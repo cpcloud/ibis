@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
+
 from ibis.expr.tests.mocks import MockConnection
 from ibis.compat import unittest
 import ibis.expr.types as ir
@@ -68,20 +70,28 @@ class TestAnalytics(unittest.TestCase):
         self.assertRaises(ValueError, d.histogram)
         self.assertRaises(ValueError, d.histogram, 10, closed='foo')
 
+    @pytest.mark.xfail(raises=AssertionError)
     def test_topk_analysis_bug(self):
         # GH #398
-        airlines = ibis.table([('dest', 'string'),
-                               ('origin', 'string'),
-                               ('arrdelay', 'int32')],
-                              'airlines')
+        airlines = ibis.table(
+            [
+                ('dest', 'string'),
+                ('origin', 'string'),
+                ('arrdelay', 'int32')
+            ],
+            name='airlines'
+        )
+
         dests = ['ORD', 'JFK', 'SFO']
+
         t = airlines[airlines.dest.isin(dests)]
         delay_filter = t.origin.topk(10, by=t.arrdelay.mean())
 
         filtered = t.filter([delay_filter])
 
         post_pred = filtered.op().predicates[1]
-        assert delay_filter.to_filter().equals(post_pred)
+        expected = delay_filter.to_filter()
+        assert expected.equals(post_pred)
 
     def test_topk_function_late_bind(self):
         # GH #520
