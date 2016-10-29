@@ -340,6 +340,7 @@ _operation_registry = {
     ops.Max: _reduction(sa.func.max),
 
     ops.CountDistinct: _count_distinct,
+    ops.DistinctArray: fixed_arity(sa.distinct, 1),
 
     ops.GroupConcat: fixed_arity(sa.func.group_concat, 2),
 
