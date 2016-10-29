@@ -14,6 +14,9 @@
 
 from collections import defaultdict
 
+from toolz import identity, curry, flip, compose
+from operator import getitem, methodcaller
+
 from ibis.compat import lzip
 import ibis.common as com
 import ibis.expr.analysis as L
@@ -27,6 +30,7 @@ import ibis.sql.transforms as transforms
 import ibis.util as util
 import ibis
 
+from multipledispatch import dispatch
 
 # ---------------------------------------------------------------------
 
@@ -36,6 +40,99 @@ class QueryAST(object):
     def __init__(self, context, queries):
         self.context = context
         self.queries = queries
+
+
+@dispatch(object)
+def adapt(expr):
+    """Non-table expressions need to be adapted to some well-formed table
+    expression, along with a way to adapt the results to the desired
+    arity (whether array-like or scalar, for example)
+
+    Canonical case is scalar values or arrays produced by some reductions
+    (simple reductions, or distinct, say)
+    """
+    raise com.TranslationError(
+        'No adapt rule for expressions of type {0} found'.format(
+            type(expr).__name__
+        )
+    )
+
+
+@dispatch(ir.TableExpr)
+def adapt(expr):
+    return expr, identity
+
+
+@dispatch(ir.ScalarExpr)
+def adapt(expr):
+    name = 'tmp'
+
+    if L.is_scalar_reduce(expr):
+        result, name = L.reduction_to_aggregation(expr, default_name='tmp')
+    else:
+        base_table = ir.find_base_table(expr)
+        if base_table is None:
+            # expr with no table refs
+            result = expr.name(name)
+        else:
+            raise NotImplementedError(expr._repr())
+    return result, compose(flip(getitem, 0), flip(getitem, name))
+
+
+@dispatch(ir.AnalyticExpr)
+def adapt(expr):
+    return expr.to_aggregation(), identity
+
+
+@dispatch(ir.ExprList)
+def adapt(expr):
+    exprs = expr.exprs()
+
+    is_aggregation = True
+    any_aggregation = False
+
+    for x in exprs:
+        if not L.is_scalar_reduce(x):
+            is_aggregation = False
+        else:
+            any_aggregation = True
+
+    if is_aggregation:
+        table = ir.find_base_table(exprs[0])
+        return table.aggregate(exprs), identity
+    elif not any_aggregation:
+        return expr, identity
+
+    raise NotImplementedError(expr._repr())
+
+
+@dispatch(ir.ArrayExpr)
+def adapt(expr):
+    op = expr.op()
+    name = 'tmp'
+
+    if isinstance(op, ops.TableColumn):
+        name = op.name
+        table_expr = op.table[[name]]
+    else:
+        # Something more complicated.
+        base_table = L.find_source_table(expr)
+
+        if isinstance(op, ops.DistinctArray):
+            expr = op.arg
+            try:
+                name = expr.get_name()
+            except Exception:
+                pass
+            method = methodcaller('distinct')
+        else:
+            method = identity
+
+        table_expr = method(base_table[expr.name(name)])
+
+    result_handler = flip(getitem, name)
+
+    return table_expr, result_handler
 
 
 class SelectBuilder(object):
@@ -53,7 +150,7 @@ class SelectBuilder(object):
     def __init__(self, expr, context):
         self.expr = expr
 
-        self.query_expr, self.result_handler = _adapt_expr(self.expr)
+        self.query_expr, self.result_handler = adapt(expr)
 
         self.sub_memo = {}
 
@@ -782,96 +879,6 @@ class _CorrelatedRefCheck(object):
         if isinstance(what, ir.Expr):
             what = what.op()
         return what in self.query_roots
-
-
-def _adapt_expr(expr):
-    # Non-table expressions need to be adapted to some well-formed table
-    # expression, along with a way to adapt the results to the desired
-    # arity (whether array-like or scalar, for example)
-    #
-    # Canonical case is scalar values or arrays produced by some reductions
-    # (simple reductions, or distinct, say)
-    def as_is(x):
-        return x
-
-    if isinstance(expr, ir.TableExpr):
-        return expr, as_is
-
-    def _get_scalar(field):
-        def scalar_handler(results):
-            return results[field][0]
-        return scalar_handler
-
-    if isinstance(expr, ir.ScalarExpr):
-
-        if L.is_scalar_reduce(expr):
-            table_expr, name = L.reduction_to_aggregation(
-                expr, default_name='tmp')
-            return table_expr, _get_scalar(name)
-        else:
-            base_table = ir.find_base_table(expr)
-            if base_table is None:
-                # expr with no table refs
-                return expr.name('tmp'), _get_scalar('tmp')
-            else:
-                raise NotImplementedError(expr._repr())
-
-    elif isinstance(expr, ir.AnalyticExpr):
-        return expr.to_aggregation(), as_is
-
-    elif isinstance(expr, ir.ExprList):
-        exprs = expr.exprs()
-
-        is_aggregation = True
-        any_aggregation = False
-
-        for x in exprs:
-            if not L.is_scalar_reduce(x):
-                is_aggregation = False
-            else:
-                any_aggregation = True
-
-        if is_aggregation:
-            table = ir.find_base_table(exprs[0])
-            return table.aggregate(exprs), as_is
-        elif not any_aggregation:
-            return expr, as_is
-        else:
-            raise NotImplementedError(expr._repr())
-
-    elif isinstance(expr, ir.ArrayExpr):
-        op = expr.op()
-
-        def _get_column(name):
-            def column_handler(results):
-                return results[name]
-            return column_handler
-
-        if isinstance(op, ops.TableColumn):
-            table_expr = op.table[[op.name]]
-            result_handler = _get_column(op.name)
-        else:
-            # Something more complicated.
-            base_table = L.find_source_table(expr)
-
-            if isinstance(op, ops.DistinctArray):
-                expr = op.arg
-                try:
-                    name = op.arg.get_name()
-                except Exception:
-                    name = 'tmp'
-
-                table_expr = (base_table.projection([expr.name(name)])
-                              .distinct())
-                result_handler = _get_column(name)
-            else:
-                table_expr = base_table.projection([expr.name('tmp')])
-                result_handler = _get_column('tmp')
-
-        return table_expr, result_handler
-    else:
-        raise com.TranslationError('Do not know how to execute: {0}'
-                                   .format(type(expr)))
 
 
 class QueryBuilder(object):
