@@ -13,12 +13,16 @@
 # limitations under the License.
 
 from ibis.common import RelationError, ExpressionError, IbisTypeError
+
 from ibis.expr.datatypes import HasSchema
 from ibis.expr.window import window
 import ibis.expr.types as ir
 import ibis.expr.operations as ops
+
 import ibis.util as util
+
 import toolz
+
 
 # ---------------------------------------------------------------------
 # Some expression metaprogramming / graph transformations to support
@@ -37,7 +41,6 @@ def _expr_key(expr):
         return expr
 
 
-@toolz.memoize(key=lambda args, kwargs: _expr_key(args[0]))
 def _subs(expr, mapping):
     """Substitute expressions with other expressions
     """
@@ -62,7 +65,10 @@ def _subs(expr, mapping):
     except IbisTypeError:
         return expr
 
-    return expr._factory(new_node, name=getattr(expr, '_name', None))
+    try:
+        return expr._factory(new_node, name=getattr(expr, '_name', None))
+    except TypeError:
+        return expr._factory(new_node)
 
 
 class ScalarAggregate(object):
