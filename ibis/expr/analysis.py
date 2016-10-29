@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from operator import is_
+
 from ibis.common import RelationError, ExpressionError, IbisTypeError
 
 from ibis.expr.datatypes import HasSchema
 from ibis.expr.window import window
+from ibis.expr.lineage import roots
+
 import ibis.expr.types as ir
 import ibis.expr.operations as ops
 
@@ -48,8 +52,6 @@ def _subs(expr, mapping):
     key = repr(node)
     if key in mapping:
         return mapping[key]
-    if node.blocks():
-        return expr
 
     new_args = list(node.args)
     unchanged = True
@@ -57,6 +59,10 @@ def _subs(expr, mapping):
         if isinstance(arg, ir.Expr):
             new_arg = _subs(arg, mapping)
             unchanged = unchanged and new_arg is arg
+            new_args[i] = new_arg
+        elif isinstance(arg, (list, tuple)):
+            new_arg = type(arg)(_subs(a, mapping) for a in arg)
+            unchanged = unchanged and all(map(is_, new_arg, arg))
             new_args[i] = new_arg
     if unchanged:
         return expr
@@ -759,7 +765,7 @@ class ExprValidator(object):
 
         self.roots = []
         for expr in self.parent_exprs:
-            self.roots.extend(expr._root_tables())
+            self.roots.extend(roots(expr, ops.TableExpr))
 
     def has_common_roots(self, expr):
         return self.validate(expr)
