@@ -439,6 +439,9 @@ def test_scalar_subtraction():
     sa_t = sa.table('t', sa.column('a', type_=sa.Float(precision=53)))
     expr = t.a - t.a.mean()
     result = ibis.sqlite.compile(expr)
-    other = sa.select([sa.func.avg(sa_t.c.a).label('mean')])
-    expected = sa.select([sa_t.c.a - other.c.mean])
+    t0 = sa_t.alias('t0')
+    t1 = sa.select([sa.func.avg(t0.c.a).label('mean')]).alias('t1')
+    expected = sa.select([(t0.c.a - t1.c.mean).label('tmp')]).select_from(
+        t0.join(t1, sa.literal(True))
+    )
     assert str(result) == str(expected)
