@@ -100,27 +100,55 @@ class Queue(Container):
         return identity
 
 
-def _get_args(op, name):
+def _get_args(op, name=None):
     """Hack to get relevant arguments for lineage computation.
 
     We need a better way to determine the relevant arguments of an expression.
     """
     # Could use multipledispatch here to avoid the pasta
     if isinstance(op, ops.Selection):
-        assert name is not None, 'name is None'
         result = op.selections
 
         # if Selection.selections is always columnar, could use an
         # OrderedDict to prevent scanning the whole thing
-        return [col for col in result if col._name == name]
+        if name is not None:
+            return [col for col in result if col._name == name]
+        return result
     elif isinstance(op, ops.Aggregation):
-        assert name is not None, 'name is None'
-        return [col for col in chain(op.by, op.agg_exprs) if col._name == name]
+        result = list(chain(op.by, op.agg_exprs))
+        if name is not None:
+            return [col for col in result if col._name == name]
+        return result
     else:
         return op.args
 
 
-def lineage(expr, container=Stack):
+def traverse(expr, container=Stack, node_types=(ir.Node,)):
+    c = container([expr])
+
+    seen = set()
+
+    # while we haven't visited everything
+    while c:
+        # import pdb
+        # pdb.set_trace()
+        node = c.get()
+
+        if node not in seen:
+            seen.add(node)
+            if isinstance(node.op(), node_types):
+                yield node
+
+        # add our dependencies to the container if they match our name
+        # and are ibis expressions
+        c.extend(
+            arg for arg in c.visitor(_get_args(node.op()))
+            if isinstance(arg, ir.Expr)
+        )
+
+
+
+def lineage(expr, container=Stack, types=(ir.Expr,)):
     """Yield the path of the expression tree that comprises a column
     expression.
 
@@ -161,5 +189,5 @@ def lineage(expr, container=Stack):
         c.extend(
             (arg, getattr(arg, '_name', name))
             for arg in c.visitor(_get_args(node.op(), name))
-            if isinstance(arg, ir.Expr)
+            if isinstance(arg, types)
         )
