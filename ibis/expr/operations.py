@@ -1512,7 +1512,7 @@ class CrossJoin(InnerJoin):
         right = args[1]
         for t in args[2:]:
             right = right.cross_join(t)
-        InnerJoin.__init__(self, left, right, [])
+        super(CrossJoin, self).__init__(left, right, [])
 
 
 class Union(TableNode, HasSchema):
