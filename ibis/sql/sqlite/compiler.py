@@ -211,6 +211,7 @@ def adapt_array_expr_sqlite(expr, dialect):
             assert source1.equals(source)
             joined = joiner(joined)
             new_proj.append(agg)
+            oldaggs.append(oldagg)
 
     new_base_relation = joined.projection(new_proj)
     subbed_result = sub_for(
