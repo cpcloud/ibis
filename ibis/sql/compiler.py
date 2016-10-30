@@ -57,7 +57,8 @@ class SelectBuilder(object):
 
         self.query_expr, self.result_handler = adapt(
             expr,
-            context.dialect() if context.dialect is not None else None
+            context.dialect()
+            if getattr(context, 'dialect', None) is not None else None
         )
 
         self.sub_memo = {}
