@@ -434,6 +434,9 @@ def test_compile_with_one_unnamed_table():
     assert str(result) == str(expected)
 
 
+# "window" functions :)
+
+
 def test_scalar_subtraction():
     t = ibis.table([('a', 'double')], name='t')
     sa_t = sa.table('t', sa.column('a', type_=sa.Float(precision=53)))
@@ -442,6 +445,21 @@ def test_scalar_subtraction():
     t0 = sa_t.alias('t0')
     t1 = sa.select([sa.func.avg(t0.c.a).label('mean')]).alias('t1')
     expected = sa.select([(t0.c.a - t1.c.mean).label('tmp')]).select_from(
+        t0.join(t1, sa.literal(True))
+    )
+    assert str(result) == str(expected)
+
+
+def test_fillna():
+    t = ibis.table([('a', 'double')], name='t')
+    sa_t = sa.table('t', sa.column('a', type_=sa.Float(precision=53)))
+    expr = t.a.fillna(t.a.mean())
+    result = ibis.sqlite.compile(expr)
+    t0 = sa_t.alias('t0')
+    t1 = sa.select([sa.func.avg(t0.c.a).label('mean')]).alias('t1')
+    expected = sa.select([
+        sa.func.ifnull(t0.c.a, t1.c.mean).label('tmp')
+    ]).select_from(
         t0.join(t1, sa.literal(True))
     )
     assert str(result) == str(expected)
