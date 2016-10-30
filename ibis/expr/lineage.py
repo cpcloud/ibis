@@ -130,8 +130,6 @@ def traverse(expr, container=Stack, node_types=(ir.Node,)):
 
     # while we haven't visited everything
     while c:
-        # import pdb
-        # pdb.set_trace()
         node = c.get()
 
         if node not in seen:
