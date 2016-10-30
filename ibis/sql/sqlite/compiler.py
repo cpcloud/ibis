@@ -14,7 +14,14 @@
 
 import sqlalchemy as sa
 
+from operator import methodcaller, le, ge
+from functools import partial
+from toolz import identity
+
 from ibis.sql.alchemy import unary, varargs, fixed_arity
+from ibis.sql.adapt import adapt
+from ibis.expr.lineage import traverse
+from ibis.expr.analysis import sub_for
 import ibis.sql.alchemy as alch
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
@@ -184,3 +191,116 @@ compiles = SQLiteExprTranslator.compiles
 class SQLiteDialect(alch.AlchemyDialect):
 
     translator = SQLiteExprTranslator
+
+
+
+@adapt.register(ir.ArrayExpr, SQLiteDialect)
+def adapt_array_expr_sqlite(expr, dialect):
+    result, handler = adapt(expr, None)
+    windows = list(traverse(result, node_types=ops.WindowOp))
+    if not windows:
+        return result
+    else:
+        new_windows = list(map(rewrite_window_as_projection, windows))
+        source1, agg1, joiner1, oldagg1 = new_windows[0]
+
+        joined = joiner1(source1)
+        new_proj = [source1, agg1]
+        oldaggs = [oldagg1]
+        for source, agg, joiner, oldagg in new_windows[1:]:
+            assert source1.equals(source)
+            joined = joiner(joined)
+            new_proj.append(agg)
+
+    new_base_relation = joined.projection(new_proj)
+    subbed_result = sub_for(
+        expr,
+        [
+            (source1, new_base_relation),
+        ] + [
+            (oldagg, new_base_relation[oldagg._name]) for oldagg in oldaggs
+        ]
+    )
+
+    projected = new_base_relation[subbed_result.name(expr._name or 'tmp')]
+    return projected, identity
+
+
+def rewrite_window_as_projection(window_expr):
+    """
+    """
+    window_op = window_expr.op()
+    agg, window = window_op.args
+
+    agg_op = agg.op()
+    agg_type = type(agg_op)
+    column, _ = agg_op.args
+
+    source_relation = column._arg.table
+
+    group_by_names = [e._name for e in window._group_by]
+    order_by_names = [
+        op.expr._name for op in map(methodcaller('op'), window._order_by)
+    ]
+
+    all_names = group_by_names + order_by_names
+
+    ORDERING_OPS = {True: le, False: ge}
+
+    if window._order_by:
+        # if we have an order by we need to do a self join, then do our partitioning
+        left, right = source_relation, source_relation.view()
+        left = left.projection([left[o].name(o) for o in all_names]).distinct()
+        ordering_source = left.inner_join(
+            right,
+            [
+                ORDERING_OPS[ascending](right[name], left[name])
+                for name, ascending in (
+                    (op.expr._name, op.ascending)
+                    for op in map(methodcaller('op'), window._order_by)
+                )
+            ] + [
+                left[name] == right[name] for name in group_by_names
+            ]
+        )
+        projection = [
+            left[name] for name in order_by_names
+        ] + [
+            right[name] for name in group_by_names
+        ]
+        if column._name not in order_by_names:
+            projection.append(right[column._name])
+        ordering_source = ordering_source.projection(projection)
+    else:
+        ordering_source = source_relation
+
+    new_agg_source = ordering_source.group_by(all_names).aggregate(
+        agg_type(ordering_source[column._name]).to_expr().name(agg._name)
+    )
+
+    if not group_by_names and not order_by_names:
+        join_type = 'cross'
+    else:
+        join_type = 'left'
+
+    predicates = [
+        source_relation[name] == new_agg_source[name]
+        for name in all_names
+    ]
+
+    joiner = partial(
+        lambda predicates, other_relation, relation: getattr(
+            relation, '{}_join'.format(join_type)
+        )(other_relation, predicates=predicates),
+        predicates,
+        new_agg_source,
+    )
+
+    return (
+        source_relation,  # the final relation that we join with
+        new_agg_source[agg._name].name(
+            window_expr._name
+        ),  # the aggregated column
+        joiner,  # join composition function
+        agg,  # old agg to replace
+    )
