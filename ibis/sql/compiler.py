@@ -14,9 +14,6 @@
 
 from collections import defaultdict
 
-from toolz import identity, curry, flip, compose
-from operator import getitem, methodcaller
-
 from ibis.compat import lzip
 import ibis.common as com
 import ibis.expr.analysis as L
@@ -27,6 +24,7 @@ import ibis.expr.types as ir
 import ibis.expr.format as format
 
 import ibis.sql.transforms as transforms
+from ibis.sql.adapt import adapt
 import ibis.util as util
 import ibis
 
@@ -40,99 +38,6 @@ class QueryAST(object):
     def __init__(self, context, queries):
         self.context = context
         self.queries = queries
-
-
-@dispatch(object)
-def adapt(expr):
-    """Non-table expressions need to be adapted to some well-formed table
-    expression, along with a way to adapt the results to the desired
-    arity (whether array-like or scalar, for example)
-
-    Canonical case is scalar values or arrays produced by some reductions
-    (simple reductions, or distinct, say)
-    """
-    raise com.TranslationError(
-        'No adapt rule for expressions of type {0} found'.format(
-            type(expr).__name__
-        )
-    )
-
-
-@dispatch(ir.TableExpr)
-def adapt(expr):
-    return expr, identity
-
-
-@dispatch(ir.ScalarExpr)
-def adapt(expr):
-    name = 'tmp'
-
-    if L.is_scalar_reduce(expr):
-        result, name = L.reduction_to_aggregation(expr, default_name='tmp')
-    else:
-        base_table = ir.find_base_table(expr)
-        if base_table is None:
-            # expr with no table refs
-            result = expr.name(name)
-        else:
-            raise NotImplementedError(expr._repr())
-    return result, compose(flip(getitem, 0), flip(getitem, name))
-
-
-@dispatch(ir.AnalyticExpr)
-def adapt(expr):
-    return expr.to_aggregation(), identity
-
-
-@dispatch(ir.ExprList)
-def adapt(expr):
-    exprs = expr.exprs()
-
-    is_aggregation = True
-    any_aggregation = False
-
-    for x in exprs:
-        if not L.is_scalar_reduce(x):
-            is_aggregation = False
-        else:
-            any_aggregation = True
-
-    if is_aggregation:
-        table = ir.find_base_table(exprs[0])
-        return table.aggregate(exprs), identity
-    elif not any_aggregation:
-        return expr, identity
-
-    raise NotImplementedError(expr._repr())
-
-
-@dispatch(ir.ArrayExpr)
-def adapt(expr):
-    op = expr.op()
-    name = 'tmp'
-
-    if isinstance(op, ops.TableColumn):
-        name = op.name
-        table_expr = op.table[[name]]
-    else:
-        # Something more complicated.
-        base_table = L.find_source_table(expr)
-
-        if isinstance(op, ops.DistinctArray):
-            expr = op.arg
-            try:
-                name = expr.get_name()
-            except Exception:
-                pass
-            method = methodcaller('distinct')
-        else:
-            method = identity
-
-        table_expr = method(base_table[expr.name(name)])
-
-    result_handler = flip(getitem, name)
-
-    return table_expr, result_handler
 
 
 class SelectBuilder(object):
@@ -150,7 +55,10 @@ class SelectBuilder(object):
     def __init__(self, expr, context):
         self.expr = expr
 
-        self.query_expr, self.result_handler = adapt(expr)
+        self.query_expr, self.result_handler = adapt(
+            expr,
+            context.dialect() if context.dialect is not None else None
+        )
 
         self.sub_memo = {}
 
