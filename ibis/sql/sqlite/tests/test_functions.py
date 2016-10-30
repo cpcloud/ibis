@@ -432,3 +432,13 @@ def test_compile_with_one_unnamed_table():
     sqla_join = sqla_t.join(sqla_s, sqla_t.c.a == sqla_s.c.b)
     expected = sa.select([sqla_t.c.a, sqla_s.c.b]).select_from(sqla_join)
     assert str(result) == str(expected)
+
+
+def test_scalar_subtraction():
+    t = ibis.table([('a', 'double')], name='t')
+    sa_t = sa.table('t', sa.column('a', type_=sa.Float(precision=53)))
+    expr = t.a - t.a.mean()
+    result = ibis.sqlite.compile(expr)
+    other = sa.select([sa.func.avg(sa_t.c.a).label('mean')])
+    expected = sa.select([sa_t.c.a - other.c.mean])
+    assert str(result) == str(expected)
