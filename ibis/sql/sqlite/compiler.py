@@ -199,7 +199,7 @@ def adapt_array_expr_sqlite(expr, dialect):
     result, handler = adapt(expr, None)
     windows = list(traverse(result, node_types=ops.WindowOp))
     if not windows:
-        return result
+        return result, handler
     else:
         new_windows = list(map(rewrite_window_as_projection, windows))
         source1, agg1, joiner1, oldagg1 = new_windows[0]
