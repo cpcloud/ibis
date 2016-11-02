@@ -16,10 +16,10 @@ import sqlalchemy as sa
 
 from operator import methodcaller, le, ge
 from functools import partial
-from toolz import identity
+from toolz import identity, flip
 
 from ibis.sql.alchemy import unary, varargs, fixed_arity
-from ibis.sql.adapt import adapt
+from ibis.sql.adapt import dispatch
 from ibis.expr.lineage import traverse
 from ibis.expr.analysis import sub_for
 import ibis.sql.alchemy as alch
@@ -193,9 +193,27 @@ class SQLiteDialect(alch.AlchemyDialect):
     translator = SQLiteExprTranslator
 
 
+@dispatch(ir.TableExpr, SQLiteDialect)
+def adapt(expr, dialect):
+    op = expr.op()
+    if isinstance(op, ops.Selection):
+        results = list(map(flip(adapt, dialect), op.selections))
+        import pdb
+        pdb.set_trace()
+    else:
+        return expr, identity
 
-@adapt.register(ir.ArrayExpr, SQLiteDialect)
-def adapt_array_expr_sqlite(expr, dialect):
+
+@dispatch(ir.ScalarExpr, SQLiteDialect)
+def adapt(expr, dialect):
+    result, handler = adapt(expr, None)
+    op = expr.op()
+    import pdb
+    pdb.set_trace()
+
+
+@dispatch(ir.ArrayExpr, SQLiteDialect)
+def adapt(expr, dialect):
     result, handler = adapt(expr, None)
     windows = list(traverse(result, node_types=ops.WindowOp))
     if not windows:
