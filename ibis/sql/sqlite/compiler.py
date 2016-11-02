@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 from operator import methodcaller, le, ge
 from functools import partial
-from toolz import identity, flip
+from toolz import identity, flip, compose, first
 
 from ibis.sql.alchemy import unary, varargs, fixed_arity
 from ibis.sql.adapt import dispatch
@@ -197,19 +197,20 @@ class SQLiteDialect(alch.AlchemyDialect):
 def adapt(expr, dialect):
     op = expr.op()
     if isinstance(op, ops.Selection):
-        results = list(map(flip(adapt, dialect), op.selections))
-        import pdb
-        pdb.set_trace()
+        new_exprs = list(
+            map(compose(first, flip(adapt, dialect)), op.selections)
+        )
+        if len(new_exprs) == 1:
+            return new_exprs[0], identity
     else:
         return expr, identity
 
 
 @dispatch(ir.ScalarExpr, SQLiteDialect)
 def adapt(expr, dialect):
-    result, handler = adapt(expr, None)
-    op = expr.op()
-    import pdb
-    pdb.set_trace()
+    source, agg, joiner, oldagg = rewrite_window_as_projection(expr)
+    new_base_relation = joiner(source).projection([agg])
+    return new_base_relation, identity
 
 
 @dispatch(ir.ArrayExpr, SQLiteDialect)
