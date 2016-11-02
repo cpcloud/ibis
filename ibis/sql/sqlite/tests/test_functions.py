@@ -463,3 +463,26 @@ def test_fillna():
         t0.join(t1, sa.literal(True))
     )
     assert str(result) == str(expected)
+
+
+@pytest.mark.xfail(raises=AssertionError)
+def test_group_by_window():
+    """So much join.
+
+    """
+    t = ibis.table([('a', 'string'), ('b', 'double')], name='t')
+    sa_t = sa.table(
+        't',
+        sa.column('a', type_=sa.TEXT),
+        sa.column('b', type_=sa.Float(precision=53)),
+    )
+    expr = t.projection([t.b.sum().over(ibis.window(group_by=t.a))])
+    result = ibis.sqlite.compile(expr)
+    t0 = sa_t.alias('t0')
+    t1 = sa.select([sa.func.avg(t0.c.a).label('mean')]).alias('t1')
+    expected = sa.select([
+        sa.func.ifnull(t0.c.a, t1.c.mean).label('tmp')
+    ]).select_from(
+        t0.join(t1, sa.literal(True))
+    )
+    assert str(result) == str(expected)
