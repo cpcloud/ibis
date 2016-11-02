@@ -465,7 +465,6 @@ def test_fillna():
     assert str(result) == str(expected)
 
 
-@pytest.mark.xfail(raises=AssertionError)
 def test_group_by_window():
     """So much join.
 
@@ -476,13 +475,17 @@ def test_group_by_window():
         sa.column('a', type_=sa.TEXT),
         sa.column('b', type_=sa.Float(precision=53)),
     )
-    expr = t.projection([t.b.sum().over(ibis.window(group_by=t.a))])
+    expr = t.projection([
+        t.b.sum().over(ibis.window(group_by=t.a)).name('window_sum')
+    ])
     result = ibis.sqlite.compile(expr)
+
     t0 = sa_t.alias('t0')
-    t1 = sa.select([sa.func.avg(t0.c.a).label('mean')]).alias('t1')
+    t1 = sa.select([
+        t0.c.a,
+        sa.func.sum(t0.c.b).label('sum')
+    ]).group_by(t0.c.a).alias('t1')
     expected = sa.select([
-        sa.func.ifnull(t0.c.a, t1.c.mean).label('tmp')
-    ]).select_from(
-        t0.join(t1, sa.literal(True))
-    )
+        t1.c.sum.label('window_sum')
+    ]).select_from(t0.join(t1, onclause=t0.c.a == t1.c.a, isouter=True))
     assert str(result) == str(expected)
