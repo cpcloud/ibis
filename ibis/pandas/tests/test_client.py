@@ -24,4 +24,5 @@ def dictionary(df):
 def test_table(dictionary, df):
     con = connect(dictionary)
     data = con.table('df')
-    tm.assert_frame_equal(df, data)
+    result = data.execute()
+    tm.assert_frame_equal(df, result)
