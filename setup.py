@@ -67,6 +67,7 @@ setup(
         'all': [
             'hdfs>=2.0.0',
             'impyla>=0.13.7',
+            'multipledispatch',
             'psycopg2',
             'sqlalchemy>=1.0.0',
             'thrift<=0.9.3',
@@ -76,6 +77,7 @@ setup(
             'hdfs>=2.0.0',
             'impyla>=0.13.7',
             'mock',
+            'multipledispatch',
             'psycopg2',
             'pytest',
             'sqlalchemy>=1.0.0',
@@ -90,6 +92,7 @@ setup(
         'kerberos': ['requests-kerberos'],
         'postgres': ['psycopg2', 'sqlalchemy>=1.0.0'],
         'sqlite': ['sqlalchemy>=1.0.0'],
+        'pandas': ['multipledispatch'],
     },
     description="Productivity-centric Python Big Data Framework",
     long_description=LONG_DESCRIPTION,
