@@ -29,5 +29,3 @@ class PandasDatabase(ops.Database):
 
     def drop(self):
         self.client.clear()
-
-
