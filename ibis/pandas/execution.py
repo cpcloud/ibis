@@ -188,15 +188,6 @@ def execute_binary_operation_series(op, left, right, scope=None):
     return _BINARY_OPERATIONS[type(op)](left, right)
 
 
-def hashable(obj):
-    try:
-        hash(obj)
-    except TypeError:
-        return False
-    else:
-        return True
-
-
 def find_data(expr):
     stack = [expr]
     seen = set()
@@ -227,9 +218,8 @@ def execute_with_scope(expr, scope):
     evaluated_arguments = [
         execute(arg, scope) if hasattr(arg, 'op') else arg
         for arg in args if isinstance(arg, (ir.Expr, ir.Node))
-    ] or [
-        scope.get(arg, arg) for arg in args if hashable(arg)
-    ]
+    ] or [scope.get(arg, arg) for arg in args]
+
     return execute_node(op, *evaluated_arguments, scope=scope)
 
 
