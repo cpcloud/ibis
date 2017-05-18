@@ -16,7 +16,9 @@ def df():
         'b': list('abc'),
         'c': [4.0, 5.0, 6.0],
         'd': pd.date_range('now', periods=3).values,
-        'e': list('dad')
+        'e': list('dad'),
+        'f': ['1.0', '2', '3.234'],
+        'g': list(map(str, range(1, 4))),
     })
 
 
@@ -64,6 +66,35 @@ def test_literal(client):
     ],
 )
 def test_cast_numeric(t, df, from_, to, expected):
+    c = t[from_].cast(to)
+    result = c.execute()
+    assert str(result.dtype) == expected
+
+
+@pytest.mark.parametrize('from_', list('fg'))
+@pytest.mark.parametrize(
+    ('to', 'expected'),
+    [
+        ('double', 'float64'),
+        ('string', 'object'),
+    ]
+)
+def test_cast_string(t, df, from_, to, expected):
+    c = t[from_].cast(to)
+    result = c.execute()
+    assert str(result.dtype) == expected
+
+
+@pytest.mark.parametrize('from_', ['d'])
+@pytest.mark.parametrize(
+    ('to', 'expected'),
+    [
+        ('string', 'object'),
+        ('int64', 'int64'),
+        pytest.mark.xfail(('double', 'float64'), raises=TypeError),
+    ]
+)
+def test_cast_timestamp(t, df, from_, to, expected):
     c = t[from_].cast(to)
     result = c.execute()
     assert str(result.dtype) == expected
