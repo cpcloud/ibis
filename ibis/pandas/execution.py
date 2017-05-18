@@ -109,8 +109,28 @@ def execute_reduction_series(op, data, scope=None):
 
 
 @execute_node.register(ops.Reduction, pd.Series, pd.Series)
-def execute_masked_reduction_series(op, data, mask, scope=None):
+def execute_reduction_series_mask(op, data, mask, scope=None):
     return getattr(data[mask], type(op).__name__.lower())()
+
+
+@execute_node.register(ops.StandardDev, pd.Series)
+def execute_standard_dev_series(op, data, scope=None):
+    return data.std()
+
+
+@execute_node.register(ops.StandardDev, pd.Series, pd.Series)
+def execute_standard_dev_series_mask(op, data, mask, scope=None):
+    return data[mask].std()
+
+
+@execute_node.register(ops.Variance, pd.Series)
+def execute_variance_series(op, data, scope=None):
+    return data.var()
+
+
+@execute_node.register(ops.Variance, pd.Series, pd.Series)
+def execute_variance_series_mask(op, data, mask, scope=None):
+    return data[mask].var()
 
 
 _JOIN_TYPES = {

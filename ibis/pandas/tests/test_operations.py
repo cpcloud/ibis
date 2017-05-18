@@ -112,8 +112,28 @@ def test_group_by(t, df):
     tm.assert_frame_equal(result, expected)
 
 
-def test_filtered_aggregation(t, df):
-    expr = t.a.mean(where=(t.b == 'a') | (t.b == 'c'))
+@pytest.mark.parametrize(
+    'reduction',
+    ['mean', 'sum', 'count', 'std', 'var']
+)
+@pytest.mark.parametrize(
+    'where',
+    [
+        lambda t: (t.b == 'a') | (t.b == 'c'),
+        lambda t: (t.e == 'd') & ((t.a == 1) | (t.a == 3)),
+        lambda t: None,
+    ]
+)
+def test_aggregation(t, df, reduction, where):
+    func = getattr(t.a, reduction)
+    mask = where(t)
+    expr = func(where=mask)
     result = expr.execute()
-    expected = df.loc[(df.b == 'a') | (df.b == 'c'), 'a'].mean()
-    assert float(result) == float(expected)
+
+    df_mask = where(df)
+    expected_func = getattr(
+        df.loc[df_mask if df_mask is not None else slice(None), 'a'],
+        reduction,
+    )
+    expected = expected_func()
+    assert result == expected
