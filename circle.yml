@@ -25,7 +25,6 @@ machine:
 
     # untar it
     - tar xvzf ibis-testing-data.tar.gz
-
   services:
     - docker
 
