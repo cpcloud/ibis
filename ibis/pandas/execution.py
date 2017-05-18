@@ -16,6 +16,14 @@ import ibis.expr.operations as ops
 from ibis.pandas.dispatch import execute, execute_node
 
 
+integer_types = six.integer_types + (np.integer,)
+
+scalar_types = (
+    numbers.Real, datetime.datetime, datetime.date, np.number, np.bool_,
+    np.datetime64, np.timedelta64,
+) + six.string_types
+
+
 @execute_node.register(ir.Literal)
 def execute_node_literal(op):
     return op.value
@@ -69,7 +77,7 @@ _LITERAL_CAST_TYPES = {
 }
 
 
-@execute_node.register(ops.Cast, str, dt.DataType)
+@execute_node.register(ops.Cast, scalar_types, dt.DataType)
 def execute_cast_string_literal(op, data, type, scope=None):
     try:
         return _LITERAL_CAST_TYPES[type](data)
@@ -242,12 +250,12 @@ def execute_not_series(op, data, scope=None):
     return ~data
 
 
-@execute_node.register(ops.Strftime, pd.Timestamp, str)
+@execute_node.register(ops.Strftime, pd.Timestamp, six.string_types)
 def execute_strftime_timestamp_str(op, data, format_string, scope=None):
     return data.strftime(format_string)
 
 
-@execute_node.register(ops.Strftime, pd.Series, str)
+@execute_node.register(ops.Strftime, pd.Series, six.string_types)
 def execute_strftime_series_str(op, data, format_string, scope=None):
     return data.dt.strftime(format_string)
 
@@ -282,7 +290,10 @@ def execute_string_length_series(op, data, scope=None):
 
 
 @execute_node.register(
-    ops.Substring, pd.Series, (pd.Series, int), (pd.Series, int)
+    ops.Substring,
+    pd.Series,
+    (pd.Series,) + integer_types,
+    (pd.Series,) + integer_types
 )
 def execute_string_substring(op, data, start, length, scope=None):
     return data.str[start:start + length]
@@ -303,12 +314,22 @@ def execute_string_rstrip(op, data, scope=None):
     return data.str.rstrip()
 
 
-@execute_node.register(ops.LPad, pd.Series, (pd.Series, int), (pd.Series, str))
+@execute_node.register(
+    ops.LPad,
+    pd.Series,
+    (pd.Series,) + integer_types,
+    (pd.Series,) + six.string_types
+)
 def execute_string_lpad(op, data, length, pad, scope=None):
     return data.str.pad(length, side='left', fillchar=pad)
 
 
-@execute_node.register(ops.RPad, pd.Series, (pd.Series, int), (pd.Series, str))
+@execute_node.register(
+    ops.RPad,
+    pd.Series,
+    (pd.Series,) + integer_types,
+    (pd.Series,) + six.string_types
+)
 def execute_string_rpad(op, data, length, pad, scope=None):
     return data.str.pad(length, side='right', fillchar=pad)
 
@@ -333,7 +354,7 @@ def execute_string_capitalize(op, data, scope=None):
     return data.str.capitalize()
 
 
-@execute_node.register(ops.Repeat, pd.Series, (pd.Series, int))
+@execute_node.register(ops.Repeat, pd.Series, (pd.Series,) + integer_types)
 def execute_string_repeat(op, data, times, scope=None):
     return data.str.repeat(times)
 
@@ -341,9 +362,9 @@ def execute_string_repeat(op, data, times, scope=None):
 @execute_node.register(
     ops.StringFind,
     pd.Series,
-    (pd.Series, str),
-    (pd.Series, int, type(None)),
-    (pd.Series, int, type(None)),
+    (pd.Series,) + six.string_types,
+    (pd.Series, type(None)) + integer_types,
+    (pd.Series, type(None)) + integer_types,
 )
 def execute_string_contains(op, data, needle, start, end, scope=None):
     return data.str.find(needle, start, end)
