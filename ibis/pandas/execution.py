@@ -222,7 +222,7 @@ def execute_with_scope(expr, scope):
         return scope[expr]
 
     op = expr.op()
-    args = getattr(op, 'inputs', []) or op.args
+    args = op.args
 
     evaluated_arguments = [
         execute(arg, scope) if hasattr(arg, 'op') else arg
