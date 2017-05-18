@@ -5,9 +5,11 @@ from functools import reduce
 
 import six
 
+import numpy as np
 import pandas as pd
 
 import ibis.expr.types as ir
+import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
 from ibis.pandas.dispatch import execute, execute_node
@@ -26,6 +28,29 @@ def execute_node_literal_object(op, _, scope=None):
 @execute.register(ir.Literal)
 def execute_literal(literal):
     return literal.value
+
+
+_IBIS_TYPE_TO_PANDAS_TYPE = {
+    dt.float: np.float32,
+    dt.double: np.float64,
+    dt.int8: np.int8,
+    dt.int16: np.int16,
+    dt.int32: np.int32,
+    dt.int64: np.int64,
+    dt.string: str,
+    dt.timestamp: 'datetime64[ns]'
+}
+
+
+def ibis_type_to_pandas_type(ibis_type):
+    return _IBIS_TYPE_TO_PANDAS_TYPE[ibis_type]
+
+
+@execute_node.register(ops.Cast, pd.Series)
+def execute_cast_series(op, data, scope=None):
+    _, type = op.args
+    pandas_type = ibis_type_to_pandas_type(type)
+    return data.astype(pandas_type)
 
 
 @execute_node.register(ops.TableColumn, pd.DataFrame)

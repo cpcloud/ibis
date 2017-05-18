@@ -50,6 +50,25 @@ def test_literal(client):
     assert client.execute(ibis.literal(1)) == 1
 
 
+@pytest.mark.parametrize('from_', list('ac'))
+@pytest.mark.parametrize(
+    ('to', 'expected'),
+    [
+        ('double', 'float64'),
+        ('float', 'float32'),
+        ('int8', 'int8'),
+        ('int16', 'int16'),
+        ('int32', 'int32'),
+        ('int64', 'int64'),
+        ('string', 'object'),
+    ],
+)
+def test_cast_numeric(t, df, from_, to, expected):
+    c = t[from_].cast(to)
+    result = c.execute()
+    assert str(result.dtype) == expected
+
+
 @pytest.mark.parametrize(
     'op',
     [
