@@ -5,8 +5,6 @@ from functools import reduce
 
 import six
 
-import toolz
-
 import pandas as pd
 
 import ibis.expr.types as ir
@@ -202,6 +200,7 @@ def hashable(obj):
 def find_data(expr):
     stack = [expr]
     seen = set()
+    data = dict()
 
     while stack:
         e = stack.pop()
@@ -211,9 +210,10 @@ def find_data(expr):
             seen.add(node)
 
             if hasattr(node, 'source'):
-                yield {e: node.source.dictionary[node.name]}
+                data[e] = node.source.dictionary[node.name]
 
             stack.extend(arg for arg in node.args if isinstance(arg, ir.Expr))
+    return data
 
 
 @execute.register(ir.Expr, dict)
@@ -238,7 +238,7 @@ def execute_without_scope(expr):
     if isinstance(expr.op(), ir.Literal):
         return execute(expr.op())
 
-    scope = toolz.merge(find_data(expr))
+    scope = find_data(expr)
     if not scope:
         raise ValueError('No data sources found')
     return execute(expr, scope)
