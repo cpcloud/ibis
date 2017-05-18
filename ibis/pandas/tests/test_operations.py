@@ -3,6 +3,8 @@ import datetime
 
 import pytest
 
+import numpy as np
+
 import pandas as pd
 import pandas.util.testing as tm
 
@@ -24,6 +26,8 @@ def df():
         'h': list(' ad'),
         'i': list('ad '),
         'j': list(' d '),
+        'k': [0, 1, 0],
+        'm': [1.0, 0.0, 1.0],
     })
 
 
@@ -282,6 +286,14 @@ def test_boolean_aggregation(t, df, reduction):
     result = expr.execute()
     expected = reduction(df.a == 1)
     assert result == expected
+
+
+@pytest.mark.parametrize('column', list('km'))
+def test_null_if_zero(t, df, column):
+    expr = t[column].nullifzero()
+    result = expr.execute()
+    expected = df[column].replace(0, np.nan)
+    tm.assert_series_equal(result, expected)
 
 
 @pytest.mark.parametrize(
