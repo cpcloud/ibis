@@ -9,6 +9,7 @@ import pandas as pd
 import pandas.util.testing as tm
 
 import ibis
+import ibis.expr.datatypes as dt
 from ibis import literal as L
 from ibis.pandas.api import connect, execute
 
@@ -28,6 +29,14 @@ def df():
         'j': list(' d '),
         'k': [0, 1, 0],
         'm': [1.0, 0.0, 1.0],
+        'n': pd.Series(
+            [
+                '2017-04-01 12:03:01',
+                '2017-04-02 10:34:17',
+                '2017-04-03 11:12:13',
+            ],
+            dtype='datetime64[ns]'
+        ),
     })
 
 
@@ -109,9 +118,13 @@ def test_cast_timestamp(t, df, from_, to, expected):
     assert str(result.dtype) == expected
 
 
-@pytest.mark.xfail
-def test_cast_date(t, df, from_, to, expected):
-    assert False
+def test_cast_date(t, df):
+    assert t.n.type() == dt.timestamp
+
+    expr = t.n.cast('date').cast('string')
+    result = expr.execute()
+    expected = df.n.dt.date.astype(str)
+    tm.assert_series_equal(result, expected)
 
 
 @pytest.mark.parametrize(
