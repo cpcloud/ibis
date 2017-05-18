@@ -53,6 +53,30 @@ def execute_cast_series(op, data, scope=None):
     return data.astype(pandas_type)
 
 
+_LITERAL_CAST_TYPES = {
+    dt.double: float,
+    dt.float: float,
+    dt.int64: int,
+    dt.int32: int,
+    dt.int16: int,
+    dt.int8: int,
+    dt.string: str,
+    dt.timestamp: pd.Timestamp,
+}
+
+
+@execute_node.register(ops.Cast, str)
+def execute_cast_string_literal(op, data, scope=None):
+    _, type = op.args
+
+    try:
+        return _LITERAL_CAST_TYPES[type](data)
+    except KeyError:
+        raise TypeError(
+            "Don't know how to cast {!r} to type {}".format(data, type)
+        )
+
+
 @execute_node.register(ops.TableColumn, pd.DataFrame)
 def execute_table_column_dataframe(op, data, scope=None):
     return data[op.name]
@@ -212,6 +236,35 @@ def execute_binary_operation_series(op, left, right, scope=None):
     return _BINARY_OPERATIONS[type(op)](left, right)
 
 
+@execute_node.register(ops.Strftime, pd.Timestamp, str)
+def execute_strftime_timestamp_str(op, data, format_string, scope=None):
+    return data.strftime(format_string)
+
+
+@execute_node.register(ops.Strftime, pd.Series, str)
+def execute_strftime_series_str(op, data, format_string, scope=None):
+    return data.dt.strftime(format_string)
+
+
+@execute_node.register(ops.ExtractTimestampField, pd.Timestamp)
+def execute_extract_timestamp_field_timestamp(op, data, scope=None):
+    field_name = type(op).__name__.lower().replace('extract', '')
+    return getattr(data, field_name)
+
+
+@execute_node.register(ops.ExtractMillisecond, pd.Timestamp)
+def execute_extract_millisecond_timestamp(op, data, scope=None):
+    return int(data.microsecond // 1000.0)
+
+
+@execute_node.register(ops.ExtractTimestampField, pd.Series)
+def execute_extract_timestamp_field_series(op, data, scope=None):
+    field_name = type(op).__name__.lower().replace('extract', '')
+    return getattr(data.dt, field_name)
+
+
+# Core execution
+
 def find_data(expr):
     stack = [expr]
     seen = set()
@@ -226,6 +279,8 @@ def find_data(expr):
 
             if hasattr(node, 'source'):
                 data[e] = node.source.dictionary[node.name]
+            elif isinstance(node, ir.Literal):
+                data[e] = node.value
 
             stack.extend(arg for arg in node.args if isinstance(arg, ir.Expr))
     return data
@@ -249,9 +304,6 @@ def execute_with_scope(expr, scope):
 
 @execute.register(ir.Expr)
 def execute_without_scope(expr):
-    if isinstance(expr.op(), ir.Literal):
-        return execute(expr.op())
-
     scope = find_data(expr)
     if not scope:
         raise ValueError('No data sources found')

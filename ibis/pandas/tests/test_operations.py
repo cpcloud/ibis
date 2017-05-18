@@ -1,4 +1,5 @@
 import operator
+import datetime
 
 import pytest
 
@@ -6,7 +7,8 @@ import pandas as pd
 import pandas.util.testing as tm
 
 import ibis
-from ibis.pandas.api import connect
+from ibis import literal as L
+from ibis.pandas.api import connect, execute
 
 
 @pytest.fixture
@@ -98,6 +100,50 @@ def test_cast_timestamp(t, df, from_, to, expected):
     c = t[from_].cast(to)
     result = c.execute()
     assert str(result.dtype) == expected
+
+
+@pytest.mark.xfail
+def test_cast_date(t, df, from_, to, expected):
+    assert False
+
+
+@pytest.mark.parametrize(
+    ('case_func', 'expected_func'),
+    [
+        (lambda v: v.strftime('%Y%m%d'), lambda vt: vt.strftime('%Y%m%d')),
+
+        (lambda v: v.year(), lambda vt: vt.year),
+        (lambda v: v.month(), lambda vt: vt.month),
+        (lambda v: v.day(), lambda vt: vt.day),
+        (lambda v: v.hour(), lambda vt: vt.hour),
+        (lambda v: v.minute(), lambda vt: vt.minute),
+        (lambda v: v.second(), lambda vt: vt.second),
+        (lambda v: v.millisecond(), lambda vt: int(vt.microsecond / 1e3)),
+    ] + [
+        (
+            operator.methodcaller('strftime', pattern),
+            operator.methodcaller('strftime', pattern),
+        ) for pattern in [
+            '%Y%m%d %H',
+            'DD BAR %w FOO "DD"',
+            'DD BAR %w FOO "D',
+            'DD BAR "%w" FOO "D',
+            'DD BAR "%d" FOO "D',
+            'DD BAR "%c" FOO "D',
+            'DD BAR "%x" FOO "D',
+            'DD BAR "%X" FOO "D',
+        ]
+    ]
+)
+def test_timestamp_functions(case_func, expected_func):
+    v = L('2015-09-01 14:48:05.359').cast('timestamp')
+    vt = datetime.datetime(
+        year=2015, month=9, day=1,
+        hour=14, minute=48, second=5, microsecond=359000
+    )
+    result = case_func(v)
+    expected = expected_func(vt)
+    assert execute(result) == expected
 
 
 @pytest.mark.parametrize(
