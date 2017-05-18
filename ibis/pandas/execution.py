@@ -1,6 +1,8 @@
 import numbers
 import operator
 
+from functools import reduce
+
 import six
 
 import toolz
@@ -18,6 +20,16 @@ def execute_node_literal(op):
     return op.value
 
 
+@execute_node.register(ir.Literal, object)
+def execute_node_literal_object(op, _, scope=None):
+    return op.value
+
+
+@execute.register(ir.Literal)
+def execute_literal(literal):
+    return literal.value
+
+
 @execute_node.register(ops.TableColumn, pd.DataFrame)
 def execute_table_column_dataframe(op, data, scope=None):
     return data[op.name]
@@ -25,22 +37,80 @@ def execute_table_column_dataframe(op, data, scope=None):
 
 @execute_node.register(ops.Selection, pd.DataFrame)
 def execute_selection_dataframe(op, data, scope=None):
-    pass
+    selections = op.selections
+    predicates = op.predicates
+    sort_keys = op.sort_keys
+
+    result = data
+
+    if selections:
+        old_names = [s.op().name for s in selections]
+        new_names = [
+            getattr(s, '_name', old_name) or old_name
+            for old_name, s in zip(old_names, selections)
+        ]
+        result = result[old_names].rename(dict(zip(old_names, new_names)))
+
+    if predicates:
+        where = reduce(operator.and_, (execute(p, scope) for p in predicates))
+        result = result.loc[where]
+
+    if sort_keys:
+        return result.sort_values(sort_keys)
+    return result
+
+
+def reduction_to_lambda(expr):
+    op = expr.op()
+
+    def reduction(
+        df,
+        column=op.args[0]._name,
+        method_name=type(op).__name__.lower(),
+        new_name=expr._name,
+    ):
+        method = getattr(df[column], method_name)
+        return method().rename(new_name)
+    return reduction
 
 
 @execute_node.register(ops.Aggregation, pd.DataFrame)
 def execute_aggregation_dataframe(op, data, scope=None):
-    pass
+    assert op.agg_exprs
+    assert op.by
+
+    predicates = op.predicates
+    if predicates:
+        data = data.loc[
+            reduce(operator.and_, (execute(p, scope) for p in predicates))
+        ]
+
+    gb = data.groupby([execute(by, scope) for by in op.by])
+
+    aggs = [reduction_to_lambda(agg_expr) for agg_expr in op.agg_exprs]
+    pieces = [func(gb) for func in aggs]
+    agg_df = pd.concat(pieces, axis=1)
+
+    having = op.having
+    if having:
+        agg_df = agg_df[
+            reduce(operator.and_, (execute(h, scope) for h in having))
+        ]
+
+    sort_keys = op.sort_keys
+    if sort_keys:
+        agg_df = agg_df.sort_values(sort_keys)
+    return agg_df.reset_index()
 
 
 @execute_node.register(ops.Reduction, pd.Series)
 def execute_reduction_series(op, data, scope=None):
-    return getattr(data, type(op).__name__)()
+    return getattr(data, type(op).__name__.lower())()
 
 
 @execute_node.register(ops.Reduction, pd.Series, pd.Series)
 def execute_masked_reduction_series(op, data, mask, scope=None):
-    return getattr(data[mask], type(op).__name__)()
+    return getattr(data[mask], type(op).__name__.lower())()
 
 
 _JOIN_TYPES = {
@@ -59,6 +129,18 @@ def execute_join(op, left, right, scope=None):
 
     left_on = []
     right_on = []
+
+    for predicate in op.predicates:
+        pred_op = predicate.op()
+        if not isinstance(pred_op, ops.Equals):
+            raise TypeError(
+                'Only equality join predicates supported with pandas'
+            )
+        left_key = pred_op.left._name
+        right_key = pred_op.right._name
+        left_on.append(left_key)
+        right_on.append(right_key)
+
     return pd.merge(left, right, how=how, left_on=left_on, right_on=right_on)
 
 
@@ -133,12 +215,10 @@ def execute_with_scope(expr, scope):
 
 @execute.register(ir.Expr)
 def execute_without_scope(expr):
+    if isinstance(expr.op(), ir.Literal):
+        return execute(expr.op())
+
     scope = toolz.merge(find_data(expr))
     if not scope:
         raise ValueError('No data sources found')
     return execute(expr, scope)
-
-
-@execute.register(ir.ScalarExpr)
-def execute_literal(literal):
-    return execute_node(literal.op())
