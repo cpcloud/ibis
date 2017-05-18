@@ -62,21 +62,7 @@ class PandasClient(client.Client):
         return ops.DatabaseTable(name, schema, self).to_expr()
 
     def execute(self, query, *args, **kwargs):
-        assert isinstance(query, ir.Expr)
         from ibis.pandas.execution import execute
+
+        assert isinstance(query, ir.Expr)
         return execute(query)
-
-
-class PandasDatabase(client.Database):
-
-    def __init__(self, client, name=None):
-        super().__init__(client)
-
-    def list_tables(self):
-        return sorted(self.client.keys())
-
-    def table(self, name):
-        return self.client[name]
-
-    def drop(self):
-        self.client.clear()
