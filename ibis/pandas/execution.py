@@ -39,7 +39,7 @@ _IBIS_TYPE_TO_PANDAS_TYPE = {
     dt.int32: np.int32,
     dt.int64: np.int64,
     dt.string: str,
-    dt.timestamp: 'datetime64[ns]'
+    dt.timestamp: 'datetime64[ns]',
 }
 
 
@@ -47,11 +47,14 @@ def ibis_type_to_pandas_type(ibis_type):
     return _IBIS_TYPE_TO_PANDAS_TYPE[ibis_type]
 
 
-@execute_node.register(ops.Cast, pd.Series)
-def execute_cast_series(op, data, scope=None):
-    _, type = op.args
-    pandas_type = ibis_type_to_pandas_type(type)
-    return data.astype(pandas_type)
+@execute_node.register(ops.Cast, pd.Series, dt.DataType)
+def execute_cast_series_generic(op, data, type, scope=None):
+    return data.astype(ibis_type_to_pandas_type(type))
+
+
+@execute_node.register(ops.Cast, pd.Series, dt.Date)
+def execute_cast_series_date(op, data, type, scope=None):
+    return data.dt.date
 
 
 _LITERAL_CAST_TYPES = {
@@ -66,10 +69,8 @@ _LITERAL_CAST_TYPES = {
 }
 
 
-@execute_node.register(ops.Cast, str)
-def execute_cast_string_literal(op, data, scope=None):
-    _, type = op.args
-
+@execute_node.register(ops.Cast, str, dt.DataType)
+def execute_cast_string_literal(op, data, type, scope=None):
     try:
         return _LITERAL_CAST_TYPES[type](data)
     except KeyError:
@@ -396,7 +397,9 @@ def execute_with_scope(expr, scope):
 
     evaluated_arguments = [
         execute(arg, scope) if hasattr(arg, 'op') else arg
-        for arg in args if isinstance(arg, (ir.Expr, ir.Node, type(None)))
+        for arg in args if isinstance(
+            arg, (ir.Expr, ir.Node, dt.DataType, type(None))
+        )
     ] or [scope.get(arg, arg) for arg in args]
 
     return execute_node(op, *evaluated_arguments, scope=scope)
