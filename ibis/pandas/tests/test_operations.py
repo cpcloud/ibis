@@ -21,6 +21,9 @@ def df():
         'e': list('dad'),
         'f': ['1.0', '2', '3.234'],
         'g': list(map(str, range(1, 4))),
+        'h': list(' ad'),
+        'i': list('ad '),
+        'j': list(' d '),
     })
 
 
@@ -149,16 +152,21 @@ def test_timestamp_functions(case_func, expected_func):
 @pytest.mark.parametrize(
     'op',
     [
-        operator.add,
-        operator.sub,
-        operator.mul,
-        operator.truediv,
+        # comparison
         operator.eq,
         operator.ne,
         operator.lt,
         operator.le,
         operator.gt,
         operator.ge,
+
+        # arithmetic
+        operator.add,
+        operator.sub,
+        operator.mul,
+        operator.truediv,
+        operator.floordiv,
+        operator.mod,
         operator.pow,
     ]
 )
@@ -166,6 +174,13 @@ def test_binary_operations(t, df, op):
     expr = op(t.c, t.a)
     result = expr.execute()
     tm.assert_series_equal(result, op(df.c, df.a))
+
+
+@pytest.mark.parametrize('op', [operator.and_, operator.or_, operator.xor])
+def test_binary_boolean_operations(t, df, op):
+    expr = op(t.c == 1, t.c == 2)
+    result = expr.execute()
+    tm.assert_series_equal(result, op(df.c == 1, df.c == 2))
 
 
 @pytest.mark.parametrize(
@@ -251,3 +266,52 @@ def test_aggregation(t, df, reduction, where):
     )
     expected = expected_func()
     assert result == expected
+
+
+@pytest.mark.parametrize(
+    'reduction',
+    [
+        lambda x: x.any(),
+        lambda x: x.all(),
+        lambda x: ~x.any(),
+        lambda x: ~x.all(),
+    ]
+)
+def test_boolean_aggregation(t, df, reduction):
+    expr = reduction(t.a == 1)
+    result = expr.execute()
+    expected = reduction(df.a == 1)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    ('case_func', 'expected_func'),
+    [
+        (lambda s: s.length(), lambda s: s.str.len()),
+        (lambda s: s.substr(1, 2), lambda s: s.str[1:3]),
+        (lambda s: s.strip(), lambda s: s.str.strip()),
+        (lambda s: s.lstrip(), lambda s: s.str.lstrip()),
+        (lambda s: s.rstrip(), lambda s: s.str.rstrip()),
+        (
+            lambda s: s.lpad(3, 'a'),
+            lambda s: s.str.pad(3, side='left', fillchar='a')
+        ),
+        (
+            lambda s: s.rpad(3, 'b'),
+            lambda s: s.str.pad(3, side='right', fillchar='b')
+        ),
+        (lambda s: s.reverse(), lambda s: s.str[::-1]),
+        (lambda s: s.lower(), lambda s: s.str.lower()),
+        (lambda s: s.upper(), lambda s: s.str.upper()),
+        (lambda s: s.capitalize(), lambda s: s.str.capitalize()),
+        (lambda s: s.repeat(2), lambda s: s * 2),
+        (lambda s: s.contains('a'), lambda s: s.str.contains('a')),
+        (lambda s: ~s.contains('a'), lambda s: ~s.str.contains('a')),
+    ]
+)
+@pytest.mark.parametrize('c', list('hij'))
+def test_string_ops(t, df, c, case_func, expected_func):
+    expr = case_func(t[c])
+    result = expr.execute()
+    series = expected_func(df[c])
+    tm.assert_series_equal(result, series)
