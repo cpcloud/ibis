@@ -77,6 +77,14 @@ def execute_aggregation_dataframe(op, data, scope=None):
     assert op.agg_exprs
     assert op.by
 
+    if op.having:
+        raise NotImplementedError('having expressions not yet implemented')
+
+    if op.sort_keys:
+        raise NotImplementedError(
+            'sorting on aggregations not yet implemented'
+        )
+
     predicates = op.predicates
     if predicates:
         data = data.loc[
@@ -89,15 +97,6 @@ def execute_aggregation_dataframe(op, data, scope=None):
     pieces = [func(gb) for func in aggs]
     agg_df = pd.concat(pieces, axis=1)
 
-    having = op.having
-    if having:
-        agg_df = agg_df[
-            reduce(operator.and_, (execute(h, scope) for h in having))
-        ]
-
-    sort_keys = op.sort_keys
-    if sort_keys:
-        agg_df = agg_df.sort_values(sort_keys)
     return agg_df.reset_index()
 
 

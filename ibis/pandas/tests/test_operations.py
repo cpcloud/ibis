@@ -105,10 +105,28 @@ def test_selection(t, df):
 
 def test_group_by(t, df):
     expr = t.group_by(t.e).aggregate(avg_a=t.a.mean(), sum_c=t.c.sum())
-    result = expr.execute()
+    result = expr.execute()[['avg_a', 'sum_c']]
+    expected = df.groupby('e').agg(
+        {'a': 'mean', 'c': 'sum'}
+    ).reset_index().rename(
+        columns={'a': 'avg_a', 'c': 'sum_c'}
+    )[['avg_a', 'sum_c']]
+    tm.assert_frame_equal(result, expected)
+
+
+@pytest.mark.xfail(raises=NotImplementedError)
+def test_group_by_with_having(t, df):
+    expr = t.group_by(t.e).having(t.c.sum() == 5).aggregate(
+        avg_a=t.a.mean(),
+        sum_c=t.c.sum(),
+    )
+    result = expr.execute()[['avg_a', 'sum_c']]
+
     expected = df.groupby('e').agg(
         {'a': 'mean', 'c': 'sum'}
     ).reset_index().rename(columns={'a': 'avg_a', 'c': 'sum_c'})
+    expected = expected.loc[expected.sum_c == 5, ['avg_a', 'sum_c']]
+
     tm.assert_frame_equal(result, expected)
 
 
