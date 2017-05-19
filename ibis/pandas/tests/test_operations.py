@@ -17,26 +17,16 @@ from ibis.pandas.api import connect, execute
 @pytest.fixture
 def df():
     return pd.DataFrame({
-        'a': [1, 2, 3],
-        'b': list('abc'),
-        'c': [4.0, 5.0, 6.0],
-        'd': pd.date_range('now', periods=3).values,
-        'e': list('dad'),
-        'f': ['1.0', '2', '3.234'],
-        'g': list(map(str, range(1, 4))),
-        'h': list(' ad'),
-        'i': list('ad '),
-        'j': list(' d '),
-        'k': [0, 1, 0],
-        'm': [1.0, 0.0, 1.0],
-        'n': pd.Series(
-            [
-                '2017-04-01 12:03:01',
-                '2017-04-02 10:34:17',
-                '2017-04-03 11:12:13',
-            ],
-            dtype='datetime64[ns]'
-        ),
+        'plain_int64': [1, 2, 3],
+        'plain_strings': list('abc'),
+        'plain_float64': [4.0, 5.0, 6.0],
+        'plain_datetimes': pd.date_range('now', periods=3).values,
+        'dup_strings': list('dad'),
+        'float64_as_strings': ['1.0', '2', '3.234'],
+        'int64_as_strings': list(map(str, range(1, 4))),
+        'strings_with_space': list(' ad'),
+        'int64_with_zeros': [0, 1, 0],
+        'float64_with_zeros': [1.0, 0.0, 1.0],
     })
 
 
@@ -61,16 +51,16 @@ def t(client):
 
 
 def test_table_column(t, df):
-    expr = t.a
+    expr = t.plain_int64
     result = expr.execute()
-    tm.assert_series_equal(result, df.a)
+    tm.assert_series_equal(result, df.plain_int64)
 
 
 def test_literal(client):
     assert client.execute(ibis.literal(1)) == 1
 
 
-@pytest.mark.parametrize('from_', list('ac'))
+@pytest.mark.parametrize('from_', ['plain_float64', 'plain_int64'])
 @pytest.mark.parametrize(
     ('to', 'expected'),
     [
@@ -89,7 +79,7 @@ def test_cast_numeric(t, df, from_, to, expected):
     assert str(result.dtype) == expected
 
 
-@pytest.mark.parametrize('from_', list('fg'))
+@pytest.mark.parametrize('from_', ['float64_as_strings', 'int64_as_strings'])
 @pytest.mark.parametrize(
     ('to', 'expected'),
     [
@@ -103,7 +93,6 @@ def test_cast_string(t, df, from_, to, expected):
     assert str(result.dtype) == expected
 
 
-@pytest.mark.parametrize('from_', ['d'])
 @pytest.mark.parametrize(
     ('to', 'expected'),
     [
@@ -112,18 +101,18 @@ def test_cast_string(t, df, from_, to, expected):
         pytest.mark.xfail(('double', 'float64'), raises=TypeError),
     ]
 )
-def test_cast_timestamp(t, df, from_, to, expected):
-    c = t[from_].cast(to)
+def test_cast_timestamp(t, df, to, expected):
+    c = t.plain_datetimes.cast(to)
     result = c.execute()
     assert str(result.dtype) == expected
 
 
 def test_cast_date(t, df):
-    assert t.n.type() == dt.timestamp
+    assert t.plain_datetimes.type() == dt.timestamp
 
-    expr = t.n.cast('date').cast('string')
+    expr = t.plain_datetimes.cast('date').cast('string')
     result = expr.execute()
-    expected = df.n.dt.date.astype(str)
+    expected = df.plain_datetimes.dt.date.astype(str)
     tm.assert_series_equal(result, expected)
 
 
@@ -188,16 +177,19 @@ def test_timestamp_functions(case_func, expected_func):
     ]
 )
 def test_binary_operations(t, df, op):
-    expr = op(t.c, t.a)
+    expr = op(t.plain_float64, t.plain_int64)
     result = expr.execute()
-    tm.assert_series_equal(result, op(df.c, df.a))
+    tm.assert_series_equal(result, op(df.plain_float64, df.plain_int64))
 
 
 @pytest.mark.parametrize('op', [operator.and_, operator.or_, operator.xor])
 def test_binary_boolean_operations(t, df, op):
-    expr = op(t.c == 1, t.c == 2)
+    expr = op(t.plain_int64 == 1, t.plain_int64 == 2)
     result = expr.execute()
-    tm.assert_series_equal(result, op(df.c == 1, df.c == 2))
+    tm.assert_series_equal(
+        result,
+        op(df.plain_int64 == 1, df.plain_int64 == 2)
+    )
 
 
 @pytest.mark.parametrize(
@@ -225,34 +217,51 @@ def test_join(client, how):
 
 
 def test_selection(t, df):
-    expr = t[((t.b == 'a') | (t.a == 3)) & (t.e == 'd')]
+    expr = t[
+        ((t.plain_strings == 'a') | (t.plain_int64 == 3)) &
+        (t.dup_strings == 'd')
+    ]
     result = expr.execute()
-    expected = df[((df.b == 'a') | (df.a == 3)) & (df.e == 'd')]
+    expected = df[
+        ((df.plain_strings == 'a') | (df.plain_int64 == 3)) &
+        (df.dup_strings == 'd')
+    ]
     tm.assert_frame_equal(result, expected)
 
 
 def test_group_by(t, df):
-    expr = t.group_by(t.e).aggregate(avg_a=t.a.mean(), sum_c=t.c.sum())
-    result = expr.execute()[['avg_a', 'sum_c']]
-    expected = df.groupby('e').agg(
-        {'a': 'mean', 'c': 'sum'}
+    expr = t.group_by(
+        t.dup_strings
+    ).aggregate(
+        avg_plain_int64=t.plain_int64.mean(),
+        sum_plain_float64=t.plain_float64.sum()
+    )
+    result = expr.execute()[['avg_plain_int64', 'sum_plain_float64']]
+    expected = df.groupby('dup_strings').agg(
+        {'plain_int64': 'mean', 'plain_float64': 'sum'}
     ).reset_index().rename(
-        columns={'a': 'avg_a', 'c': 'sum_c'}
-    )[['avg_a', 'sum_c']]
+        columns={
+            'plain_int64': 'avg_plain_int64',
+            'plain_float64': 'sum_plain_float64',
+        }
+    )[['avg_plain_int64', 'sum_plain_float64']]
     tm.assert_frame_equal(result, expected)
 
 
 @pytest.mark.xfail(raises=NotImplementedError)
 def test_group_by_with_having(t, df):
-    expr = t.group_by(t.e).having(t.c.sum() == 5).aggregate(
-        avg_a=t.a.mean(),
-        sum_c=t.c.sum(),
+    expr = t.group_by(t.dup_strings).having(
+        t.plain_float64.sum() == 5
+    ).aggregate(
+        avg_a=t.plain_int64.mean(),
+        sum_c=t.plain_float64.sum(),
     )
     result = expr.execute()[['avg_a', 'sum_c']]
 
-    expected = df.groupby('e').agg(
-        {'a': 'mean', 'c': 'sum'}
-    ).reset_index().rename(columns={'a': 'avg_a', 'c': 'sum_c'})
+    expected = df.groupby('dup_strings').agg({
+        'a': 'mean',
+        'c': 'sum',
+    }).reset_index().rename(columns={'a': 'avg_a', 'c': 'sum_c'})
     expected = expected.loc[expected.sum_c == 5, ['avg_a', 'sum_c']]
 
     tm.assert_frame_equal(result, expected)
@@ -265,20 +274,21 @@ def test_group_by_with_having(t, df):
 @pytest.mark.parametrize(
     'where',
     [
-        lambda t: (t.b == 'a') | (t.b == 'c'),
-        lambda t: (t.e == 'd') & ((t.a == 1) | (t.a == 3)),
+        lambda t: (t.plain_strings == 'a') | (t.plain_strings == 'c'),
+        lambda t: (t.dup_strings == 'd') &
+            ((t.plain_int64 == 1) | (t.plain_int64 == 3)),
         lambda t: None,
     ]
 )
 def test_aggregation(t, df, reduction, where):
-    func = getattr(t.a, reduction)
+    func = getattr(t.plain_int64, reduction)
     mask = where(t)
     expr = func(where=mask)
     result = expr.execute()
 
     df_mask = where(df)
     expected_func = getattr(
-        df.loc[df_mask if df_mask is not None else slice(None), 'a'],
+        df.loc[df_mask if df_mask is not None else slice(None), 'plain_int64'],
         reduction,
     )
     expected = expected_func()
@@ -295,13 +305,13 @@ def test_aggregation(t, df, reduction, where):
     ]
 )
 def test_boolean_aggregation(t, df, reduction):
-    expr = reduction(t.a == 1)
+    expr = reduction(t.plain_int64 == 1)
     result = expr.execute()
-    expected = reduction(df.a == 1)
+    expected = reduction(df.plain_int64 == 1)
     assert result == expected
 
 
-@pytest.mark.parametrize('column', list('km'))
+@pytest.mark.parametrize('column', ['float64_with_zeros', 'int64_with_zeros'])
 def test_null_if_zero(t, df, column):
     expr = t[column].nullifzero()
     result = expr.execute()
@@ -334,9 +344,8 @@ def test_null_if_zero(t, df, column):
         (lambda s: ~s.contains('a'), lambda s: ~s.str.contains('a')),
     ]
 )
-@pytest.mark.parametrize('c', list('hij'))
-def test_string_ops(t, df, c, case_func, expected_func):
-    expr = case_func(t[c])
+def test_string_ops(t, df, case_func, expected_func):
+    expr = case_func(t.strings_with_space)
     result = expr.execute()
-    series = expected_func(df[c])
+    series = expected_func(df.strings_with_space)
     tm.assert_series_equal(result, series)
