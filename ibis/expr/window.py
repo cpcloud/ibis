@@ -34,8 +34,9 @@ class Window(object):
     for current_value
     """
 
-    def __init__(self, group_by=None, order_by=None,
-                 preceding=None, following=None):
+    def __init__(
+        self, group_by=None, order_by=None, preceding=None, following=None
+    ):
         if group_by is None:
             group_by = []
 

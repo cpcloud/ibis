@@ -23,6 +23,7 @@ from ibis.expr.rules import value, string, number, integer, boolean, list_of
 from ibis.expr.types import (Node, as_value_expr, Expr,
                              ValueExpr, ColumnExpr, TableExpr,
                              ValueOp, _safe_repr)
+
 import ibis.common as com
 import ibis.expr.datatypes as dt
 import ibis.expr.rules as rules
@@ -770,26 +771,32 @@ class AnalyticOp(ValueOp):
 
 class WindowOp(ValueOp):
 
+    input_type = [
+        rules.instance_of(object, name='expr'),
+        rules.instance_of(object, name='window')
+    ]
+
     output_type = rules.type_of_arg(0)
 
     def __init__(self, expr, window):
-        from ibis.expr.window import propagate_down_window
         if not is_analytic(expr):
-            raise com.IbisInputError('Expression does not contain a valid '
-                                     'window operation')
+            raise com.IbisInputError(
+                'Expression does not contain a valid window operation'
+            )
 
         table = ir.find_base_table(expr)
         if table is not None:
             window = window.bind(table)
 
+        from ibis.expr.window import propagate_down_window
         expr = propagate_down_window(expr, window)
 
-        ValueOp.__init__(self, expr, window)
+        super(WindowOp, self).__init__(expr, window)
 
     def over(self, window):
-        existing_window = self.args[1]
+        existing_window = self.window
         new_window = existing_window.combine(window)
-        return WindowOp(self.args[0], new_window)
+        return WindowOp(self.expr, new_window)
 
 
 def is_analytic(expr, exclude_windows=False):

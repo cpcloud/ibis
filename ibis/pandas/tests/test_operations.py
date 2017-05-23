@@ -41,13 +41,27 @@ def df2():
 
 
 @pytest.fixture
-def client(df, df1, df2):
-    return connect({'df': df, 'df1': df1, 'df2': df2})
+def wdf():
+    return pd.DataFrame({
+        'time': pd.date_range('2017-04-01', periods=20),
+        'key': np.random.choice(list('ab'), size=20),
+        'value': np.arange(20, dtype='float64'),
+    })[['time', 'key', 'value']]
+
+
+@pytest.fixture
+def client(df, df1, df2, wdf):
+    return connect({'df': df, 'df1': df1, 'df2': df2, 'wdf': wdf})
 
 
 @pytest.fixture
 def t(client):
     return client.table('df')
+
+
+@pytest.fixture
+def wt(client):
+    return client.table('wdf')
 
 
 def test_table_column(t, df):
@@ -350,3 +364,26 @@ def test_string_ops(t, df, case_func, expected_func):
     result = expr.execute()
     series = expected_func(df.strings_with_space)
     tm.assert_series_equal(result, series)
+
+
+def roller(func):
+    def rolled(df, func=func):
+        rolling = df.sort_values('time').value.rolling(7, min_periods=0)
+        return getattr(rolling, func)()
+    return rolled
+
+
+@pytest.mark.parametrize('func', ['mean', 'sum', 'min', 'max'])
+def test_partitioned_window(wt, wdf, func):
+    window = ibis.window(
+        group_by=wt.key,
+        # order_by=wt.time,
+        preceding=6,
+        following=0,
+    )
+
+    f = getattr(wt.value, func)
+    expr = f().over(window).name('value')
+    result = wt.projection([expr]).execute().value
+    expected = wdf.groupby(wdf.key).apply(roller(func)).reset_index(drop=True)
+    tm.assert_series_equal(result, expected)

@@ -2,6 +2,7 @@ import numbers
 import operator
 import datetime
 
+from collections import OrderedDict
 from functools import reduce
 
 import six
@@ -9,19 +10,27 @@ import six
 import numpy as np
 import pandas as pd
 
+import toolz
+
+from ibis.compat import integer_types
+
 import ibis.expr.types as ir
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
-from ibis.pandas.dispatch import execute, execute_node
-
-
-integer_types = six.integer_types + (np.integer,)
+from ibis.pandas.dispatch import execute, execute_node, execute_direct
 
 scalar_types = (
-    numbers.Real, datetime.datetime, datetime.date, np.number, np.bool_,
-    np.datetime64, np.timedelta64,
-) + six.string_types
+    numbers.Real,
+    datetime.datetime,
+    datetime.date,
+    np.floating,
+    np.datetime64,
+    np.bool_,
+) + integer_types + six.string_types
+
+
+float_types = np.floating, float
 
 
 @execute_node.register(ir.Literal)
@@ -51,13 +60,10 @@ _IBIS_TYPE_TO_PANDAS_TYPE = {
 }
 
 
-def ibis_type_to_pandas_type(ibis_type):
-    return _IBIS_TYPE_TO_PANDAS_TYPE[ibis_type]
-
-
 @execute_node.register(ops.Cast, pd.Series, dt.DataType)
 def execute_cast_series_generic(op, data, type, scope=None):
-    return data.astype(ibis_type_to_pandas_type(type))
+    pandas_type = _IBIS_TYPE_TO_PANDAS_TYPE[type]
+    return data.astype(pandas_type)
 
 
 @execute_node.register(ops.Cast, pd.Series, dt.Date)
@@ -92,6 +98,70 @@ def execute_table_column_dataframe(op, data, scope=None):
     return data[op.name]
 
 
+def roller(func, column, sort_key, ascending, preceding, following):
+    def rolled(
+        df,
+        func=func, sort_key=sort_key, preceding=preceding, following=following
+    ):
+        rolling = df
+
+        if sort_key:
+            rolling = rolling.sort_values(sort_key, ascending=ascending)
+        rolling = rolling[value].rolling(preceding + 1, min_periods=0)
+
+        return getattr(rolling, func)()
+    return rolled
+
+
+@execute_direct.register(ops.WindowOp, pd.DataFrame)
+def execute_window_op_dataframe(op, data, scope=None):
+    window = op.window
+    preceding = window.preceding
+    following = window.following
+    orderings = [
+        (op.expr._name, op.ascending) for op in map(
+            operator.methodcaller('op'),
+            window._order_by
+        )
+    ]
+    assert not orderings
+    if not all(ascending for ascending in map(toolz.second, orderings)):
+        raise ValueError(
+            'Multiple sorting orders is not supported with pandas 1.0'
+        )
+    grouping = data.groupby([execute(o, scope) for o in window._group_by])
+
+    # if orderings:
+        # return grouping.apply(roller(func))
+    # import pdb; pdb.set_trace()  # noqa
+    result = grouping.transform(transform_to_lambda(op.expr))
+    return result
+
+
+def transform_to_lambda(expr):
+    op = expr.op()
+
+    def transform(
+        data_group,
+        method_name=type(op).__name__.lower(),
+        name=expr._name
+    ):
+        # import pdb; pdb.set_trace()  # noqa
+        size = len(data_group)
+        method = getattr(data_group, method_name)
+        try:
+            result = method()
+        except KeyError:
+            raise TypeError()
+        return pd.Series([result for _ in range(size)], name=name)
+    return transform
+
+
+@execute_node.register(ops.SortKey, pd.Series)
+def execute_sort_key_series(op, data, scope=None):
+    return op.expr._name, op.ascending
+
+
 @execute_node.register(ops.Selection, pd.DataFrame)
 def execute_selection_dataframe(op, data, scope=None):
     selections = op.selections
@@ -101,12 +171,12 @@ def execute_selection_dataframe(op, data, scope=None):
     result = data
 
     if selections:
-        old_names = [s.op().name for s in selections]
-        new_names = [
-            getattr(s, '_name', old_name) or old_name
-            for old_name, s in zip(old_names, selections)
-        ]
-        result = result[old_names].rename(dict(zip(old_names, new_names)))
+        computed_columns = [execute(s, scope) for s in selections]
+        new_names = [s._name for s in selections]
+        result = pd.concat(computed_columns, axis=1)
+        result = result.rename(
+            columns=dict(zip(list(result.columns), new_names))
+        )
 
     if predicates:
         where = reduce(operator.and_, (execute(p, scope) for p in predicates))
@@ -390,7 +460,7 @@ def execute_union_dataframe_dataframe(op, left, right, scope=None):
 def find_data(expr):
     stack = [expr]
     seen = set()
-    data = dict()
+    data = OrderedDict()
 
     while stack:
         e = stack.pop()
@@ -404,7 +474,9 @@ def find_data(expr):
             elif isinstance(node, ir.Literal):
                 data[e] = node.value
 
-            stack.extend(arg for arg in node.args if isinstance(arg, ir.Expr))
+            stack.extend(
+                arg for arg in reversed(node.args) if isinstance(arg, ir.Expr)
+            )
     return data
 
 
@@ -416,12 +488,27 @@ def execute_with_scope(expr, scope):
     op = expr.op()
     args = op.args
 
-    evaluated_arguments = [
-        execute(arg, scope) if hasattr(arg, 'op') else arg
-        for arg in args if isinstance(
-            arg, (ir.Expr, ir.Node, dt.DataType, type(None))
-        )
-    ] or [scope.get(arg, arg) for arg in args]
+    evaluated_arguments = []
+
+    for arg in args:
+        if isinstance(arg, (ir.Expr, ir.Node, dt.DataType, type(None))):
+            if hasattr(arg, 'op'):
+                try:
+                    # See if we can directly compute the result
+                    return execute_direct(
+                        op, *scope.values(), scope=scope
+                    )
+                except NotImplementedError:
+                    # We can't directly compute, so start with leaves and work
+                    # our way up
+                    computed_argument = execute(arg, scope)
+            else:
+                computed_argument = arg
+
+            evaluated_arguments.append(computed_argument)
+
+    if not evaluated_arguments:
+        evaluated_arguments = [scope.get(arg, arg) for arg in args]
 
     return execute_node(op, *evaluated_arguments, scope=scope)
 
