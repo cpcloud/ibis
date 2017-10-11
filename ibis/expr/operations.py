@@ -1621,23 +1621,17 @@ class MaterializedJoin(TableNode, HasSchema):
 
 class CrossJoin(InnerJoin):
 
-    """
-    Some databases have a CROSS JOIN operator, that may be preferential to use
-    over an INNER JOIN with no predicates.
+    """Some databases have a CROSS JOIN operator, that may be preferential to
+    use over an INNER JOIN with no predicates.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, left, right, *relations, **kwargs):
         if 'prefixes' in kwargs:
-            raise NotImplementedError
+            raise NotImplementedError('prefixes argument not implemented')
 
-        if len(args) < 2:
-            raise com.IbisInputError('Must pass at least 2 tables')
-
-        left = args[0]
-        right = args[1]
-        for t in args[2:]:
+        for t in relations:
             right = right.cross_join(t)
-        InnerJoin.__init__(self, left, right, [])
+        super(CrossJoin, self).__init__(left, right, [])
 
 
 class AsOfJoin(Join):
@@ -2836,3 +2830,37 @@ class ValueList(ValueOp):
 
     def root_tables(self):
         return distinct_roots(*self.values)
+
+    def _make_expr(self):
+        dtype = rlz.highest_precedence_dtype(self.values)
+        return ir.ListExpr(self, dtype=dtype)
+
+
+class Unnest(TableNode, HasSchema):
+
+    array = Arg(rlz.noop)
+
+    def root_tables(self):
+        return self.array.op().root_tables()
+
+    @property
+    def table(self):
+        roots = self.root_tables()
+        if roots:
+            root, = roots
+            return root.to_expr()
+
+    @property
+    def name(self):
+        return self.array.get_name()
+
+    @property
+    def schema(self):
+        array = self.array
+        if self.name is None:
+            try:
+                self._name = array.get_name()
+            except com.ExpressionError:
+                self._name = genname()
+        tuples = [(self.name, array.type().value_type)]
+        return Schema.from_tuples(tuples)

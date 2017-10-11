@@ -1127,30 +1127,29 @@ class AlchemySelect(Select):
 
     def _add_groupby(self, fragment):
         # GROUP BY and HAVING
-        if not len(self.group_by):
+        if not self.group_by:
             return fragment
 
-        group_keys = [self._translate(arg) for arg in self.group_by]
-        fragment = fragment.group_by(*group_keys)
+        fragment = fragment.group_by(*map(self._translate, self.group_by))
 
-        if len(self.having) > 0:
-            having_args = [self._translate(arg) for arg in self.having]
-            having_clause = _and_all(having_args)
+        if self.having:
+            having_args = map(self._translate, self.having)
+            having_clause = functools.reduce(sa.and_, having_args)
             fragment = fragment.having(having_clause)
 
         return fragment
 
     def _add_where(self, fragment):
-        if not len(self.where):
+        if not self.where:
             return fragment
 
         args = [self._translate(pred, permit_subquery=True)
                 for pred in self.where]
-        clause = _and_all(args)
+        clause = functools.reduce(sa.and_, args)
         return fragment.where(clause)
 
     def _add_order_by(self, fragment):
-        if not len(self.order_by):
+        if not self.order_by:
             return fragment
 
         clauses = []
@@ -1211,28 +1210,31 @@ class _AlchemyTableSet(TableSetFormatter):
         for jtype, table, preds in zip(self.join_types,
                                        self.join_tables[1:],
                                        self.join_predicates):
-            if len(preds):
+            if preds:
                 sqla_preds = [self._translate(pred) for pred in preds]
-                onclause = _and_all(sqla_preds)
+                onclause = functools.reduce(sa.and_, sqla_preds)
             else:
                 onclause = None
 
-            if jtype in (ops.InnerJoin, ops.CrossJoin):
+            if jtype is ops.InnerJoin:
                 result = result.join(table, onclause)
+            elif jtype is ops.CrossJoin:
+                result = result.join(
+                    table,
+                    onclause if onclause is not None else sa.true()
+                )
             elif jtype is ops.LeftJoin:
-                result = result.join(table, onclause, isouter=True)
+                result = result.outerjoin(table, onclause)
             elif jtype is ops.RightJoin:
-                result = table.join(result, onclause, isouter=True)
+                result = table.outerjoin(result, onclause)
             elif jtype is ops.OuterJoin:
                 result = result.outerjoin(table, onclause)
             elif jtype is ops.LeftSemiJoin:
                 result = (sa.select([result])
-                          .where(sa.exists(sa.select([1])
-                                           .where(onclause))))
+                          .where(sa.exists(sa.select([1]).where(onclause))))
             elif jtype is ops.LeftAntiJoin:
                 result = (sa.select([result])
-                          .where(~sa.exists(sa.select([1])
-                                            .where(onclause))))
+                          .where(~sa.exists(sa.select([1]).where(onclause))))
             else:
                 raise NotImplementedError(jtype)
 
@@ -1264,6 +1266,11 @@ class _AlchemyTableSet(TableSetFormatter):
                     for n, t in zip(schema.names, schema.types)
                 )
             )
+        elif isinstance(ref_op, ops.Unnest):
+            translated_array = self._translate(ref_op.array)
+            # If we've made it past self._translate then we know there's valid
+            # parent and parent.translator attributes
+            result = self.parent.translator.unnest_function(translated_array)
         else:
             # A subquery
             if ctx.is_extracted(ref_expr):
@@ -1311,13 +1318,6 @@ def _can_lower_sort_column(table_set, expr):
         return base.equals(table_set)
     else:
         return False
-
-
-def _and_all(clauses):
-    result = clauses[0]
-    for clause in clauses[1:]:
-        result = sql.and_(result, clause)
-    return result
 
 
 class AlchemyProxy(object):

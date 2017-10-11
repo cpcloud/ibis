@@ -16,6 +16,7 @@ from ibis.compat import functools
 from ibis.sql.alchemy import (unary, fixed_arity, infix_op,
                               _variance_reduction, _get_sqla_table)
 import ibis.common as com
+from ibis.sql.postgres.unnest import unnest
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
@@ -698,6 +699,8 @@ class PostgreSQLExprTranslator(alch.AlchemyExprTranslator):
         dt.Double: pg.DOUBLE_PRECISION,
         dt.Float: pg.REAL
     })
+
+    unnest_function = unnest
 
 
 rewrites = PostgreSQLExprTranslator.rewrites
