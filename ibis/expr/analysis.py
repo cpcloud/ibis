@@ -746,6 +746,13 @@ class Projector(object):
 
     def get_result(self):
         roots = self.parent_roots
+
+        nroots = len(roots)
+        if not nroots:  # we're projecting from an Unnest operation
+            parent = self.parent
+            assert isinstance(parent.op(), ops.Unnest), type(parent.op())
+            return ops.Selection(parent, self.clean_exprs)
+
         first_root = roots[0]
 
         if len(roots) == 1 and isinstance(first_root, ops.Selection):
@@ -817,10 +824,7 @@ class ExprValidator(object):
 
     def __init__(self, exprs):
         self.parent_exprs = exprs
-
-        self.roots = []
-        for expr in self.parent_exprs:
-            self.roots.extend(expr._root_tables())
+        self.roots = [root for expr in exprs for root in expr._root_tables()]
 
     def has_common_roots(self, expr):
         return self.validate(expr)
@@ -828,37 +832,32 @@ class ExprValidator(object):
     def validate(self, expr):
         op = expr.op()
         if isinstance(op, ops.TableColumn):
-            if self._among_roots(op.table.op()):
+            if self.roots_shared(op.table.op()):
                 return True
         elif isinstance(op, ops.Selection):
-            if self._among_roots(op):
+            if self.roots_shared(op):
                 return True
 
         expr_roots = expr._root_tables()
         for root in expr_roots:
-            if not self._among_roots(root):
+            if not self.roots_shared(root):
                 return False
         return True
-
-    def _among_roots(self, node):
-        return self.roots_shared(node) > 0
 
     def roots_shared(self, node):
         return sum(root.is_ancestor(node) for root in self.roots)
 
+    def total_roots_shared(self, expr):
+        return map(self.roots_shared, expr._root_tables())
+
     def shares_some_roots(self, expr):
-        expr_roots = expr._root_tables()
-        return any(self._among_roots(root) for root in expr_roots)
+        return any(self.total_roots_shared(expr))
 
     def shares_one_root(self, expr):
-        expr_roots = expr._root_tables()
-        total = sum(self.roots_shared(root) for root in expr_roots)
-        return total == 1
+        return sum(self.total_roots_shared(expr)) == 1
 
     def shares_multiple_roots(self, expr):
-        expr_roots = expr._root_tables()
-        total = sum(self.roots_shared(expr_roots) for root in expr_roots)
-        return total > 1
+        return sum(self.total_roots_shared(expr)) > 1
 
     def validate_all(self, exprs):
         for expr in exprs:
@@ -870,8 +869,10 @@ class ExprValidator(object):
             raise RelationError(msg)
 
     def _error_message(self, expr):
-        return ('The expression %s does not fully originate from '
-                'dependencies of the table expression.' % repr(expr))
+        return (
+            'The expression {} does not fully originate from dependencies of '
+            'the table expression.'.format(repr(expr))
+        )
 
 
 def fully_originate_from(exprs, parents):
@@ -883,8 +884,8 @@ def fully_originate_from(exprs, parents):
         return lin.halt if op.blocks() else lin.proceed, None
 
     # unique table dependencies of exprs and parents
-    exprs_deps = set(lin.traverse(finder, exprs))
-    parents_deps = set(lin.traverse(finder, parents))
+    exprs_deps = frozenset(lin.traverse(finder, exprs))
+    parents_deps = frozenset(lin.traverse(finder, parents))
     return exprs_deps <= parents_deps
 
 

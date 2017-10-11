@@ -1503,3 +1503,42 @@ def test_string_to_binary_round_trip(con):
         name='tmp'
     )
     tm.assert_series_equal(result, expected)
+
+
+def test_unnest_simple(con, array_types):
+    flat = array_types.x.unnest()
+    expr = array_types.cross_join(flat)[flat.x]
+    query = 'SELECT t1.x AS x FROM array_types AS t0, UNNEST(t0.x) AS t1(x)'
+    expected = pd.DataFrame(con.raw_sql(query).fetchall(), columns=['x'])
+    result = expr.execute()
+    tm.assert_frame_equal(result, expected)
+
+
+def test_unnest_complex(con, array_types):
+    flattened = array_types.x.unnest()
+    expr = array_types.cross_join(flattened)[
+        array_types.grouper, flattened.x
+    ]
+    gb = expr.groupby(expr.grouper).aggregate(count_flat=expr.x.count())
+    expected_sql = """\
+SELECT t0.grouper, COUNT(t1.x) AS count_flat
+FROM array_types AS t0, UNNEST(t0.x) AS t1(x)
+GROUP BY t0.grouper"""
+    expected = pd.DataFrame(
+        con.raw_sql(expected_sql).fetchall(),
+        columns=['grouper', 'count_flat']
+    )
+    result = gb.execute()
+    tm.assert_frame_equal(result, expected)
+
+
+def test_unnest_convenience_api(con, array_types):
+    flattened = array_types.x.unnest()
+    expr = array_types[flattened.x]
+    expected_sql = """\
+SELECT t1.x AS x
+FROM array_types AS t0, UNNEST(t0.x) AS t1(x)"""
+    result = expr.execute()
+    raw_data = con.raw_sql(expected_sql).fetchall()
+    expected = pd.DataFrame(raw_data, columns=['x'])
+    tm.assert_series_equal(result, expected)

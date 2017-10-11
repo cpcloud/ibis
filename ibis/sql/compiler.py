@@ -385,7 +385,9 @@ class SelectBuilder(object):
         if hasattr(self, method):
             f = getattr(self, method)
             f(expr, toplevel=toplevel)
-        elif isinstance(op, (ops.PhysicalTable, ops.SQLQueryResult)):
+        elif isinstance(
+            op, (ops.PhysicalTable, ops.SQLQueryResult, ops.Unnest)
+        ):
             self._collect_PhysicalTable(expr, toplevel=toplevel)
         elif isinstance(op, ops.Join):
             self._collect_Join(expr, toplevel=toplevel)
@@ -581,7 +583,7 @@ def _all_distinct_roots(subtables):
     for t in subtables:
         base = _blocking_base(t)
         for x in bases:
-            if base.equals(x):
+            if base is not None and base.equals(x):
                 return False
         bases.append(base)
     return True
@@ -642,6 +644,9 @@ class ExtractSubqueries(object):
     def seen(self, expr):
         return expr.op() in self.expr_counts
 
+    def _visit_physical_table(self, expr):
+        self.observe(expr)
+
     def visit(self, expr):
         node = expr.op()
         method = 'visit_{}'.format(type(node).__name__)
@@ -678,6 +683,9 @@ class ExtractSubqueries(object):
 
     def visit_Aggregation(self, expr):
         self.visit(expr.op().table)
+        self.observe(expr)
+
+    def visit_Unnest(self, expr):
         self.observe(expr)
 
     def visit_Distinct(self, expr):
@@ -1119,6 +1127,11 @@ class QueryContext(object):
         return result
 
     def make_alias(self, expr):
+        op = expr.op()
+        if isinstance(op, ops.Unnest):
+            self.set_ref(expr, op.array.get_name())
+            return
+
         i = len(self._table_refs)
 
         key = self._get_table_key(expr)
@@ -1141,7 +1154,12 @@ class QueryContext(object):
         self.set_ref(expr, alias)
 
     def need_aliases(self, expr=None):
-        return self.always_alias or len(self._table_refs) > 1
+        return (
+            # unnest operations always need a name
+            (expr is not None and isinstance(expr.op(), ops.Unnest)) or
+            self.always_alias or
+            len(self._table_refs) > 1
+        )
 
     def has_ref(self, expr, parent_contexts=False):
         key = self._get_table_key(expr)
@@ -1260,14 +1278,10 @@ class ExprTranslator(object):
         op = expr.op()
         if isinstance(op, ops.TableColumn):
             # This column has been given an explicitly different name
-            if expr.get_name() != op.name:
-                return True
-            return False
+            return (expr.get_name() != op.name or
+                    isinstance(op.table.op(), ops.Unnest))
 
-        if expr.get_name() is ir.unnamed:
-            return False
-
-        return True
+        return expr.get_name() is not ir.unnamed
 
     def translate(self, expr):
         # The operation node type the typed expression wraps
@@ -1795,9 +1809,14 @@ class TableSetFormatter(object):
         if isinstance(ref_op, ops.PhysicalTable):
             name = ref_op.name
             if name is None:
-                raise com.RelationError('Table did not have a name: {0!r}'
-                                        .format(expr))
+                raise com.RelationError(
+                    'Table did not have a name: {!r}'.format(expr)
+                )
             result = self._quote_identifier(name)
+            is_subquery = False
+        elif isinstance(ref_op, ops.Unnest):
+            translated_array = self._translate(ref_op.array)
+            result = 'UNNEST({})'.format(translated_array)
             is_subquery = False
         else:
             # A subquery

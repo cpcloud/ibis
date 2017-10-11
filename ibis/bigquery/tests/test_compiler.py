@@ -3,6 +3,7 @@ import datetime
 import pytest
 
 import pandas as pd
+import pandas.util.testing as tm
 
 import ibis
 import ibis.expr.datatypes as dt
@@ -508,3 +509,53 @@ def test_now():
     result = ibis.bigquery.compile(expr)
     expected = 'SELECT CURRENT_TIMESTAMP() AS `tmp`'
     assert result == expected
+
+
+def test_unnest_table(alltypes):
+    agg = alltypes.groupby(
+        alltypes.string_col).aggregate(foo=alltypes.double_col.collect())
+    rhs = agg.foo.unnest()
+    expr = agg.cross_join(rhs)[agg.string_col, rhs.foo]
+    result = expr.compile()
+    expected = """\
+SELECT t0.`string_col`, foo AS `foo`
+FROM (
+  SELECT `string_col`, ARRAY_AGG(`double_col`) AS `foo`
+  FROM `ibis-gbq.testing.functional_alltypes`
+  GROUP BY 1
+) t0
+  CROSS JOIN UNNEST(t0.`foo`) foo"""
+    assert result == expected
+
+
+def test_unnest_table_execute(alltypes, df):
+    agg = alltypes.groupby(
+        alltypes.string_col).aggregate(foo=alltypes.double_col.collect())
+    rhs = agg.foo.unnest()
+    expr = agg.cross_join(rhs)[agg.string_col, rhs.foo]
+    result = expr.execute()
+    assert not result.empty
+    assert len(result) == len(df)
+
+
+def test_unnest_single_column_execute(alltypes):
+    agg = alltypes.groupby(
+        alltypes.string_col).aggregate(foo=alltypes.double_col.collect())
+    rhs = agg.foo.unnest()
+    expr = agg.cross_join(rhs)[rhs.foo].foo.value_counts()
+    result = expr.execute()
+    assert not result.empty
+
+
+def test_unnest_literal(client):
+    collected = ibis.literal([1, 2, 3]).name('foo')
+    expr = collected.unnest().foo + 1
+    result = client.compile(expr)
+    expected = """\
+SELECT `foo` + 1 AS `tmp`
+FROM UNNEST([1, 2, 3]) foo"""
+    assert result == expected
+
+    series = client.execute(expr)
+    expected_series = pd.Series([1, 2, 3], name='tmp', dtype='int16') + 1
+    tm.assert_series_equal(series, expected_series)

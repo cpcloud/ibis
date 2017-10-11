@@ -1,12 +1,8 @@
 import datetime
 
-from functools import partial
-
 import regex as re
 
 import six
-
-import toolz
 
 from multipledispatch import Dispatcher
 
@@ -41,7 +37,7 @@ class BigQuerySelectBuilder(comp.SelectBuilder):
         return BigQuerySelect
 
 
-class BigQueryUDFDefinition(comp.DDL):
+class BigQueryUDF(comp.DDL):
 
     def __init__(self, expr, context):
         self.expr = expr
@@ -71,15 +67,10 @@ class BigQueryQueryBuilder(comp.QueryBuilder):
     union_class = BigQueryUnion
 
     def generate_setup_queries(self):
-        queries = map(
-            partial(BigQueryUDFDefinition, context=self.context),
-            lin.traverse(find_bigquery_udf, self.expr)
-        )
-
-        # UDFs are uniquely identified by the name of the Node subclass we
-        # generate.
-        return list(
-            toolz.unique(queries, key=lambda x: type(x.expr.op()).__name__))
+        return [
+            BigQueryUDF(expr, context=self.context)
+            for expr in lin.traverse(find_bigquery_udf, self.expr)
+        ]
 
 
 def build_ast(expr, context):
@@ -451,6 +442,32 @@ def bigquery_day_of_week_index(t, e):
 def bigquery_day_of_week_name(e):
     arg = e.op().args[0]
     return arg.strftime('%A')
+
+
+@compiles(ops.TableColumn)
+def bigquery_compiles_table_column(translator, expr):
+    op = expr.op()
+
+    field_name = op.name
+    quoted_name = impala_compiler.quote_identifier(field_name, force=True)
+
+    table = op.table
+    ctx = translator.context
+
+    # If the column does not originate from the table set in the current SELECT
+    # context, we should format as a subquery
+    if translator.permit_subquery and ctx.is_foreign_expr(table):
+        proj_expr = table.projection([field_name]).to_array()
+        return impala_compiler._table_array_view(translator, proj_expr)
+
+    if ctx.need_aliases():
+        alias = ctx.get_ref(table)
+        if isinstance(op.table.op(), ops.Unnest):
+            return impala_compiler.quote_identifier(alias)
+        if alias is not None:
+            quoted_name = '{}.{}'.format(alias, quoted_name)
+
+    return quoted_name
 
 
 @compiles(ops.Divide)

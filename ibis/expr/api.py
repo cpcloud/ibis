@@ -2121,6 +2121,23 @@ def _array_slice(array, index):
     return op.to_expr()
 
 
+def unnest(array):
+    """Unnest the array value `array`.
+
+    Parameters
+    ----------
+    array : ir.ArrayValue
+
+    Returns
+    -------
+    column : ir.ValueExpr
+        Column selection of the unnested value of `array`
+    """
+    op = ops.Unnest(array)
+    unnest_expr = op.to_expr()
+    return unnest_expr
+
+
 _array_column_methods = dict(
     length=_unary_op('length', ops.ArrayLength),
     __getitem__=_array_slice,
@@ -2128,6 +2145,7 @@ _array_column_methods = dict(
     __radd__=toolz.flip(_binop_expr('__radd__', ops.ArrayConcat)),
     __mul__=_binop_expr('__mul__', ops.ArrayRepeat),
     __rmul__=_binop_expr('__rmul__', ops.ArrayRepeat),
+    unnest=unnest,
 )
 
 _add_methods(ir.ArrayValue, _array_column_methods)
