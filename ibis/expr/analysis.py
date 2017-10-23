@@ -1015,6 +1015,11 @@ def find_source_table(expr):
     -------
     table_expr : ir.TableExpr
 
+    Raises
+    ------
+    NotImplementedError
+        If more than one table is found
+
     Examples
     --------
     >>> import ibis
