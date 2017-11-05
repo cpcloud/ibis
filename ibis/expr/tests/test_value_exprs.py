@@ -1160,3 +1160,77 @@ def test_struct_field_dir():
     t = ibis.table([('struct_col', 'struct<my_field: string>')])
     assert 'struct_col' in dir(t)
     assert 'my_field' in dir(t.struct_col)
+
+
+def test_array_constructor_single_level():
+    t = ibis.table([('a', 'string'), ('b', 'double'), ('c', 'string')])
+    expr = ibis.array([t.a, t.c])
+    assert expr is not None
+
+    expected_type = dt.Array(dt.string)
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_multi_level():
+    t = ibis.table([('a', 'string'), ('b', 'double'), ('c', 'string')])
+    expr = ibis.array([[t.a], [t.c]])
+    assert expr is not None
+
+    expected_type = dt.Array(dt.Array(dt.string))
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_literal_single_level():
+    expr = ibis.array(['a', 'c'])
+    assert expr is not None
+
+    expected_type = dt.Array(dt.string)
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_literal_multi_level():
+    expr = ibis.array([['a'], ['c']])
+    assert expr is not None
+
+    expected_type = dt.Array(dt.Array(dt.string))
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_failure_multi_level():
+    t = ibis.table([('a', 'string'), ('b', 'double'), ('c', 'string')])
+    elements = [[t.a], [t.b]]
+    with pytest.raises(IbisTypeError):
+        ibis.array(elements)
+
+
+def test_array_constructor_failure_single_level():
+    t = ibis.table([('a', 'string'), ('b', 'double'), ('c', 'string')])
+    elements = [t.a, t.b]
+    with pytest.raises(IbisTypeError):
+        ibis.array(elements)
+
+
+def test_array_constructor_empty():
+    expr = ibis.array([])
+    expected_type = dt.Array(dt.null)
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_none():
+    expr = ibis.array([None, None])
+    expected_type = dt.Array(dt.null)
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_partially_empty():
+    t = ibis.table([('a', 'string'), ('b', 'double'), ('c', 'string')])
+    expr = ibis.array([[], [t.a], [t.c, t.a, t.c], []])
+    expected_type = dt.Array(dt.Array(dt.string))
+    assert expr.type().equals(expected_type)
+
+
+def test_array_constructor_mixed_literal_expr():
+    t = ibis.table([('a', 'string'), ('b', 'double'), ('c', 'string')])
+    expr = ibis.array([[], [t.b ** 3], [t.b * 2], []])
+    expected_type = dt.Array(dt.Array(dt.double))
+    assert expr.type().equals(expected_type)

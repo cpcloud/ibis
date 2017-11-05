@@ -64,6 +64,7 @@ import ibis.util as util
 
 
 __all__ = [
+    'array',
     'schema', 'table', 'literal', 'expr_list',
     'timestamp', 'time', 'param',
     'case', 'where', 'sequence',
@@ -544,6 +545,16 @@ def coalesce(*args):
     coalesced : type of first provided argument
     """
     return _ops.Coalesce(*args).to_expr()
+
+
+def array(elements):
+    result = []
+    for element in elements:
+        if isinstance(element, list):
+            result.append(array(element))
+        else:
+            result.append(element)
+    return _ops.ArrayConstructor(result).to_expr()
 
 
 def greatest(*args):

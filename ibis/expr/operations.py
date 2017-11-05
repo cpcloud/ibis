@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import operator
 import six
 import itertools
 
 import toolz
 
+import ibis
 from ibis.expr.types import TableColumn  # noqa
 
 from ibis.expr.datatypes import HasSchema, Schema
@@ -2436,6 +2438,49 @@ class TimestampDelta(ValueOp):
 
     input_type = [rules.timestamp, rules.timedelta(name='offset')]
     output_type = rules.shape_like_arg(0, 'timestamp')
+
+
+def infer_array_type(elements):
+    if not isinstance(elements, list):
+        try:
+            return elements.type()
+        except AttributeError:
+            return ibis.literal(elements).type()
+
+    element_types = frozenset(map(infer_array_type, elements))
+
+    if not element_types:
+        return dt.Array(dt.null)
+
+    type = functools.reduce(rules.higher_precedence, element_types)
+    return dt.Array(type)
+
+
+def max_shape(sequence):
+    if any(isinstance(element, ir.ColumnExpr) for element in sequence):
+        return operator.methodcaller('array_type')
+    return operator.methodcaller('scalar_type')
+
+
+def highest_precedence_shape(elements):
+    if not isinstance(elements, list):
+        if isinstance(elements, ir.ColumnExpr):
+            return elements.type().array_type()
+        elif isinstance(elements, ir.ScalarExpr):
+            return elements.type().scalar_type()
+        return ibis.literal(elements).type()
+    return max_shape(highest_precedence_shape(element) for element in elements)
+
+
+class ArrayConstructor(ValueOp):
+
+    input_type = [rules.instance_of(list, name='elements')]
+
+    def output_type(self):
+        elements = self.elements
+        type = infer_array_type(elements)
+        shape = highest_precedence_shape(elements)
+        return shape(type)
 
 
 class ArrayLength(UnaryOp):

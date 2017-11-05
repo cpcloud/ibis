@@ -151,7 +151,7 @@ _SCALAR_TYPE_PRECEDENCE = {
 }
 
 
-def higher_precedence(left, right):
+def higher_precedence(left, right, enforce_value_type=False):
     left_name = left.name.lower()
     right_name = right.name.lower()
 
@@ -159,6 +159,9 @@ def higher_precedence(left, right):
             right_name in _SCALAR_TYPE_PRECEDENCE):
         left_prec = _SCALAR_TYPE_PRECEDENCE[left_name]
         right_prec = _SCALAR_TYPE_PRECEDENCE[right_name]
+
+        if enforce_value_type and not left.equals(right) and not (left.equals(dt.null) or right.equals(dt.null)):
+            raise com.IbisTypeError()
         _, highest_type = max(
             ((left_prec, left), (right_prec, right)),
             key=first
@@ -168,21 +171,27 @@ def higher_precedence(left, right):
     # TODO(phillipc): Ensure that left and right are API compatible
 
     if isinstance(left, dt.Array):
-        return dt.Array(higher_precedence(left.value_type, right.value_type))
+        return dt.Array(
+            higher_precedence(
+                left.value_type, right.value_type, enforce_value_type=True
+            )
+        )
 
     if isinstance(left, dt.Map):
         return dt.Map(
-            higher_precedence(left.key_type, right.key_type),
-            higher_precedence(left.value_type, right.value_type)
+            higher_precedence(
+                left.key_type, right.key_type, enforce_value_type=True
+            ),
+            higher_precedence(
+                left.value_type, right.value_type, enforce_value_type=True
+            )
         )
 
     if isinstance(left, dt.Struct):
         if left.names != right.names:
             raise TypeError('Struct names are not equal')
-        return dt.Struct(
-            left.names,
-            list(map(higher_precedence, left.types, right.types))
-        )
+        func = functools.partial(higher_precedence, enforce_value_type=True)
+        return dt.Struct(left.names, list(map(func, left.types, right.types)))
     raise TypeError(
         'Cannot compute precedence for {} and {} types'.format(left, right)
     )
