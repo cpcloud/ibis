@@ -13,10 +13,14 @@
 # limitations under the License.
 
 import operator
-import six
 import itertools
+import weakref
+
+import six
 
 import toolz
+
+import ibis
 
 from ibis.expr.types import TableColumn  # noqa
 
@@ -52,6 +56,11 @@ class TableNode(Node):
 
     def sort_by(self, expr, sort_exprs):
         return Selection(expr, [], sort_keys=sort_exprs)
+
+    @property
+    @toolz.memoize(cache=weakref.WeakKeyDictionary())
+    def clients(self):
+        return list(ibis.client.find_backends(self))
 
 
 def find_all_base_tables(expr, memo=None):
@@ -101,6 +110,10 @@ class DatabaseTable(PhysicalTable):
 
     def change_name(self, new_name):
         return type(self)(new_name, self.args[1], self.source)
+
+    @property
+    def clients(self):
+        return [self.source]
 
 
 class SQLQueryResult(TableNode, HasSchema):

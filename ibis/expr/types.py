@@ -18,6 +18,7 @@ import itertools
 import os
 import sys
 import warnings
+import weakref
 import webbrowser
 
 import six
@@ -232,6 +233,20 @@ class Expr(object):
         # known schema
         pass
 
+    @property
+    def client(self):
+        try:
+            client, = self.clients
+        except ValueError:
+            raise ValueError(
+                'Multiple clients found. Did you mean expr.clients?'
+            )
+        return client
+
+    @property
+    def clients(self):
+        return self.op().clients
+
 
 if sys.version_info.major == 2:
     # Python 2.7 doesn't return NotImplemented unless the other operand has
@@ -381,6 +396,13 @@ class Node(six.with_metaclass(OperationMeta, object)):
             return []
         else:
             return [t.name for t in getattr(input_type, 'types', [])]
+
+    @property
+    @toolz.memoize(cache=weakref.WeakKeyDictionary())
+    def clients(self):
+        return list(toolz.unique(toolz.concat(
+            map(lambda expr: getattr(expr, 'clients', []), self.flat_args())
+        )))
 
 
 def all_equal(left, right, cache=None):
@@ -824,6 +846,12 @@ class TableExpr(Expr):
         self.__dict__ = instance_dictionary
 
     def __getattr__(self, key):
+        # look for methods in the client's dialect if possible
+        try:
+            return getattr(self.client.dialect.methods, key)
+        except (AttributeError, ValueError):
+            pass
+
         try:
             schema = self.schema()
         except com.IbisError:
