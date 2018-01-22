@@ -196,7 +196,18 @@ def infer_pandas_schema(df, strict=False):
         if pandas_dtype == np.object_:
             no_missing = df[column_name].dropna()
             pandas_dtype = infer_pandas_dtype(no_missing)
-            if pandas_dtype == 'mixed':
+            if pandas_dtype == 'string' or pandas_dtype == 'unicode':
+                ibis_dtype = dt.string
+            else:
+                if pandas_dtype != 'mixed':
+                    raise TypeError(
+                        'Unable to infer type of column {0!r}. Try instantiating '
+                        'your table from the client with client.table('
+                        "'my_table', schema={{{0!r}: <explicit type>}})".format(
+                            column_name
+                        )
+                    )
+
                 if strict:
                     ibis_dtypes = set(no_missing.map(ibis.infer_dtype))
                     if not ibis_dtypes:
@@ -211,14 +222,6 @@ def infer_pandas_schema(df, strict=False):
                     assert len(ibis_dtypes) == 1, str(len(ibis_dtypes))
                 else:
                     ibis_dtype = ibis.infer_dtype(no_missing.iat[0])
-            else:
-                raise TypeError(
-                    'Unable to infer type of column {0!r}. Try instantiating '
-                    'your table from the client with client.table('
-                    "'my_table', schema={{{0!r}: <explicit type>}})".format(
-                        column_name
-                    )
-                )
         else:
             ibis_dtype = dt.dtype(pandas_dtype)
 
