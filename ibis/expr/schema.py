@@ -188,12 +188,30 @@ except AttributeError:
 
 
 @infer.register(pd.DataFrame)
-def infer_pandas_schema(df):
+def infer_pandas_schema(df, strict=False):
+    import ibis
+
     pairs = []
     for column_name, pandas_dtype in df.dtypes.iteritems():
         if pandas_dtype == np.object_:
-            pandas_dtype = infer_pandas_dtype(df[column_name].dropna())
+            no_missing = df[column_name].dropna()
+            pandas_dtype = infer_pandas_dtype(no_missing)
             if pandas_dtype == 'mixed':
+                if strict:
+                    ibis_dtypes = set(no_missing.map(ibis.infer_dtype))
+                    if not ibis_dtypes:
+                        ibis_dtype = dt.null
+                    elif len(ibis_dtypes) > 1:
+                        raise TypeError(
+                            'Multiple types found for column {!r}: {}'.format(
+                                column_name,
+                                ibis_dtypes,
+                            )
+                        )
+                    assert len(ibis_dtypes) == 1, str(len(ibis_dtypes))
+                else:
+                    ibis_dtype = ibis.infer_dtype(no_missing.iat[0])
+            else:
                 raise TypeError(
                     'Unable to infer type of column {0!r}. Try instantiating '
                     'your table from the client with client.table('
@@ -201,8 +219,9 @@ def infer_pandas_schema(df):
                         column_name
                     )
                 )
+        else:
+            ibis_dtype = dt.dtype(pandas_dtype)
 
-        ibis_dtype = dt.dtype(pandas_dtype)
         pairs.append((column_name, ibis_dtype))
 
     return Schema.from_tuples(pairs)
