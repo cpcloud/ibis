@@ -180,12 +180,24 @@ def _array_literal_format(expr):
     return str(list(expr.op().value))
 
 
+def _struct_literal_format(expr):
+    const = expr.op().value
+    result = 'STRUCT({})'.format(
+        ', '.join(
+            '{!r} AS {}'.format(value, name) for name, value in const.items()
+        )
+    )
+    return result
+
+
 def _literal(translator, expr):
     try:
         return impala_compiler._literal(translator, expr)
     except NotImplementedError:
         if isinstance(expr, ir.ArrayValue):
             return _array_literal_format(expr)
+        if isinstance(expr, ir.StructValue):
+            return _struct_literal_format(expr)
         raise NotImplementedError(type(expr).__name__)
 
 

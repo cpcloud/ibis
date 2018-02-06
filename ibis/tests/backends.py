@@ -13,8 +13,13 @@ from ibis.impala.tests.common import IbisTestEnv as ImpalaEnv
 class Backend(object):
     check_dtype = True
     check_names = True
+
     supports_arrays = True
     supports_arrays_outside_of_select = supports_arrays
+
+    supports_structs = True
+    supports_structs_outside_of_select = supports_structs
+
     supports_window_operations = True
     additional_skipped_operations = frozenset()
 
