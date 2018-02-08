@@ -251,3 +251,22 @@ SELECT *
 FROM `table`
 WHERE (`a` IS NOT DISTINCT FROM NULL) = (`b` IS NOT DISTINCT FROM NULL)"""
     assert result == expected
+
+
+def test_flatten_with_subquery():
+    t = ibis.table([('a', 'int64'), ('b', 'string')], name='t')
+    filt = t[t.a < 100]
+    pred = filt.a == filt.a.max()
+    import pdb; pdb.set_trace()  # noqa
+    expr = filt.filter(pred)
+    result = to_sql(expr)
+    expected = """\
+SELECT *
+FROM t
+WHERE `a` = (
+  SELECT max(`a`) AS `max`
+  FROM t
+  WHERE `a` < 100
+)"""
+    import pdb; pdb.set_trace()  # noqa
+    assert result == expected
