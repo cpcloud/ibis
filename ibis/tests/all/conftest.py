@@ -32,8 +32,7 @@ def data_directory():
     pytest.param(Spark, marks=[
         pytest.mark.spark,
         pytest.mark.skipif((3, 4) <= sys.version_info < (3, 5),
-                           reason='requires python 2.7 or 3.5+'),
-        pytest.mark.xfail(reason='not implemented')]),
+                           reason='requires python 2.7 or 3.5+')]),
     pytest.param(SQLite, marks=pytest.mark.sqlite),
     pytest.param(Postgres, marks=pytest.mark.postgres),
     pytest.param(MySQL, marks=pytest.mark.mysql),
