@@ -11,10 +11,13 @@ from pyspark.sql.types import (BooleanType, NullType, ArrayType,
 
 import ibis
 import ibis.client as client
+import ibis.expr.types as ir
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
 from ibis.compat import parse_version
+
+from ibis.spark.compiler import SparkDialect
 
 
 _ibis_dtypes = {
@@ -51,30 +54,32 @@ def ibis_dtype_to_spark(ibis_dtype):
 
 
 def ibis_schema_to_spark(schema):
-    return list(zip(schema.names, map(ibis_dtype_to_spark,
-                                      schema.types)))
+    return list(zip(schema.names, map(ibis_dtype_to_spark, schema.types)))
 
 
 @dt.dtype.register(DataType)
-def spark_data_type(datatype):
-    return _spark_types_to_ibis_types[type(datatype)]()
+def spark_data_type(datatype, nullable=True):
+    return _spark_types_to_ibis_types[type(datatype)](nullable=nullable)
 
 
 @dt.dtype.register(DecimalType)
-def spark_decimal_type(decimal):
-    return dt.Decimal(decimal.precision, decimal.scale)
+def spark_decimal_type(decimal, nullable=True):
+    return dt.Decimal(decimal.precision, decimal.scale, nullable=nullable)
 
 
 @dt.dtype.register(ArrayType)
-def spark_array_type(array):
-    return dt.Array(dt.dtype(array.elementType))
+def spark_array_type(array, nullable=True):
+    return dt.Array(dt.dtype(array.elementType), nullable=nullable)
 
 
 @dt.dtype.register(StructType)
-def spark_struct_type(struct):
-    return dt.Struct.from_tuples([
-        (field.name, dt.dtype(field.dataType)) for field in struct.fields
-    ])
+def spark_struct_type(struct, nullable=True):
+    return dt.Struct.from_tuples(
+        [
+            (field.name, dt.dtype(field.dataType)) for field in struct.fields
+        ],
+        nullable=nullable,
+    )
 
 
 class SparkTable(ops.DatabaseTable):
@@ -83,12 +88,14 @@ class SparkTable(ops.DatabaseTable):
 
 class SparkClient(client.Client):
 
-    def __init__(self, dictionary, sc=None):
-        if sc is None:
+    dialect = SparkDialect
+
+    def __init__(self, dictionary, context=None):
+        if context is None:
             conf = SparkConf().setAppName('ibis').setMaster('local[*]')
-            sc = SparkContext.getOrCreate(conf=conf)
-        self.sc = sc
-        self.spark = SparkSession(self.sc)
+            context = SparkContext.getOrCreate(conf=conf)
+        self.context = context
+        self.spark = SparkSession(self.context)
 
         # Instantiate the lambda functions in dictionary with the SparkSession
         self.dictionary = {
@@ -99,11 +106,17 @@ class SparkClient(client.Client):
         spark_schema = self.dictionary[name].schema
         pairs = dt.dtype(spark_schema).pairs.items()
         ibis_schema = ibis.schema(pairs)
-        return SparkTable(name, ibis_schema, self)
+        return SparkTable(name, ibis_schema, self).to_expr()
 
-    def execute(self, expr, *args, **kwargs):
-        raise NotImplementedError(
-            '{} not implemented'.format(type(self).__name__))
+    def compile(self, query, params=None, limit='default'):
+        from ibis.pandas.execution import execute
+        assert isinstance(query, ir.Expr)
+        return execute(query, params=params)
+
+    def execute(self, query, params=None, limit='default', async=False):
+        spark_object = self.compile(query, params=params, limit=limit)
+        import pdb; pdb.set_trace()  # noqa
+        return spark_object.toPandas()
 
     def database(self, name=None):
         return SparkDatabase(name, self)

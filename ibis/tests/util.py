@@ -41,5 +41,5 @@ def skipif_unsupported(f):
                 com.UnsupportedOperationError,
                 com.UnsupportedBackendType,
                 NotImplementedError) as e:
-            pytest.skip('{} using {}'.format(e, str(backend)))
+            pytest.skip('{!r} using {}'.format(e, str(backend)))
     return wrapper

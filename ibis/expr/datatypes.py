@@ -460,8 +460,8 @@ class Struct(DataType):
         self.pairs = OrderedDict(zip(names, types))
 
     @classmethod
-    def from_tuples(self, pairs):
-        return Struct(*map(list, zip(*pairs)))
+    def from_tuples(self, pairs, nullable=True):
+        return Struct(*map(list, zip(*pairs)), nullable=nullable)
 
     @property
     def names(self):

@@ -17,6 +17,15 @@ def test_fillna_nullif(backend, con, expr, expected):
     assert con.execute(expr) == expected
 
 
+# @tu.skipif_unsupported
+def test_simple_literal(backend, con, alltypes, df):
+    t = alltypes
+    expr = t[t.double_col > 3].double_col.sum()
+    result = expr.execute()
+    expected = df[df.double_col > 3].double_col.sum()
+    backend.assert_frame_equal(result, expected)
+
+
 @pytest.mark.parametrize(('expr', 'expected'), [
     (ibis.coalesce(5, None, 4), 5),
     (ibis.coalesce(ibis.NA, 4, ibis.NA), 4),
