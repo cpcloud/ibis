@@ -28,7 +28,9 @@ environment:
   IBIS_TEST_MYSQL_DATABASE: "ibis_testing"
 
   IBIS_TEST_SQLITE_DATABASE: "%USERPROFILE%\\ibis_testing.db"
+  ARTIFACT_DIRECTORY: "%USERPROFILE%\\packages"
 
+  CONDA_DIR: "C:\\Miniconda36-x64"
   CONDA: "C:\\Miniconda36-x64\\Scripts\\conda"
   ACTIVATE: "C:\\Miniconda36-x64\\Scripts\\activate"
 
@@ -40,6 +42,9 @@ environment:
 services:
   - mysql
   - postgresql101
+
+artifacts:
+  - path: "%ARTIFACT_DIRECTORY%"
 
 test_script:
   - "set PATH=C:\\Program Files\\PostgreSQL\\10\\bin\\;%PATH%"
@@ -53,11 +58,4 @@ test_script:
   - "%CONDA% list"
   - "pip install -e .\"[sqlite, postgres, mysql, visualization, pandas, csv, hdf5]\""
 
-  - "flake8"
-
-  - "python ci\\datamgr.py download"
-  - "python ci\\datamgr.py parquet -i"
-  - "python ci\\datamgr.py mysql"
-  - "python ci\\datamgr.py sqlite"
-  - "python ci\\datamgr.py postgres"
-  - "pytest --tb=short -m \"not backend and not clickhouse and not impala and not hdfs and not bigquery\" -rs ibis"
+  - "python ci\\feedstock.py test %CONDA_DIR%\\conda-bld %ARTIFACT_DIRECTORY%"

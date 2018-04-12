@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import shutil
 import sys
 
@@ -28,7 +29,15 @@ def cli():
 
 
 default_repo = 'https://github.com/conda-forge/ibis-framework-feedstock'
-default_dest = '/tmp/ibis-framework-feedstock'
+default_dest = ibis.util.guid()
+default_recipe_dir = os.path.join(default_dest, 'recipe')
+
+
+def run(command):
+    return command(
+        stdout=click.get_binary_stream('stdout'),
+        stderr=click.get_binary_stream('stderr')
+    )
 
 
 @cli.command()
@@ -38,19 +47,16 @@ def clone(repo_uri, destination):
     if Path(destination).exists():
         return
 
-    cmd = git['clone', repo_uri, destination]
-
-    cmd(stdout=click.get_binary_stream('stdout'),
-        stderr=click.get_binary_stream('stderr'))
+    run(git['clone', repo_uri, destination])
 
 
 @cli.command()
-@click.argument('meta', default=default_dest + '/recipe/meta.yaml')
+@click.argument('meta', default=os.path.join(default_recipe_dir, 'meta.yaml'))
 @click.option('--source-path', default=str(IBIS_DIR))
 def update(meta, source_path):
     path = Path(meta)
 
-    click.echo('\nUpdating {} recipe...'.format(path.parent))
+    click.echo('Updating {} recipe...'.format(path.parent))
 
     content = render(path)
     recipe = ruamel.yaml.round_trip_load(content)
@@ -69,46 +75,45 @@ def update(meta, source_path):
 
 
 @cli.command()
-@click.argument('recipe', default=default_dest + '/recipe')
+@click.argument('recipe', default=os.path.join(default_dest, 'recipe'))
 def build(recipe):
-    click.echo('\nBuilding {} recipe...'.format(recipe))
-
-    python_version = '.'.join(map(str, sys.version_info[:3]))
-
-    cmd = conda['build', recipe,
-                '--channel', 'conda-forge',
-                '--python', python_version]
-
-    cmd(stdout=click.get_binary_stream('stdout'),
-        stderr=click.get_binary_stream('stderr'))
+    click.echo('Building {} recipe...'.format(recipe))
+    python_version = '{0.major}.{0.minor}.{0.micro}'.join(sys.version_info)
+    run(conda['build', recipe,
+              '--channel', 'conda-forge',
+              '--python', python_version])
 
 
 @cli.command()
-@click.argument('package_location', default='/opt/conda/conda-bld')
-@click.argument('artifact_directory', default='/tmp/packages')
-@click.argument('architectures', default=('linux-64', 'noarch'))
+@click.argument('package_location', type=click.Path(exists=True))
+@click.argument('artifact_directory', type=click.Path(exists=True))
+@click.argument('architectures', default=('noarch', 'linux-64', 'win-64'))
 def deploy(package_location, artifact_directory, architectures):
+    package_location = run(conda)
     artifact_dir = Path(artifact_directory)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     package_loc = Path(package_location)
     assert package_loc.exists(), 'Path {} does not exist'.format(package_loc)
 
     for architecture in architectures:
-        arch_artifact_directory = str(artifact_dir / architecture)
-        arch_package_directory = str(package_loc / architecture)
-        shutil.copytree(arch_package_directory, arch_artifact_directory)
-    cmd = conda['index', artifact_directory]
-    cmd(stdout=click.get_binary_stream('stdout'),
-        stderr=click.get_binary_stream('stderr'))
+        arch_artifact_directory = artifact_dir / architecture
+        arch_package_directory = package_loc / architecture
+        if (arch_artifact_directory.exists() and
+                arch_package_directory.exists()):
+            shutil.copytree(
+                str(arch_package_directory), str(arch_artifact_directory))
+    run(conda['index'], artifact_directory)
 
 
 @cli.command()
 @click.pass_context
-def test(ctx):
+@click.argument('package_location', type=click.Path(exists=True))
+@click.argument('artifact_directory', type=click.Path(exists=True))
+def test(ctx, package_location, artifact_directory):
     ctx.invoke(clone)
     ctx.invoke(update)
     ctx.invoke(build)
-    ctx.invoke(deploy)
+    ctx.invoke(deploy, package_location, artifact_directory)
 
 
 if __name__ == '__main__':

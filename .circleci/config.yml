@@ -74,7 +74,9 @@ build: &build
         command: docker images
     - run:
         name: Clone, update and build conda-forge recipe
-        command: docker-compose run ibis ci/feedstock.py test
+        command: |
+          docker-compose run ibis \
+            ci/feedstock.py test /opt/conda/conda-bld /tmp/packages
     - run:
         name: Permission the host for package deployment
         command: sudo chown -R "${USER}":"${USER}" /tmp/ibis/packages
