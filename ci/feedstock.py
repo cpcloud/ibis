@@ -78,7 +78,7 @@ def update(meta, source_path):
 @click.argument('recipe', default=os.path.join(default_dest, 'recipe'))
 def build(recipe):
     click.echo('Building {} recipe...'.format(recipe))
-    python_version = '{0.major}.{0.minor}.{0.micro}'.join(sys.version_info)
+    python_version = '{0.major}.{0.minor}.{0.micro}'.format(sys.version_info)
     run(conda['build', recipe,
               '--channel', 'conda-forge',
               '--python', python_version])
