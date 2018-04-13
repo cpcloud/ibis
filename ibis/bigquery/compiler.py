@@ -389,8 +389,6 @@ _invalid_operations = {
     ops.Translate,
     ops.FindInSet,
     ops.Capitalize,
-    ops.DateDiff,
-    ops.TimestampDiff
 }
 
 _operation_registry = {
@@ -480,6 +478,51 @@ def compiles_floor(t, e):
     bigquery_type = ibis_type_to_bigquery_type(e.type())
     arg, = e.op().args
     return 'CAST(FLOOR({}) AS {})'.format(t.translate(arg), bigquery_type)
+
+
+TIME_DIFF_UNITS = {
+    'h': 'HOUR',
+    'm': 'MINUTE',
+    's': 'SECOND',
+    'ms': 'MILLISECOND',
+    'us': 'MICROSECOND',
+}
+
+DATE_DIFF_UNITS = {
+    'Y': 'YEAR',
+    'Q': 'QUARTER',
+    'M': 'MONTH',
+    'W': 'WEEK',
+    'D': 'DAY',
+}
+
+TIMESTAMP_DIFF_UNITS = TIME_DIFF_UNITS.copy()
+
+
+def temporal_diff(cls, prefix, units):
+    @compiles(cls)
+    def compiles_temporal_diff(t, e):
+        func_name = '{}_DIFF'.format(prefix)
+        left, right, unit = e.op().args
+        if unit not in units:
+            raise ValueError(
+                'Unit {!r} is not supported in BigQuery {!r}'.format(
+                    unit, func_name
+                )
+            )
+        return '{}({}, {}, {})'.format(
+            func_name,
+            t.translate(left),
+            t.translate(right),
+            units[unit]
+        )
+    return compiles_temporal_diff
+
+
+compiles_timestamp_diff = temporal_diff(
+    ops.TimestampDiff, 'TIMESTAMP', TIMESTAMP_DIFF_UNITS)
+compiles_date_diff = temporal_diff(ops.DateDiff, 'DATE', DATE_DIFF_UNITS)
+compiles_time_diff = temporal_diff(ops.TimeDiff, 'TIME', TIME_DIFF_UNITS)
 
 
 class BigQueryDialect(impala_compiler.ImpalaDialect):

@@ -114,10 +114,14 @@ def execute_timestamp_sub_datetime_timedelta(op, left, right, **kwargs):
     return pd.Timestamp(left) - pd.Timedelta(right)
 
 
-@execute_node.register(
-    (ops.TimestampDiff, ops.TimestampSub), datetime.datetime, pd.Series)
-def execute_timestamp_diff_sub_datetime_series(op, left, right, **kwargs):
+@execute_node.register(ops.TimestampSub, datetime.datetime, pd.Series)
+def execute_timestamp_sub_datetime_series(op, left, right, **kwargs):
     return pd.Timestamp(left) - right
+
+
+@execute_node.register(ops.TimestampDiff, datetime.datetime, pd.Series)
+def execute_timestamp_diff_datetime_series(op, left, right, **kwargs):
+    return (pd.Timestamp(left) - right).dt.ceil(op.unit)
 
 
 @execute_node.register(ops.TimestampSub, pd.Series, datetime.timedelta)
@@ -125,20 +129,24 @@ def execute_timestamp_sub_series_timedelta(op, left, right, **kwargs):
     return left - pd.Timedelta(right)
 
 
-@execute_node.register(
-    (ops.TimestampDiff, ops.TimestampSub), pd.Series, pd.Series)
-def execute_timestamp_diff_sub_series_series(op, left, right, **kwargs):
+@execute_node.register(ops.TimestampSub, pd.Series, pd.Series)
+def execute_timestamp_sub_series_series(op, left, right, **kwargs):
     return left - right
+
+
+@execute_node.register(ops.TimestampDiff, pd.Series, pd.Series)
+def execute_timestamp_diff_series_series(op, left, right, **kwargs):
+    return (left - right).dt.ceil(op.unit)
 
 
 @execute_node.register(ops.TimestampDiff, datetime.datetime, datetime.datetime)
 def execute_timestamp_diff_datetime_datetime(op, left, right, **kwargs):
-    return pd.Timestamp(left) - pd.Timestamp(right)
+    return (pd.Timestamp(left) - pd.Timestamp(right)).ceil(op.unit)
 
 
 @execute_node.register(ops.TimestampDiff, pd.Series, datetime.datetime)
 def execute_timestamp_diff_series_datetime(op, left, right, **kwargs):
-    return left - pd.Timestamp(right)
+    return (left - pd.Timestamp(right)).dt.ceil(op.unit)
 
 
 @execute_node.register(

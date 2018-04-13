@@ -572,6 +572,11 @@ def cast(arg, target_type):
     if op.to.equals(arg.type()):
         # noop case if passed type is the same
         return arg
+
+    arg_op = arg.op()
+    if isinstance(arg_op, ops.TemporalDiff):
+        if isinstance(target_type, dt.Interval):
+            return type(arg_op)(arg_op.left, arg_op.right, target_type.unit)
     else:
         result = op.to_expr()
         if not arg.has_name():

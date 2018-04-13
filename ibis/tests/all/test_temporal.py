@@ -4,6 +4,7 @@ from pytest import param
 import pandas as pd
 
 import ibis
+import ibis.expr.datatypes as dt
 import ibis.tests.util as tu
 
 
@@ -142,11 +143,6 @@ timestamp_value = pd.Timestamp('2018-01-01 18:18:18')
     param(lambda t, be: t.timestamp_col.date() - ibis.interval(days=14),
           lambda t, be: t.timestamp_col.dt.floor('d') - pd.Timedelta(days=14),
           id='date-subtract-interval'),
-    param(lambda t, be: t.timestamp_col - ibis.timestamp(timestamp_value),
-          lambda t, be: pd.Series(
-            t.timestamp_col.sub(timestamp_value).values.astype(
-                'timedelta64[{}]'.format(be.returned_timestamp_unit))),
-          id='timestamp-subtract-timestamp'),
     param(lambda t, be: t.timestamp_col.date() - ibis.date(date_value),
           lambda t, be: t.timestamp_col.dt.floor('d') - date_value,
           id='date-subtract-date'),
@@ -160,6 +156,17 @@ def test_temporal_binop(backend, con, alltypes, df,
     result = con.execute(expr)
     expected = backend.default_series_rename(expected)
 
+    backend.assert_series_equal(result, expected)
+
+
+@pytest.mark.parametrize('unit', ['s'])
+@tu.skipif_unsupported
+def test_timestamp_subtract_timestamp(backend, con, alltypes, df, unit):
+    expr_diff = alltypes.timestamp_col.sub(
+        ibis.timestamp(timestamp_value)).cast(dt.Interval(unit))
+    expected = df.timestamp_col.sub(timestamp_value).dt.ceil(
+        unit).sort_values().reset_index(drop=True).rename('tmp')
+    result = expr_diff.execute().sort_values().reset_index(drop=True)
     backend.assert_series_equal(result, expected)
 
 

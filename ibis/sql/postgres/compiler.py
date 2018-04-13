@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 import locale
-import string
+import operator
 import platform
+import re
+import string
 import warnings
+
+from functools import partial
 
 import sqlalchemy as sa
 
@@ -594,6 +597,43 @@ def _day_of_week_name(t, expr):
     return sa.func.trim(sa.func.to_char(sa_arg, 'Day'))
 
 
+years = partial(sa.extract, 'YEAR')
+months = partial(sa.extract, 'MONTH')
+seconds = partial(sa.extract, 'EPOCH')
+milliseconds = partial(sa.extract, 'MILLISECOND')
+microseconds = partial(sa.extract, 'MICROSECOND')
+
+
+interval_funcs = {
+    'Y': years,
+    'Q': lambda e: years(e) * 4 + months(e) // 3,
+    'M': lambda e: years(e) * 12 + months(e),
+    'D': lambda e: seconds(e) / 86400,
+    'h': lambda e: seconds(e) / 3600,
+    'm': lambda e: sa.extract('MINUTE', e),
+    's': seconds,
+    'ms': lambda e: seconds(e) * 1000 + milliseconds(e),
+    'us': lambda e: seconds(e) * 1000000 + microseconds(e)
+}
+
+
+def _temporal_diff(diff_function):
+    def compile_temporal_diff(t, expr):
+        op = expr.op()
+        left, right, unit = op.args
+        sa_left, sa_right = map(t.translate, (left, right))
+        diff = diff_function(sa_left, sa_right)
+        if unit not in interval_funcs:
+            raise ValueError(
+                'Unit {!r} not support in postgres {!r} operation'.format(
+                    type(op).__name__
+                )
+            )
+        func = interval_funcs[unit]
+        return func(diff)
+    return compile_temporal_diff
+
+
 _operation_registry.update({
     ops.Literal: _literal,
 
@@ -644,10 +684,11 @@ _operation_registry.update({
     ops.IntervalFromInteger: _interval_from_integer,
     ops.DateAdd: infix_op('+'),
     ops.DateSub: infix_op('-'),
-    ops.DateDiff: infix_op('-'),
+    ops.DateDiff: _temporal_diff(sa.func.age),
     ops.TimestampAdd: infix_op('+'),
     ops.TimestampSub: infix_op('-'),
-    ops.TimestampDiff: infix_op('-'),
+    ops.TimestampDiff: _temporal_diff(sa.func.age),
+    ops.TimeDiff: _temporal_diff(operator.sub),
 
     ops.Strftime: _strftime,
     ops.ExtractYear: _extract('year'),
