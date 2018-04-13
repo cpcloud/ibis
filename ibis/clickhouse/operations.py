@@ -526,6 +526,13 @@ _unary_ops = {
 }
 
 
+def _temporal_diff(translator, expr):
+    op = expr.op()
+    left = _parenthesize(translator, op.left)
+    right = _parenthesize(translator, op.right)
+    return '{} - {}'.format(left, right)
+
+
 _operation_registry = {
     # Unary operations
     ops.TypeOf: unary('toTypeName'),
@@ -633,10 +640,10 @@ _operation_registry = {
 
     ops.DateAdd: binary_infix_op('+'),
     ops.DateSub: binary_infix_op('-'),
-    ops.DateDiff: binary_infix_op('-'),
+    ops.DateDiff: _temporal_diff,
     ops.TimestampAdd: binary_infix_op('+'),
     ops.TimestampSub: binary_infix_op('-'),
-    ops.TimestampDiff: binary_infix_op('-'),
+    ops.TimestampDiff: _temporal_diff,
     ops.TimestampFromUNIX: _timestamp_from_unix,
 
     transforms.ExistsSubquery: _exists_subquery,

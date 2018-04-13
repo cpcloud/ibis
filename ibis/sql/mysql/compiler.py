@@ -158,11 +158,23 @@ def _interval_from_integer(t, expr):
     return sa.text('INTERVAL {} {}'.format(sa_arg, text_unit))
 
 
+interval_units = {
+    's': 'SECOND',
+    'D': 'DAY',
+}
+
+
 def _timestamp_diff(t, expr):
-    left, right = expr.op().args
+    left, right, unit = expr.op().args
     sa_left = t.translate(left)
     sa_right = t.translate(right)
-    return sa.func.timestampdiff(sa.text('SECOND'), sa_right, sa_left)
+    unit_text = sa.text(interval_units[unit])
+    return sa.func.timestampdiff(unit_text, sa_right, sa_left)
+
+
+def _date_diff(t, expr):
+    left, right, _ = expr.op().args
+    return sa.func.datediff(t.translate(left), t.translate(right))
 
 
 def _literal(t, expr):
@@ -200,7 +212,7 @@ _operation_registry.update({
     ops.Date: unary(sa.func.date),
     ops.DateAdd: infix_op('+'),
     ops.DateSub: infix_op('-'),
-    ops.DateDiff: fixed_arity(sa.func.datediff, 2),
+    ops.DateDiff: _date_diff,
     ops.TimestampAdd: infix_op('+'),
     ops.TimestampSub: infix_op('-'),
     ops.TimestampDiff: _timestamp_diff,
