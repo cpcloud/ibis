@@ -599,18 +599,23 @@ def _day_of_week_name(t, expr):
 
 years = partial(sa.extract, 'YEAR')
 months = partial(sa.extract, 'MONTH')
-seconds = partial(sa.extract, 'EPOCH')
+
+
+def seconds(expr):
+    return sa.func.floor(sa.extract('EPOCH', expr))
+
+
 milliseconds = partial(sa.extract, 'MILLISECOND')
 microseconds = partial(sa.extract, 'MICROSECOND')
 
 
 interval_funcs = {
     'Y': years,
-    'Q': lambda e: years(e) * 4 + months(e) // 3,
+    'Q': lambda e: years(e) * 4 + sa.func.floor(months(e) / 3),
     'M': lambda e: years(e) * 12 + months(e),
-    'D': lambda e: seconds(e) / 86400,
-    'h': lambda e: seconds(e) / 3600,
-    'm': lambda e: sa.extract('MINUTE', e),
+    'D': lambda e: sa.func.floor(seconds(e) / 86400),
+    'h': lambda e: sa.func.floor(seconds(e) / 3600),
+    'm': lambda e: sa.func.floor(seconds(e) / 60),
     's': seconds,
     'ms': lambda e: seconds(e) * 1000 + milliseconds(e),
     'us': lambda e: seconds(e) * 1000000 + microseconds(e)
@@ -672,7 +677,7 @@ _operation_registry.update({
 
     # math
     ops.Log: _log,
-    ops.Log2: unary(lambda x: sa.func.log(2, x)),
+    ops.Log2: unary(partial(sa.func.log, 2)),
     ops.Log10: unary(sa.func.log),
     ops.Round: _round,
     ops.Modulus: _mod,

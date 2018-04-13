@@ -159,15 +159,34 @@ def test_temporal_binop(backend, con, alltypes, df,
     backend.assert_series_equal(result, expected)
 
 
-@pytest.mark.parametrize('unit', ['s'])
+@pytest.mark.parametrize('unit', ['h', 'm', 's', 'ms', 'us'])
 @tu.skipif_unsupported
-def test_timestamp_subtract_timestamp(backend, con, alltypes, df, unit):
-    expr_diff = alltypes.timestamp_col.sub(
-        ibis.timestamp(timestamp_value)).cast(dt.Interval(unit))
-    expected = df.timestamp_col.sub(timestamp_value).dt.ceil(
-        unit).sort_values().reset_index(drop=True).rename('tmp')
-    result = expr_diff.execute().sort_values().reset_index(drop=True)
-    backend.assert_series_equal(result, expected)
+def test_timestamp_subtract_timestamp(backend, con, unit):
+    lhs = ibis.timestamp('2010-12-18 01:02:03.456789')
+    rhs = ibis.timestamp('2010-12-18 02:03:04.567890')
+    diff = lhs.sub(rhs).cast(dt.Interval(unit))
+    exec_diff = ibis.pandas.execute(diff)
+    pandas_lhs = ibis.pandas.execute(lhs)
+    pandas_rhs = ibis.pandas.execute(rhs)
+    pandas_diff = (pandas_lhs - pandas_rhs).ceil(unit)
+    assert exec_diff == pandas_diff
+
+
+@pytest.mark.parametrize(
+    ('unit', 'expected'),
+    [
+        ('Y', pd.Timedelta(1, 'Y')),
+        ('Q', pd.Timedelta(7, 'Q')),
+        ('M', pd.Timedelta(23, 'M')),
+        ('D', pd.Timedelta(702, 'D')),
+    ]
+)
+def test_date_subtract_date(backend, con, unit, expected):
+    lhs = ibis.date('2012-11-19')
+    rhs = ibis.date('2010-12-18')
+    expr = lhs.sub(rhs).cast(dt.Interval(unit))
+    result = ibis.pandas.execute(expr)
+    assert result == expected
 
 
 @pytest.mark.parametrize(('ibis_pattern', 'pandas_pattern'), [
