@@ -576,7 +576,11 @@ def cast(arg, target_type):
     arg_op = arg.op()
     if isinstance(arg_op, ops.TemporalDiff):
         if isinstance(target_type, dt.Interval):
-            return type(arg_op)(arg_op.left, arg_op.right, target_type.unit)
+            if arg_op.unit != target_type.unit:
+                return type(arg_op)(
+                    arg_op.left, arg_op.right, target_type.unit
+                ).to_expr()
+            return arg
     else:
         result = op.to_expr()
         if not arg.has_name():
