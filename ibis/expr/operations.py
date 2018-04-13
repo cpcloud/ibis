@@ -31,7 +31,7 @@ def distinct_roots(*expressions):
 
 class Node(Annotable):
 
-    __slots__ = ('_expr_cached',)
+    __slots__ = '_expr_cached',
 
     def __repr__(self):
         return self._repr()
@@ -2363,7 +2363,7 @@ class Hash(ValueOp):
     output_type = rlz.shape_like('arg', dt.int64)
 
 
-class TemporalDiff(BinaryOp):
+class TemporalDiff(ValueOp):
     pass
 
 
