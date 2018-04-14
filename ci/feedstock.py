@@ -90,6 +90,8 @@ def build(recipe):
 @click.argument('architectures', default=('noarch', 'linux-64', 'win-64'))
 def deploy(package_location, artifact_directory, architectures):
     click.echo('!!!!!!Deploying PACKAGES!!!!!')
+    click.echo(package_location)
+    click.echo(artifact_directory)
     artifact_dir = Path(artifact_directory)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     package_loc = Path(package_location)
