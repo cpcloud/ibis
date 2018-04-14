@@ -109,8 +109,8 @@ def deploy(package_location, artifact_directory, architectures):
 
 @cli.command()
 @click.pass_context
-@click.argument('package_location', type=click.Path(exists=True))
-@click.argument('artifact_directory', type=click.Path(exists=False))
+@click.option('--package-location', type=click.Path(exists=True))
+@click.option('--artifact-directory', type=click.Path(exists=False))
 def test(ctx, package_location, artifact_directory):
     ctx.invoke(clone)
     ctx.invoke(update)
