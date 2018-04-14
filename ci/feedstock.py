@@ -99,6 +99,9 @@ def deploy(package_location, artifact_directory, architectures):
         arch_package_directory = package_loc / architecture
         if (arch_artifact_directory.exists() and
                 arch_package_directory.exists()):
+            click.echo(
+                'Copying {} to {}'.format(
+                    arch_package_directory, arch_artifact_directory))
             shutil.copytree(
                 str(arch_package_directory), str(arch_artifact_directory))
     run(conda['index', artifact_directory])
