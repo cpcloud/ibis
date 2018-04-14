@@ -89,7 +89,6 @@ def build(recipe):
 @click.argument('artifact_directory', type=click.Path(exists=False))
 @click.argument('architectures', default=('noarch', 'linux-64', 'win-64'))
 def deploy(package_location, artifact_directory, architectures):
-    package_location = run(conda)
     artifact_dir = Path(artifact_directory)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     package_loc = Path(package_location)
@@ -102,7 +101,7 @@ def deploy(package_location, artifact_directory, architectures):
                 arch_package_directory.exists()):
             shutil.copytree(
                 str(arch_package_directory), str(arch_artifact_directory))
-    run(conda['index'], artifact_directory)
+    run(conda['index', artifact_directory])
 
 
 @cli.command()
@@ -113,7 +112,10 @@ def test(ctx, package_location, artifact_directory):
     ctx.invoke(clone)
     ctx.invoke(update)
     ctx.invoke(build)
-    ctx.invoke(deploy, package_location, artifact_directory)
+    ctx.invoke(
+        deploy,
+        package_location=package_location,
+        artifact_directory=artifact_directory)
 
 
 if __name__ == '__main__':
