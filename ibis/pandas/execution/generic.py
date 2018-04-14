@@ -3,8 +3,11 @@ from __future__ import absolute_import
 import collections
 import datetime
 import decimal
+import math
 import numbers
 import operator
+
+from collections import Sized
 
 import six
 
@@ -762,3 +765,104 @@ def execute_node_where_scalar_series_scalar(op, cond, true, false, **kwargs):
 @execute_node.register(ops.Where, boolean_types, scalar_types, pd.Series)
 def execute_node_where_scalar_scalar_series(op, cond, true, false, **kwargs):
     return pd.Series(np.repeat(true, len(false))) if cond else false
+
+
+MATH_FUNCTIONS = {
+    ops.Floor: math.floor,
+    ops.Ln: math.log,
+    ops.Log2: lambda x: math.log(x, 2),
+    ops.Log10: math.log10,
+    ops.Exp: math.exp,
+    ops.Sqrt: math.sqrt,
+    ops.Abs: abs,
+    ops.Ceil: math.ceil,
+    ops.Sign: lambda x: 0 if not x else -1 if x < 0 else 1,
+}
+
+MATH_FUNCTION_TYPES = tuple(MATH_FUNCTIONS.keys())
+
+
+@execute_node.register(MATH_FUNCTION_TYPES, numeric_types)
+def execute_node_math_function_number(op, value, **kwargs):
+    return MATH_FUNCTIONS[type(op)](value)
+
+
+@execute_node.register(ops.Log, numeric_types, numeric_types)
+def execute_node_log_number_number(op, value, base, **kwargs):
+    return math.log(value, base)
+
+
+@execute_node.register(ops.IfNull, pd.Series, scalar_types + (type(None),))
+@execute_node.register(ops.IfNull, pd.Series, pd.Series)
+def execute_node_ifnull_series(op, value, replacement, **kwargs):
+    return value.fillna(replacement)
+
+
+@execute_node.register(ops.IfNull, scalar_types + (type(None),), pd.Series)
+def execute_node_ifnull_scalar_series(op, value, replacement, **kwargs):
+    return (
+        pd.Series(value, index=replacement.index)
+        if pd.notnull(value) else replacement
+    )
+
+
+@execute_node.register(
+    ops.IfNull, scalar_types + (type(None),), scalar_types + (type(None),))
+def execute_node_if_scalars(op, value, replacement, **kwargs):
+    return replacement if pd.isnull(value) else value
+
+
+@execute_node.register(ops.NullIf, bool, scalar_types + (type(None),))
+def execute_node_nullif_scalars(op, condition, value, **kwargs):
+    return np.nan if condition else value
+
+
+@execute_node.register(ops.NullIf, pd.Series, pd.Series)
+def execute_node_nullif_series(op, condition, value, **kwargs):
+    return value.where(~condition, np.nan)
+
+
+@execute_node.register(ops.NullIf, pd.Series, scalar_types + (type(None),))
+def execute_node_nullif_series_scalar(op, condition, value, **kwargs):
+    return pd.Series(np.repeat(value, len(condition))).where(
+        ~condition, np.nan)
+
+
+@execute_node.register(ops.NullIf, bool, pd.Series)
+def execute_node_nullif_scalar_series(op, condition, value, **kwargs):
+    return pd.Series([None], index=value.index) if condition else value
+
+
+def coalesce(*values):
+    return functools.reduce(lambda x, y: x if not pd.isnull(x) else y, values)
+
+
+@toolz.curry
+def promote_to_sequence(length, obj):
+    return obj.values if isinstance(obj, pd.Series) else np.repeat(obj, length)
+
+
+@execute_node.register(ops.Coalesce, list)
+def execute_node_coalesce(op, value, **kwargs):
+    # TODO: this is slow
+    return pd.Series(map(coalesce, *map(promote_to_sequence, value))).squeeze()
+
+
+def compute_minmax(func, value):
+    final_sizes = {len(x) for x in value if isinstance(x, Sized)}
+    if not final_sizes:
+        return func(value)
+
+    final_size, = final_sizes
+    raw = func(list(map(promote_to_sequence(final_size), value)), axis=0)
+    return pd.Series(raw).squeeze()
+
+
+@execute_node.register(ops.Greatest, list)
+def execute_node_greatest_list(op, value, **kwargs):
+    return compute_minmax(np.maximum.reduce, value)
+
+
+@execute_node.register(ops.Least, list)
+def execute_node_least_list(op, value, **kwargs):
+    return compute_minmax(np.minimum.reduce, value)
