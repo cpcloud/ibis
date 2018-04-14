@@ -1,4 +1,4 @@
-import enum
+import aenum as enum
 from itertools import starmap, product
 
 from ibis.compat import suppress

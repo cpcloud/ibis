@@ -1,5 +1,5 @@
 import six
-import enum
+import aenum as enum
 import ibis
 import pytest
 
@@ -115,9 +115,10 @@ def test_invalid_isin(values, value, expected):
         rlz.isin(values, value)
 
 
-class Foo(enum.Enum):
-    a = 1
-    b = 2
+@enum.unique
+class Foo(enum.AutoNumberEnum):
+    a = ()
+    b = ()
 
 
 class Bar(object):

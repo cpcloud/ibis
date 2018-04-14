@@ -1,12 +1,12 @@
 channels:
   - conda-forge
 dependencies:
+  - aenum
   - click
   - clickhouse-cityhash
   - clickhouse-driver>=0.0.8
   - clickhouse-sqlalchemy
   - cmake
-  - enum34
   - flake8
   - funcsigs
   - functools32

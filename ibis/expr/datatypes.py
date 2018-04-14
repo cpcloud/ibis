@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import aenum as enum
 import re
 import six
 import toolz
@@ -640,42 +641,31 @@ _primitive_types = (
 )
 
 
-class Tokens(object):
-    """Class to hold tokens for lexing
-    """
-    __slots__ = ()
+@enum.unique
+class Tokens(enum.AutoNumberEnum):
+    """Enum to hold tokens for lexing"""
 
-    ANY = 0
-    NULL = 1
-    PRIMITIVE = 2
-    DECIMAL = 3
-    VARCHAR = 4
-    CHAR = 5
-    ARRAY = 6
-    MAP = 7
-    STRUCT = 8
-    INTEGER = 9
-    FIELD = 10
-    COMMA = 11
-    COLON = 12
-    LPAREN = 13
-    RPAREN = 14
-    LBRACKET = 15
-    RBRACKET = 16
-    STRARG = 17
-    TIMESTAMP = 18
-    TIME = 19
-    INTERVAL = 20
-
-    @staticmethod
-    def name(value):
-        return _token_names[value]
-
-
-_token_names = dict(
-    (getattr(Tokens, n), n)
-    for n in dir(Tokens) if n.isalpha() and n.isupper()
-)
+    ANY = ()
+    NULL = ()
+    PRIMITIVE = ()
+    DECIMAL = ()
+    VARCHAR = ()
+    CHAR = ()
+    ARRAY = ()
+    MAP = ()
+    STRUCT = ()
+    INTEGER = ()
+    FIELD = ()
+    COMMA = ()
+    COLON = ()
+    LPAREN = ()
+    RPAREN = ()
+    LBRACKET = ()
+    RBRACKET = ()
+    STRARG = ()
+    TIMESTAMP = ()
+    TIME = ()
+    INTERVAL = ()
 
 
 Token = namedtuple('Token', ('type', 'value'))
@@ -827,7 +817,7 @@ class TypeParser(object):
     def _expect(self, toktype):
         if not self._accept(toktype):
             raise SyntaxError('Expected {} after {!r} in {!r}'.format(
-                Tokens.name(toktype),
+                toktype.name,
                 self.tok.value,
                 self.text,
             ))
