@@ -150,19 +150,33 @@ def execute_cast_series_date(op, data, type, **kwargs):
     raise TypeError("Don't know how to cast {} to {}".format(from_type, type))
 
 
-@execute_node.register(ops.Negate, pd.Series)
-def execute_series_unary_op_negate(op, data, **kwargs):
+def call_numpy_ufunc(func, op, data, **kwargs):
     if data.dtype == np.dtype(np.object_):
         return data.apply(functools.partial(execute_node, op, **kwargs))
-    return np.negative(data)
+    return func(data)
+
+
+@execute_node.register(ops.Negate, pd.Series)
+def execute_series_unary_op_negate(op, data, **kwargs):
+    return call_numpy_ufunc(np.negative, op, data, **kwargs)
 
 
 @execute_node.register(ops.UnaryOp, pd.Series)
 def execute_series_unary_op(op, data, **kwargs):
     function = getattr(np, type(op).__name__.lower())
-    if data.dtype == np.dtype(np.object_):
-        return data.apply(functools.partial(execute_node, op, **kwargs))
-    return function(data)
+    return call_numpy_ufunc(function, op, data, **kwargs)
+
+
+@execute_node.register(ops.Floor, pd.Series)
+def execute_series_floor(op, data, **kwargs):
+    return_type = np.object_ if data.dtype == np.object_ else np.int64
+    return call_numpy_ufunc(np.floor, op, data, **kwargs).astype(return_type)
+
+
+@execute_node.register(ops.Ceil, pd.Series)
+def execute_series_ceil(op, data, **kwargs):
+    return_type = np.object_ if data.dtype == np.object_ else np.int64
+    return call_numpy_ufunc(np.ceil, op, data, **kwargs).astype(return_type)
 
 
 def vectorize_object(op, arg, *args, **kwargs):
@@ -308,10 +322,7 @@ def execute_cast_string_literal(op, data, type, **kwargs):
     (six.integer_types, type(None))
 )
 def execute_round_scalars(op, data, places, **kwargs):
-    if places is None:
-        return np.around(data)
-    else:
-        return np.around(data, places)
+    return round(data, places)
 
 
 @execute_node.register(
@@ -322,7 +333,8 @@ def execute_round_scalars(op, data, places, **kwargs):
 def execute_round_series(op, data, places, **kwargs):
     if data.dtype == np.dtype(np.object_):
         return vectorize_object(op, data, places, **kwargs)
-    return data.round(places if places is not None else 0)
+    result = data.round(places or 0)
+    return result if places else result.astype('int64')
 
 
 @execute_node.register(ops.TableColumn, (pd.DataFrame, DataFrameGroupBy))
@@ -833,7 +845,7 @@ def execute_node_nullif_scalar_series(op, condition, value, **kwargs):
     return pd.Series([None], index=value.index) if condition else value
 
 
-def coalesce(*values):
+def coalesce(values):
     return functools.reduce(lambda x, y: x if not pd.isnull(x) else y, values)
 
 
@@ -842,27 +854,27 @@ def promote_to_sequence(length, obj):
     return obj.values if isinstance(obj, pd.Series) else np.repeat(obj, length)
 
 
-@execute_node.register(ops.Coalesce, list)
-def execute_node_coalesce(op, value, **kwargs):
-    # TODO: this is slow
-    return pd.Series(map(coalesce, *map(promote_to_sequence, value))).squeeze()
-
-
-def compute_minmax(func, value):
+def compute_row_reduction(func, value, **kwargs):
     final_sizes = {len(x) for x in value if isinstance(x, Sized)}
     if not final_sizes:
         return func(value)
 
     final_size, = final_sizes
-    raw = func(list(map(promote_to_sequence(final_size), value)), axis=0)
+    raw = func(list(map(promote_to_sequence(final_size), value)), **kwargs)
     return pd.Series(raw).squeeze()
 
 
 @execute_node.register(ops.Greatest, list)
 def execute_node_greatest_list(op, value, **kwargs):
-    return compute_minmax(np.maximum.reduce, value)
+    return compute_row_reduction(np.maximum.reduce, value, axis=0)
 
 
 @execute_node.register(ops.Least, list)
 def execute_node_least_list(op, value, **kwargs):
-    return compute_minmax(np.minimum.reduce, value)
+    return compute_row_reduction(np.minimum.reduce, value, axis=0)
+
+
+@execute_node.register(ops.Coalesce, list)
+def execute_node_coalesce(op, values, **kwargs):
+    # TODO: this is slow
+    return compute_row_reduction(coalesce, values)
