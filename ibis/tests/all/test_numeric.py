@@ -82,36 +82,96 @@ def test_math_functions_literals(backend, con, alltypes, df, expr, expected):
 @pytest.mark.parametrize(
     ('expr_fn', 'expected_fn'),
     [
-        (lambda t: (-t.double_col).abs(), lambda t: (-t.double_col).abs()),
-        (lambda t: t.double_col.abs(), lambda t: t.double_col.abs()),
-        (
-            lambda t: ibis.least(t.bigint_col, t.int_col),
-            lambda t: pd.Series(map(min, t.bigint_col, t.int_col))
+        param(
+            lambda t: (-t.double_col).abs(),
+            lambda t: (-t.double_col).abs(),
+            id='abs-neg'
         ),
-        (
+        param(
+            lambda t: t.double_col.abs(),
+            lambda t: t.double_col.abs(),
+            id='abs'
+        ),
+        param(
+            lambda t: ibis.least(t.bigint_col, t.int_col),
+            lambda t: pd.Series(map(min, t.bigint_col, t.int_col)),
+            id='least-all-columns'
+        ),
+        param(
             lambda t: ibis.least(t.bigint_col, t.int_col, -2),
             lambda t: pd.Series(map(min, t.bigint_col, t.int_col, repeat(-2))),
+            id='least-scalar'
         ),
-        (
+        param(
             lambda t: ibis.greatest(t.bigint_col, t.int_col),
-            lambda t: pd.Series(map(max, t.bigint_col, t.int_col))
+            lambda t: pd.Series(map(max, t.bigint_col, t.int_col)),
+            id='greatest-all-columns'
         ),
-        (
+        param(
             lambda t: ibis.greatest(t.bigint_col, t.int_col, -2),
             lambda t: pd.Series(map(max, t.bigint_col, t.int_col, repeat(-2))),
+            id='greatest-scalar'
         ),
-        (lambda t: t.double_col.round(), lambda t: t.double_col.round()),
-        (lambda t: t.double_col.round(2), lambda t: t.double_col.round(2)),
-        (lambda t: t.double_col.ceil(), lambda t: np.ceil(t.double_col)),
-        (lambda t: t.double_col.floor(), lambda t: np.floor(t.double_col)),
-        (lambda t: t.double_col.exp(), lambda t: np.exp(t.double_col)),
-        (lambda t: t.double_col.sign(), lambda t: np.sign(t.double_col)),
-        (lambda t: (-t.double_col).sign(), lambda t: np.sign(-t.double_col)),
-        (lambda t: t.double_col.sqrt(), lambda t: np.sqrt(t.double_col)),
-        (lambda t: t.double_col.log(2), lambda t: np.log2(t.double_col)),
-        (lambda t: t.double_col.ln(), lambda t: np.log(t.double_col)),
-        (lambda t: t.double_col.log10(), lambda t: np.log10(t.double_col)),
-        (lambda t: t.double_col % 3, lambda t: t.double_col % 3),
+        param(
+            lambda t: t.double_col.round(),
+            lambda t: t.double_col.round().astype('int64'),
+            id='round'
+        ),
+        param(
+            lambda t: t.double_col.round(2),
+            lambda t: t.double_col.round(2),
+            id='round-with-param'
+        ),
+        param(
+            lambda t: t.double_col.ceil(),
+            lambda t: np.ceil(t.double_col).astype('int64'),
+            id='ceil'
+        ),
+        param(
+            lambda t: t.double_col.floor(),
+            lambda t: np.floor(t.double_col).astype('int64'),
+            id='floor'
+        ),
+        param(
+            lambda t: t.double_col.exp(),
+            lambda t: np.exp(t.double_col),
+            id='exp'
+        ),
+        param(
+            lambda t: t.double_col.sign(),
+            lambda t: np.sign(t.double_col),
+            id='sign'
+        ),
+        param(
+            lambda t: (-t.double_col).sign(),
+            lambda t: np.sign(-t.double_col),
+            id='sign-negative'
+        ),
+        param(
+            lambda t: t.double_col.sqrt(),
+            lambda t: np.sqrt(t.double_col),
+            id='sqrt'
+        ),
+        param(
+            lambda t: t.double_col.log(2),
+            lambda t: np.log2(t.double_col),
+            id='log2'
+        ),
+        param(
+            lambda t: t.double_col.ln(),
+            lambda t: np.log(t.double_col),
+            id='ln'
+        ),
+        param(
+            lambda t: t.double_col.log10(),
+            lambda t: np.log10(t.double_col),
+            id='log10'
+        ),
+        param(
+            lambda t: t.double_col % 3,
+            lambda t: t.double_col % 3,
+            id='mod'
+        ),
     ]
 )
 @tu.skipif_unsupported
@@ -119,7 +179,7 @@ def test_math_functions_columns(
     backend, con, alltypes, df, expr_fn, expected_fn
 ):
     expr = expr_fn(alltypes)
-    expected = expected_fn(df)
+    expected = expected_fn(df).rename('tmp')
     result = con.execute(expr)
     backend.assert_series_equal(result, expected)
 
