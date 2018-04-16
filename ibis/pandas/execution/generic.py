@@ -762,3 +762,18 @@ def execute_node_where_scalar_series_scalar(op, cond, true, false, **kwargs):
 @execute_node.register(ops.Where, boolean_types, scalar_types, pd.Series)
 def execute_node_where_scalar_scalar_series(op, cond, true, false, **kwargs):
     return pd.Series(np.repeat(true, len(false))) if cond else false
+
+
+@execute_node.register(ops.StructField, pd.Series)
+def execute_node_struct_field_series(op, data, **kwargs):
+    return data.map(operator.itemgetter(op.field))
+
+
+@execute_node.register(ops.StructField, collections.Mapping)
+def execute_node_struct_field_dict(op, data, **kwargs):
+    return data[op.field]
+
+
+@execute_node.register(ops.StructField, object)
+def execute_node_struct_field_object(op, data, **kwargs):
+    return getattr(data, op.field)
