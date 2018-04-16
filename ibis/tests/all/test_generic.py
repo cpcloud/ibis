@@ -1,5 +1,7 @@
-import pytest
+import collections
 import decimal
+
+import pytest
 
 import ibis
 from ibis import literal as L
@@ -85,3 +87,12 @@ def test_notin(backend, alltypes, df, column, elements):
     expected = ~df[column].isin(elements)
     expected = backend.default_series_rename(expected)
     backend.assert_series_equal(result, expected)
+
+
+@tu.skipif_unsupported
+def test_struct_field_scalar(backend, con, df):
+    raw_value = collections.OrderedDict([('a', [1, 2, 3])])
+    value = L(raw_value)
+    expr = value.a
+    result = con.execute(expr)
+    assert result == raw_value['a']
