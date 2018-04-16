@@ -229,8 +229,23 @@ def _string_right(translator, expr):
     )
 
 
-def _array_literal_format(expr):
-    return str(list(expr.op().value))
+def _array_literal_format(translator, expr):
+    return '[{}]'.format(
+        ', '.join(
+            translator.translate(ibis.literal(element))
+            for element in expr.op().value
+        )
+    )
+
+
+def _struct_literal_format(translator, expr):
+    mapping = expr.op().value
+    return 'STRUCT({})'.format(
+        ', '.join(
+            '{} AS {}'.format(translator.translate(ibis.literal(value)), key)
+            for key, value in mapping.items()
+        )
+    )
 
 
 def _log(translator, expr):
@@ -256,7 +271,9 @@ def _literal(translator, expr):
         return impala_compiler._literal(translator, expr)
     except NotImplementedError:
         if isinstance(expr, ir.ArrayValue):
-            return _array_literal_format(expr)
+            return _array_literal_format(translator, expr)
+        elif isinstance(expr, ir.StructValue):
+            return _struct_literal_format(translator, expr)
         raise NotImplementedError(type(expr).__name__)
 
 
