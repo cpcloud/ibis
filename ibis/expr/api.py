@@ -1186,6 +1186,22 @@ def round(arg, digits=None):
     return op.to_expr()
 
 
+def _log_case(opclass, arg, base=None):
+    args = [arg]
+    if base is not None:
+        args.append(base)
+    expr = opclass(*args).to_expr()
+    # TODO: pattern match on backends to remove this during an optimization
+    # phase, since impala for example already has this behavior
+    return (
+        case()
+        .when(arg == 0, -float('inf'))
+        .when(arg < 0, float('nan'))
+        .else_(expr)
+        .end()
+    )
+
+
 def log(arg, base=None):
     """
     Perform the logarithm using a specified base
@@ -1199,8 +1215,19 @@ def log(arg, base=None):
     -------
     logarithm : double type
     """
-    op = ops.Log(arg, base)
-    return op.to_expr()
+    return _log_case(ops.Log, arg, base)
+
+
+def ln(arg):
+    return _log_case(ops.Ln, arg)
+
+
+def log10(arg):
+    return _log_case(ops.Log10, arg)
+
+
+def log2(arg):
+    return _log_case(ops.Log2, arg)
 
 
 def clip(arg, lower=None, upper=None):
@@ -1294,9 +1321,6 @@ abs = _unary_op('abs', ops.Abs)
 ceil = _unary_op('ceil', ops.Ceil)
 exp = _unary_op('exp', ops.Exp)
 floor = _unary_op('floor', ops.Floor)
-log2 = _unary_op('log2', ops.Log2)
-log10 = _unary_op('log10', ops.Log10)
-ln = _unary_op('ln', ops.Ln)
 sign = _unary_op('sign', ops.Sign)
 sqrt = _unary_op('sqrt', ops.Sqrt)
 

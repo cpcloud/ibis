@@ -110,7 +110,7 @@ def test_math_functions_literals(backend, con, alltypes, df, expr, expected):
         param(
             lambda t: ibis.greatest(t.bigint_col, t.int_col, -2),
             lambda t: pd.Series(map(max, t.bigint_col, t.int_col, repeat(-2))),
-            id='greatest-scalar'
+            id='greatest-scalar',
         ),
         param(
             lambda t: t.double_col.round(),
@@ -152,6 +152,21 @@ def test_math_functions_literals(backend, con, alltypes, df, expr, expected):
             lambda t: np.sqrt(t.double_col),
             id='sqrt'
         ),
+    ]
+)
+@tu.skipif_unsupported
+def test_math_functions_columns(
+    backend, con, alltypes, df, expr_fn, expected_fn
+):
+    expr = expr_fn(alltypes)
+    expected = expected_fn(df).rename('tmp')
+    result = con.execute(expr)
+    backend.assert_series_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    ('expr_fn', 'expected_fn'),
+    [
         param(
             lambda t: t.double_col.log(2),
             lambda t: np.log2(t.double_col),
@@ -168,14 +183,14 @@ def test_math_functions_literals(backend, con, alltypes, df, expr, expected):
             id='log10'
         ),
         param(
-            lambda t: t.double_col % 3,
-            lambda t: t.double_col % 3,
+            lambda t: t.int_col % 3,
+            lambda t: t.int_col % 3,
             id='mod'
         ),
     ]
 )
 @tu.skipif_unsupported
-def test_math_functions_columns(
+def test_no_zero_functions_columns(
     backend, con, alltypes, df, expr_fn, expected_fn
 ):
     expr = expr_fn(alltypes)
@@ -184,20 +199,24 @@ def test_math_functions_columns(
     backend.assert_series_equal(result, expected)
 
 
-@pytest.mark.parametrize('op', [
-    operator.add,
-    operator.sub,
-    operator.mul,
-    operator.truediv,
-    operator.floordiv,
-    operator.pow,
-    pytest.param(
-        operator.mod,
-        marks=pytest.mark.xfail(
-            reason='clickhouse and sqlite truncate float to integer'
-        )
-    ),
-], ids=lambda op: op.__name__)
+@pytest.mark.parametrize(
+    'op',
+    [
+        operator.add,
+        operator.sub,
+        operator.mul,
+        operator.truediv,
+        operator.floordiv,
+        operator.pow,
+        param(
+            operator.mod,
+            marks=pytest.mark.xfail(
+                reason='clickhouse and sqlite truncate float to integer'
+            )
+        ),
+    ],
+    ids=lambda op: op.__name__
+)
 def test_binary_arithmetic_operations(backend, alltypes, df, op):
     smallint_col = alltypes.smallint_col + 1  # make it nonzero
     smallint_series = df.smallint_col + 1

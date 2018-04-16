@@ -233,18 +233,6 @@ def _array_literal_format(expr):
     return str(list(expr.op().value))
 
 
-def _log(translator, expr):
-    op = expr.op()
-    arg, base = op.args
-    arg_formatted = translator.translate(arg)
-
-    if base is None:
-        return 'ln({})'.format(arg_formatted)
-
-    base_formatted = translator.translate(base)
-    return 'log({}, {})'.format(arg_formatted, base_formatted)
-
-
 def _literal(translator, expr):
 
     if isinstance(expr, ir.NumericValue):
@@ -369,7 +357,6 @@ _operation_registry.update({
     ops.ArrayIndex: _array_index,
     ops.ArrayLength: unary('ARRAY_LENGTH'),
 
-    ops.Log: _log,
     ops.Modulus: fixed_arity('MOD', 2),
 
     ops.Date: unary('DATE'),
@@ -421,6 +408,21 @@ class BigQueryExprTranslator(impala_compiler.ImpalaExprTranslator):
 
 compiles = BigQueryExprTranslator.compiles
 rewrites = BigQueryExprTranslator.rewrites
+
+
+@compiles(ops.Log)
+def _log(translator, expr):
+    op = expr.op()
+    arg, base = op.args
+    arg_formatted = translator.translate(arg)
+
+    if base is None:
+        return 'LN({})'.format(
+            arg_formatted
+        )
+
+    base_formatted = translator.translate(base)
+    return 'LOG({}, {})'.format(arg_formatted, base_formatted)
 
 
 @compiles(ops.Divide)
