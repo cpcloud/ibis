@@ -423,7 +423,7 @@ class BigQueryClient(SQLClient):
             ]
         return result
 
-    def get_schema(self, name, database):
+    def get_schema(self, name, database=None):
         table_ref = self.client.dataset(
             database or self.dataset_id
         ).table(name)
