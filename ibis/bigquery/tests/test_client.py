@@ -440,3 +440,26 @@ def test_async(client):
     expr = ibis.literal(1)
     result = client.execute(expr, async=True)
     assert result.get_result() == 1
+
+
+@pytest.mark.xfail(
+    raises=ValueError, reason='Multiple clients not yet supported')
+def test_multiple_client_queries():
+    con1 = ibis.bigquery.connect(
+        project_id='ibis-gbq',
+        dataset_id='bigquery-public-data.stackoverflow'
+    )
+    so = con1.table('posts_questions')
+    con2 = ibis.bigquery.connect(
+        project_id='ibis-gbq',
+        dataset_id='nyc-tlc.yellow'
+    )
+    trips = con2.table('trips')
+    join = so.join(trips, so.tags == trips.rate_code)[[so.title]]
+    result = join.compile()
+    expected = """\
+SELECT t0.`title`
+FROM `bigquery-public-data.stackoverflow.posts_questions` t0
+  INNER JOIN `nyc-tlc.yellow.trips` t1
+    ON t0.`tags` = t1.`rate_code`"""
+    assert result == expected
