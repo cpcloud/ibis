@@ -433,3 +433,10 @@ def test_repeated_project_name():
     con = ibis.bigquery.connect(
         project_id='ibis-gbq', dataset_id='ibis-gbq.testing')
     assert 'functional_alltypes' in con.list_tables()
+
+
+@pytest.mark.xfail(raises=NotImplementedError, reason='async not implemented')
+def test_async(client):
+    expr = ibis.literal(1)
+    result = client.execute(expr, async=True)
+    assert result.get_result() == 1
