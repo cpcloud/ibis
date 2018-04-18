@@ -26,19 +26,6 @@ from ibis.bigquery import compiler as comp
 NATIVE_PARTITION_COL = '_PARTITIONTIME'
 
 
-def _ensure_split(table_id, dataset_id):
-    split = table_id.split('.')
-    if len(split) > 1:
-        assert len(split) == 2, \
-            "Found more than 1 '.' character in BigQuery table_id"
-        if dataset_id:
-            raise ValueError(
-                "Can't pass a fully qualified table name AND a dataset_id"
-            )
-        dataset_id, table_id = split
-    return table_id, dataset_id
-
-
 _IBIS_TYPE_TO_DTYPE = {
     'string': 'STRING',
     'int64': 'INT64',
@@ -277,6 +264,53 @@ def rename_partitioned_column(table_expr, bq_table):
     return table_expr.relabel({partition_field: col})
 
 
+def parse_project_and_dataset(project_id, dataset_id):
+    """Figure out the project id under which queries will run versus the
+    project_id of where the data live as well as what dataset to use.
+
+    Parameters
+    ----------
+    project_id : str
+        A project name
+    dataset_id : str
+        A ``<project_id>.<dataset_id>`` string or just a dataset name
+
+    Returns
+    -------
+    data_project, run_project, dataset : Tuple[str, str, str]
+
+    Examples
+    --------
+    >>> data_project, run_project, dataset = parse_project_and_dataset(
+    ...     'ibis-gbq',
+    ...     'foo-bar.my_dataset'
+    ... )
+    >>> data_project
+    'foo-bar'
+    >>> run_project
+    'ibis-gbq'
+    >>> dataset
+    'my_dataset'
+    >>> data_project, run_project, dataset = parse_project_and_dataset(
+    ...     'ibis-gbq',
+    ...     'my_dataset'
+    ... )
+    >>> data_project
+    'ibis-gbq'
+    >>> run_project
+    'ibis-gbq'
+    >>> dataset
+    'my_dataset'
+    """
+    try:
+        data_project_id, dataset_id = dataset_id.split('.')
+    except ValueError:
+        run_project_id = data_project_id = project_id
+    else:
+        run_project_id = project_id
+    return data_project_id, run_project_id, dataset_id
+
+
 class BigQueryClient(SQLClient):
 
     sync_query = BigQueryQuery
@@ -285,17 +319,26 @@ class BigQueryClient(SQLClient):
     dialect = comp.BigQueryDialect
 
     def __init__(self, project_id, dataset_id):
-        self.client = bq.Client(project_id)
-        self.dataset_id = dataset_id
+        """
+        Parameters
+        ----------
+        project_id : str
+            A project name
+        dataset_id : str
+            A ``<project_id>.<dataset_id>`` string or just a dataset name
+        """
+        (self.data_project_id,
+         self.run_project_id,
+         self.dataset_id) = parse_project_and_dataset(project_id, dataset_id)
+        self.client = bq.Client(self.data_project_id)
 
     @property
     def project_id(self):
-        return self.client.project_id
+        return self.data_project_id
 
     def table(self, name, database=None):
         t = super(BigQueryClient, self).table(name, database=database)
-        table_id, dataset_id = _ensure_split(name, database or self.dataset_id)
-        dataset_ref = self.client.dataset(dataset_id)
+        dataset_ref = self.client.dataset(database or self.dataset_id)
         table_ref = dataset_ref.table(name)
         bq_table = self.client.get_table(table_ref)
         return rename_partitioned_column(t, bq_table)
@@ -305,6 +348,10 @@ class BigQueryClient(SQLClient):
         return result
 
     def _execute_query(self, dml, async=False):
+        if async:
+            raise NotImplementedError(
+                'Asynchronous queries not implemented in the BigQuery backend'
+            )
         klass = self.async_query if async else self.sync_query
         inst = klass(self, dml, query_parameters=dml.context.params)
         df = inst.execute()
@@ -312,17 +359,19 @@ class BigQueryClient(SQLClient):
 
     def _fully_qualified_name(self, name, database):
         dataset_id = database or self.dataset_id
-        return dataset_id + '.' + name
+        return '{}.{}.{}'.format(self.data_project_id, dataset_id, name)
 
     def _get_table_schema(self, qualified_name):
-        return self.get_schema(qualified_name)
+        _, dataset, table = qualified_name.split('.')
+        return self.get_schema(table, database=dataset)
 
     def _execute(self, stmt, results=True, query_parameters=None):
-        # TODO(phillipc): Allow **kwargs in calls to execute
         job_config = bq.job.QueryJobConfig()
         job_config.query_parameters = query_parameters or []
         job_config.use_legacy_sql = False  # False by default in >=0.28
-        query = self.client.query(stmt, job_config=job_config)
+        query = self.client.query(
+            stmt, job_config=job_config, project=self.run_project_id
+        )
         query.result()  # blocks until finished
         return BigQueryCursor(query)
 
@@ -334,7 +383,14 @@ class BigQueryClient(SQLClient):
         return self.database(self.dataset_id)
 
     def set_database(self, name):
-        self.dataset_id = name
+        try:
+            data_project_id, self.dataset_id = name.split('.')
+        except ValueError:
+            self.dataset_id = name
+        else:
+            if data_project_id != self.data_project_id:
+                self.data_project_id = data_project_id
+            self.client = bq.Client(self.data_project_id)
 
     def exists_database(self, name):
         return name in self.list_databases()
@@ -351,9 +407,8 @@ class BigQueryClient(SQLClient):
         return results
 
     def exists_table(self, name, database=None):
-        table_id, dataset_id = _ensure_split(name, database)
-        return table_id in self.list_tables(
-            database=dataset_id or self.dataset_id
+        return name in self.list_tables(
+            database=database or self.dataset_id
         )
 
     def list_tables(self, like=None, database=None):
@@ -368,9 +423,10 @@ class BigQueryClient(SQLClient):
             ]
         return result
 
-    def get_schema(self, name, database=None):
-        table_id, dataset_id = _ensure_split(name, database)
-        table_ref = self.client.dataset(dataset_id).table(table_id)
+    def get_schema(self, name, database):
+        table_ref = self.client.dataset(
+            database or self.dataset_id
+        ).table(name)
         bq_table = self.client.get_table(table_ref)
         return sch.infer(bq_table)
 
