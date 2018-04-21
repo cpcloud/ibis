@@ -660,11 +660,166 @@ for _k, _v in _binary_ops.items():
     _operation_registry[_k] = fixed_arity(_v, 2)
 
 
-class AlchemySelectBuilder(comp.SelectBuilder):
+class AlchemySelect(Select):
+
+    def __init__(self, *args, **kwargs):
+        self.exists = kwargs.pop('exists', False)
+        super(AlchemySelect, self).__init__(*args, **kwargs)
+
+    def compile(self):
+        # Can't tell if this is a hack or not. Revisit later
+        self.context.set_query(self)
+
+        self._compile_subqueries()
+
+        frag = self._compile_table_set()
+        steps = [self._add_select,
+                 self._add_groupby,
+                 self._add_where,
+                 self._add_order_by,
+                 self._add_limit]
+
+        for step in steps:
+            frag = step(frag)
+
+        return frag
+
+    def _compile_subqueries(self):
+        if not self.subqueries:
+            return
+
+        for expr in self.subqueries:
+            result = self.context.get_compiled_expr(expr)
+            alias = self.context.get_ref(expr)
+            result = result.cte(alias)
+            self.context.set_table(expr, result)
+
+    def _compile_table_set(self):
+        if self.table_set is not None:
+            helper = _AlchemyTableSet(self, self.table_set)
+            return helper.get_result()
+        else:
+            return None
+
+    def _add_select(self, table_set):
+        to_select = []
+
+        has_select_star = False
+        for expr in self.select_set:
+            if isinstance(expr, ir.ValueExpr):
+                arg = self._translate(expr, named=True)
+            elif isinstance(expr, ir.TableExpr):
+                if expr.equals(self.table_set):
+                    cached_table = self.context.get_table(expr)
+                    if cached_table is None:
+                        # the select * case from materialized join
+                        has_select_star = True
+                        continue
+                    else:
+                        arg = table_set
+                else:
+                    arg = self.context.get_table(expr)
+                    if arg is None:
+                        raise ValueError(expr)
+
+            to_select.append(arg)
+
+        if has_select_star:
+            if table_set is None:
+                raise ValueError('table_set cannot be None here')
+
+            clauses = [table_set] + to_select
+        else:
+            clauses = to_select
+
+        if self.exists:
+            result = sa.exists(clauses)
+        else:
+            result = sa.select(clauses)
+
+        if self.distinct:
+            result = result.distinct()
+
+        if not has_select_star:
+            if table_set is not None:
+                return result.select_from(table_set)
+            else:
+                return result
+        else:
+            return result
+
+    def _add_groupby(self, fragment):
+        # GROUP BY and HAVING
+        if not len(self.group_by):
+            return fragment
+
+        group_keys = [self._translate(arg) for arg in self.group_by]
+        fragment = fragment.group_by(*group_keys)
+
+        if len(self.having) > 0:
+            having_args = [self._translate(arg) for arg in self.having]
+            having_clause = _and_all(having_args)
+            fragment = fragment.having(having_clause)
+
+        return fragment
+
+    def _add_where(self, fragment):
+        if not len(self.where):
+            return fragment
+
+        args = [self._translate(pred, permit_subquery=True)
+                for pred in self.where]
+        clause = _and_all(args)
+        return fragment.where(clause)
+
+    def _add_order_by(self, fragment):
+        if not len(self.order_by):
+            return fragment
+
+        clauses = []
+        for expr in self.order_by:
+            key = expr.op()
+            sort_expr = key.expr
+
+            # here we have to determine if key.expr is in the select set (as it
+            # will be in the case of order_by fused with an aggregation
+            if _can_lower_sort_column(self.table_set, sort_expr):
+                arg = sort_expr.get_name()
+            else:
+                arg = self._translate(sort_expr)
+
+            if not key.ascending:
+                arg = sa.desc(arg)
+
+            clauses.append(arg)
+
+        return fragment.order_by(*clauses)
+
+    def _among_select_set(self, expr):
+        for other in self.select_set:
+            if expr.equals(other):
+                return True
+        return False
+
+    def _add_limit(self, fragment):
+        if self.limit is None:
+            return fragment
+
+        n, offset = self.limit['n'], self.limit['offset']
+        fragment = fragment.limit(n)
+        if offset is not None and offset != 0:
+            fragment = fragment.offset(offset)
+
+        return fragment
 
     @property
-    def _select_class(self):
-        return AlchemySelect
+    def dialect(self):
+        return self.context.dialect
+
+
+class AlchemySelectBuilder(comp.SelectBuilder):
+
+    select_class = AlchemySelect
 
     def _convert_group_by(self, exprs):
         return exprs
@@ -1018,163 +1173,6 @@ class AlchemyClient(SQLClient):
     def version(self):
         vstring = '.'.join(map(str, self.con.dialect.server_version_info))
         return parse_version(vstring)
-
-
-class AlchemySelect(Select):
-
-    def __init__(self, *args, **kwargs):
-        self.exists = kwargs.pop('exists', False)
-        super(AlchemySelect, self).__init__(*args, **kwargs)
-
-    def compile(self):
-        # Can't tell if this is a hack or not. Revisit later
-        self.context.set_query(self)
-
-        self._compile_subqueries()
-
-        frag = self._compile_table_set()
-        steps = [self._add_select,
-                 self._add_groupby,
-                 self._add_where,
-                 self._add_order_by,
-                 self._add_limit]
-
-        for step in steps:
-            frag = step(frag)
-
-        return frag
-
-    def _compile_subqueries(self):
-        if not self.subqueries:
-            return
-
-        for expr in self.subqueries:
-            result = self.context.get_compiled_expr(expr)
-            alias = self.context.get_ref(expr)
-            result = result.cte(alias)
-            self.context.set_table(expr, result)
-
-    def _compile_table_set(self):
-        if self.table_set is not None:
-            helper = _AlchemyTableSet(self, self.table_set)
-            return helper.get_result()
-        else:
-            return None
-
-    def _add_select(self, table_set):
-        to_select = []
-
-        has_select_star = False
-        for expr in self.select_set:
-            if isinstance(expr, ir.ValueExpr):
-                arg = self._translate(expr, named=True)
-            elif isinstance(expr, ir.TableExpr):
-                if expr.equals(self.table_set):
-                    cached_table = self.context.get_table(expr)
-                    if cached_table is None:
-                        # the select * case from materialized join
-                        has_select_star = True
-                        continue
-                    else:
-                        arg = table_set
-                else:
-                    arg = self.context.get_table(expr)
-                    if arg is None:
-                        raise ValueError(expr)
-
-            to_select.append(arg)
-
-        if has_select_star:
-            if table_set is None:
-                raise ValueError('table_set cannot be None here')
-
-            clauses = [table_set] + to_select
-        else:
-            clauses = to_select
-
-        if self.exists:
-            result = sa.exists(clauses)
-        else:
-            result = sa.select(clauses)
-
-        if self.distinct:
-            result = result.distinct()
-
-        if not has_select_star:
-            if table_set is not None:
-                return result.select_from(table_set)
-            else:
-                return result
-        else:
-            return result
-
-    def _add_groupby(self, fragment):
-        # GROUP BY and HAVING
-        if not len(self.group_by):
-            return fragment
-
-        group_keys = [self._translate(arg) for arg in self.group_by]
-        fragment = fragment.group_by(*group_keys)
-
-        if len(self.having) > 0:
-            having_args = [self._translate(arg) for arg in self.having]
-            having_clause = _and_all(having_args)
-            fragment = fragment.having(having_clause)
-
-        return fragment
-
-    def _add_where(self, fragment):
-        if not len(self.where):
-            return fragment
-
-        args = [self._translate(pred, permit_subquery=True)
-                for pred in self.where]
-        clause = _and_all(args)
-        return fragment.where(clause)
-
-    def _add_order_by(self, fragment):
-        if not len(self.order_by):
-            return fragment
-
-        clauses = []
-        for expr in self.order_by:
-            key = expr.op()
-            sort_expr = key.expr
-
-            # here we have to determine if key.expr is in the select set (as it
-            # will be in the case of order_by fused with an aggregation
-            if _can_lower_sort_column(self.table_set, sort_expr):
-                arg = sort_expr.get_name()
-            else:
-                arg = self._translate(sort_expr)
-
-            if not key.ascending:
-                arg = sa.desc(arg)
-
-            clauses.append(arg)
-
-        return fragment.order_by(*clauses)
-
-    def _among_select_set(self, expr):
-        for other in self.select_set:
-            if expr.equals(other):
-                return True
-        return False
-
-    def _add_limit(self, fragment):
-        if self.limit is None:
-            return fragment
-
-        n, offset = self.limit['n'], self.limit['offset']
-        fragment = fragment.limit(n)
-        if offset is not None and offset != 0:
-            fragment = fragment.offset(offset)
-
-        return fragment
-
-    @property
-    def dialect(self):
-        return self.context.dialect
 
 
 class _AlchemyTableSet(TableSetFormatter):

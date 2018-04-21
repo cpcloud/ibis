@@ -30,13 +30,6 @@ class BigQueryUDFNode(ops.ValueOp):
     pass
 
 
-class BigQuerySelectBuilder(comp.SelectBuilder):
-
-    @property
-    def _select_class(self):
-        return BigQuerySelect
-
-
 class BigQueryUDFDefinition(comp.DDL):
 
     def __init__(self, expr, context):
@@ -47,30 +40,12 @@ class BigQueryUDFDefinition(comp.DDL):
         return self.expr.op().js
 
 
-class BigQueryUnion(comp.Union):
-    @property
-    def keyword(self):
-        return 'UNION DISTINCT' if self.distinct else 'UNION ALL'
-
-
 def find_bigquery_udf(expr):
     if isinstance(expr.op(), BigQueryUDFNode):
         result = expr
     else:
         result = None
     return lin.proceed, result
-
-
-class BigQueryQueryBuilder(comp.QueryBuilder):
-
-    select_builder = BigQuerySelectBuilder
-    union_class = BigQueryUnion
-
-    def generate_setup_queries(self):
-        result = list(
-            map(partial(BigQueryUDFDefinition, context=self.context),
-                lin.traverse(find_bigquery_udf, self.expr)))
-        return result
 
 
 def build_ast(expr, context):
@@ -423,6 +398,42 @@ class BigQueryExprTranslator(impala_compiler.ImpalaExprTranslator):
         return '@{}'.format(expr.get_name())
 
 
+class BigQueryTableSetFormatter(ImpalaTableSetFormatter):
+    def _quote_identifier(self, name):
+        if re.match(r'^[A-Za-z][A-Za-z_0-9]*$', name):
+            return name
+        return '`{}`'.format(name)
+
+
+class BigQuerySelect(ImpalaSelect):
+
+    translator = BigQueryExprTranslator
+    table_set_formatter = BigQueryTableSetFormatter
+
+
+class BigQuerySelectBuilder(comp.SelectBuilder):
+
+    select_class = BigQuerySelect
+
+
+class BigQueryUnion(comp.Union):
+    @property
+    def keyword(self):
+        return 'UNION DISTINCT' if self.distinct else 'UNION ALL'
+
+
+class BigQueryQueryBuilder(comp.QueryBuilder):
+
+    select_builder = BigQuerySelectBuilder
+    union_class = BigQueryUnion
+
+    def generate_setup_queries(self):
+        result = list(
+            map(partial(BigQueryUDFDefinition, context=self.context),
+                lin.traverse(find_bigquery_udf, self.expr)))
+        return result
+
+
 compiles = BigQueryExprTranslator.compiles
 rewrites = BigQueryExprTranslator.rewrites
 
@@ -475,22 +486,6 @@ def bigquery_rewrite_all(expr):
 def bigquery_rewrite_notall(expr):
     arg, = expr.op().args
     return (1 - arg.cast(dt.int64)).sum() != 0
-
-
-class BigQueryTableSetFormatter(ImpalaTableSetFormatter):
-    def _quote_identifier(self, name):
-        if re.match(r'^[A-Za-z][A-Za-z_0-9]*$', name):
-            return name
-        return '`{}`'.format(name)
-
-
-class BigQuerySelect(ImpalaSelect):
-
-    translator = BigQueryExprTranslator
-
-    @property
-    def table_set_formatter(self):
-        return BigQueryTableSetFormatter
 
 
 @rewrites(ops.IdenticalTo)

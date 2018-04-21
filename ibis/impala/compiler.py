@@ -41,41 +41,6 @@ def to_sql(expr, context=None):
 # ----------------------------------------------------------------------
 # Select compilation
 
-class ImpalaSelectBuilder(comp.SelectBuilder):
-
-    @property
-    def _select_class(self):
-        return ImpalaSelect
-
-
-class ImpalaQueryBuilder(comp.QueryBuilder):
-
-    select_builder = ImpalaSelectBuilder
-
-
-class ImpalaContext(comp.QueryContext):
-
-    def _to_sql(self, expr, ctx):
-        return to_sql(expr, ctx)
-
-
-class ImpalaSelect(comp.Select):
-
-    """
-    A SELECT statement which, after execution, might yield back to the user a
-    table, array/list, or scalar value, depending on the expression that
-    generated it
-    """
-
-    @property
-    def translator(self):
-        return ImpalaExprTranslator
-
-    @property
-    def table_set_formatter(self):
-        return ImpalaTableSetFormatter
-
-
 class ImpalaTableSetFormatter(comp.TableSetFormatter):
 
     _join_names = {
@@ -99,6 +64,12 @@ class ImpalaTableSetFormatter(comp.TableSetFormatter):
 
     def _quote_identifier(self, name):
         return quote_identifier(name)
+
+
+class ImpalaContext(comp.QueryContext):
+
+    def _to_sql(self, expr, ctx):
+        return to_sql(expr, ctx)
 
 
 # ---------------------------------------------------------------------
@@ -793,12 +764,6 @@ def _string_find(translator, expr):
         return 'locate({}, {}) - 1'.format(substr_formatted, arg_formatted)
 
 
-def _string_join(translator, expr):
-    op = expr.op()
-    arg, strings = op.args
-    return _format_call(translator, 'concat_ws', arg, *strings)
-
-
 def _parse_url(translator, expr):
     op = expr.op()
 
@@ -964,14 +929,6 @@ _binary_infix_ops = {
 }
 
 
-def _string_like(translator, expr):
-    arg, pattern, _ = expr.op().args
-    return '{} LIKE {}'.format(
-        translator.translate(arg),
-        translator.translate(pattern),
-    )
-
-
 _operation_registry = {
     # Unary operations
     ops.NotNull: _not_null,
@@ -1042,8 +999,6 @@ _operation_registry = {
     ops.FindInSet: _find_in_set,
     ops.LPad: fixed_arity('lpad', 3),
     ops.RPad: fixed_arity('rpad', 3),
-    ops.StringJoin: _string_join,
-    ops.StringSQLLike: _string_like,
     ops.RegexSearch: fixed_arity('regexp_like', 2),
     ops.RegexExtract: fixed_arity('regexp_extract', 3),
     ops.RegexReplace: fixed_arity('regexp_replace', 3),
@@ -1051,7 +1006,6 @@ _operation_registry = {
 
     # Timestamp operations
     ops.Date: unary('to_date'),
-    ops.TimestampNow: lambda *args: 'now()',
     ops.ExtractYear: _extract_field('year'),
     ops.ExtractMonth: _extract_field('month'),
     ops.ExtractDay: _extract_field('day'),
@@ -1132,15 +1086,57 @@ class ImpalaExprTranslator(comp.ExprTranslator):
                           quote_identifier(name, force=force))
 
 
+class ImpalaSelect(comp.Select):
+
+    """
+    A SELECT statement which, after execution, might yield back to the user a
+    table, array/list, or scalar value, depending on the expression that
+    generated it
+    """
+
+    translator = ImpalaExprTranslator
+    table_set_formatter = ImpalaTableSetFormatter
+
+
+class ImpalaSelectBuilder(comp.SelectBuilder):
+
+    select_class = ImpalaSelect
+
+
+class ImpalaQueryBuilder(comp.QueryBuilder):
+
+    select_builder = ImpalaSelectBuilder
+
+
 class ImpalaDialect(comp.Dialect):
     translator = ImpalaExprTranslator
 
 
 dialect = ImpalaDialect
 
-
 compiles = ImpalaExprTranslator.compiles
 rewrites = ImpalaExprTranslator.rewrites
+
+
+@compiles(ops.StringSQLLike)
+def compile_string_like(translator, expr):
+    arg, pattern, _ = expr.op().args
+    return '{} LIKE {}'.format(
+        translator.translate(arg),
+        translator.translate(pattern),
+    )
+
+
+@compiles(ops.StringJoin)
+def compile_string_join(translator, expr):
+    op = expr.op()
+    arg, strings = op.args
+    return _format_call(translator, 'concat_ws', arg, *strings)
+
+
+@compiles(ops.TimestampNow)
+def compile_now(translator, expr):
+    return 'now()'
 
 
 @rewrites(ops.FloorDivide)
