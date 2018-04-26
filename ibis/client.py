@@ -330,7 +330,7 @@ def find_backends(expr):
         if node not in seen:
             seen.add(node)
 
-            for arg in node.flat_args():
+            for arg in node.flat_args:
                 if isinstance(arg, Client):
                     if arg not in seen_backends:
                         yield arg

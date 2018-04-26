@@ -47,7 +47,7 @@ def roots(expr, types=(ops.PhysicalTable,)):
 
         # flatten and reverse so that we traverse in preorder
         stack.extend(reversed(list(chain.from_iterable(
-            arg.op().root_tables() for arg in table.flat_args()
+            arg.op().root_tables() for arg in table.flat_args
             if isinstance(arg, types)
         ))))
 
@@ -210,7 +210,7 @@ def traverse(fn, expr, type=ir.Expr, container=Stack):
 
         if control is not halt:
             if control is proceed:
-                args = op.flat_args()
+                args = op.flat_args
             elif isinstance(control, Iterable):
                 args = control
             else:

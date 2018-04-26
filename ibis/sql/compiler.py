@@ -589,7 +589,7 @@ def _blocking_base(expr):
     if node.blocks() or isinstance(node, ops.Join):
         return expr
     else:
-        for arg in expr.op().flat_args():
+        for arg in expr.op().flat_args:
             if isinstance(arg, ir.TableExpr):
                 return _blocking_base(arg)
 
@@ -660,7 +660,7 @@ class _ExtractSubqueries(object):
         elif isinstance(node, ops.PhysicalTable):
             self._visit_physical_table(expr)
         elif isinstance(node, ops.ValueOp):
-            for arg in node.flat_args():
+            for arg in node.flat_args:
                 if not isinstance(arg, ir.Expr):
                     continue
                 self.visit(arg)
@@ -758,7 +758,7 @@ class _CorrelatedRefCheck(object):
 
         in_subquery = in_subquery or self._is_subquery(node)
 
-        for arg in node.flat_args():
+        for arg in node.flat_args:
             if isinstance(arg, ir.TableExpr):
                 self._visit_table(arg, in_subquery=in_subquery,
                                   visit_cache=visit_cache,
@@ -794,7 +794,7 @@ class _CorrelatedRefCheck(object):
         if isinstance(node, (ops.PhysicalTable, ops.SelfReference)):
             self._ref_check(node, in_subquery=in_subquery)
 
-        for arg in node.flat_args():
+        for arg in node.flat_args:
             if isinstance(arg, ir.Expr):
                 self._visit(arg, in_subquery=in_subquery,
                             visit_cache=visit_cache,

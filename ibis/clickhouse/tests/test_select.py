@@ -384,19 +384,16 @@ def test_where_use_if(con, alltypes, translate):
 
 
 def test_filter_predicates(diamonds):
-    t = diamonds
+    def pred1(t):
+        return t.color.lower().like('%de%')
 
-    predicates = [
-        lambda x: x.color.lower().like('%de%'),
-        # lambda x: x.color.lower().contains('de'),
-        lambda x: x.color.lower().rlike('.*ge.*')
-    ]
+    def pred2(t):
+        return t.color.lower().rlike('.*ge.*')
 
-    expr = t
-    for pred in predicates:
-        expr = expr[pred(expr)].projection([expr])
-
-    expr.execute()
+    expr1 = diamonds[pred1(diamonds)].projection([diamonds])
+    expr2 = expr1[pred2(expr1)]
+    proj = expr2.projection([expr1])
+    assert proj.execute() is not None
 
 
 def test_where_with_timestamp():

@@ -671,7 +671,7 @@ class ListExpr(ColumnExpr, AnyValue):
 
     @property
     def values(self):
-        return self.op().values
+        return tuple(self.op().values)
 
     def __iter__(self):
         return iter(self.values)
@@ -680,11 +680,11 @@ class ListExpr(ColumnExpr, AnyValue):
         return self.values[key]
 
     def __add__(self, other):
-        other_values = getattr(other, 'values', other)
+        other_values = tuple(getattr(other, 'values', other))
         return type(self.op())(self.values + other_values).to_expr()
 
     def __radd__(self, other):
-        other_values = getattr(other, 'values', other)
+        other_values = tuple(getattr(other, 'values', other))
         return type(self.op())(other_values + self.values).to_expr()
 
     def __bool__(self):
@@ -769,7 +769,7 @@ def find_base_table(expr):
     if isinstance(expr, TableExpr):
         return expr
 
-    for arg in expr.op().flat_args():
+    for arg in expr.op().flat_args:
         if isinstance(arg, Expr):
             r = find_base_table(arg)
             if isinstance(r, TableExpr):

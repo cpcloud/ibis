@@ -111,3 +111,21 @@ def test_custom_table_expr():
     node = SpecialTable('foo', ibis.schema([('a', 'int64')]), con)
     expr = node.to_expr()
     assert isinstance(expr, MyTableExpr)
+
+
+@pytest.mark.parametrize(
+    ('a', 'b', 'expected'),
+    [
+        (1, 2, False),
+        (1, 1, True),
+        (ibis.literal(1), ibis.literal(2), False),
+        (ibis.literal(1), ibis.literal(1), True),
+        ([1], [2], False),
+        ((1,), (), False),
+        ([ibis.literal(1)], [ibis.literal(1)], True),
+        ([], [], True),
+        ([[]], (), False)
+    ]
+)
+def test_all_equal(a, b, expected):
+    assert ops.all_equal(a, b) is expected

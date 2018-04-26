@@ -1,34 +1,25 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
 import time
+import tempfile
+
+from pprint import pprint
+
 import six
 
 import pytest
 
 from ibis import options
+from ibis.compat import zip
 import ibis.util as util
-import ibis.compat as compat
 import ibis
 
-GLOBAL_TMP_DB = os.environ.get('IBIS_TEST_TMP_DB',
-                               '__ibis_tmp_{0}'.format(util.guid()))
+GLOBAL_TMP_DB = os.environ.get(
+    'IBIS_TEST_TMP_DB', '__ibis_tmp_{}'.format(util.guid()))
 
 
-GLOBAL_TMP_DIR = os.environ.get('IBIS_TEST_TMP_HDFS_DIR',
-                                '/tmp/__ibis_test')
+GLOBAL_TMP_DIR = os.environ.get(
+    'IBIS_TEST_TMP_HDFS_DIR',
+    os.path.join(tempfile.gettempdir(), '__ibis_test'))
 
 # update global Ibis config where relevant
 options.impala.temp_db = GLOBAL_TMP_DB
@@ -171,9 +162,7 @@ class ImpalaE2E(object):
 
 def format_schema(expr):
     from ibis.impala.compiler import _type_to_sql_string
-    from pprint import pprint
     schema = expr.schema()
 
-    what = compat.lzip(schema.names,
-                       [_type_to_sql_string(x) for x in schema.types])
+    what = zip(schema.names, [_type_to_sql_string(x) for x in schema.types])
     pprint(what)

@@ -1,17 +1,3 @@
-# Copyright 2014 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import re
 import six
 import time
@@ -36,7 +22,7 @@ import ibis.expr.operations as ops
 from ibis.config import options
 from ibis.client import (Query, AsyncQuery, Database,
                          DatabaseEntity, SQLClient)
-from ibis.compat import lzip, parse_version
+from ibis.compat import zip, parse_version
 from ibis.filesystems import HDFS, WebHDFS
 from ibis.impala import udf, ddl
 from ibis.impala.compat import impyla, ImpylaError, HS2Error
@@ -946,7 +932,7 @@ class ImpalaClient(SQLClient):
     def _get_list(self, cur):
         tuples = cur.fetchall()
         if len(tuples) > 0:
-            return list(lzip(*tuples)[0])
+            return next(zip(*tuples))
         else:
             return []
 

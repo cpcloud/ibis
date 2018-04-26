@@ -77,7 +77,7 @@ class AnyToExistsTransform(object):
     def _visit(self, expr):
         node = expr.op()
 
-        for arg in node.flat_args():
+        for arg in node.flat_args:
             if isinstance(arg, ir.TableExpr):
                 self._visit_table(arg)
             elif isinstance(arg, ir.BooleanColumn):
@@ -103,7 +103,7 @@ class AnyToExistsTransform(object):
                     self.foreign_table = expr
         else:
             if not node.blocks():
-                for arg in node.flat_args():
+                for arg in node.flat_args:
                     if isinstance(arg, ir.Expr):
                         self._visit(arg)
 
@@ -119,7 +119,7 @@ def _find_blocking_table(expr):
     if node.blocks():
         return expr
 
-    for arg in node.flat_args():
+    for arg in node.flat_args:
         if isinstance(arg, ir.Expr):
             result = _find_blocking_table(arg)
             if result is not None:

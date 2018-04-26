@@ -15,9 +15,7 @@ PY2 = sys.version_info[0] == 2
 if not PY2:
     unicode_type = str
 
-    def lzip(*x):
-        return list(zip(*x))
-
+    map = map
     zip = zip
     zip_longest = itertools.zip_longest
 
@@ -42,8 +40,8 @@ else:
     from funcsigs import signature, Parameter, _empty  # noqa: F401
 
     unicode_type = unicode  # noqa: F821
-    lzip = zip
     zip = itertools.izip
+    map = itertools.imap  # noqa: F821
     zip_longest = itertools.izip_longest
 
     def viewkeys(x):

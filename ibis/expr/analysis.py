@@ -765,7 +765,13 @@ class Projector(object):
         return ops.Selection(self.parent, self.clean_exprs)
 
     def _check_fusion(self, root):
-        roots = root.table._root_tables()
+        root_table = root.table
+        root_selections = root.selections
+        input_roots = root_table.op().root_tables()
+        try:
+            input_root, = input_roots
+        except ValueError:
+            input_root = None
         validator = ExprValidator([root.table])
         fused_exprs = []
         can_fuse = False
@@ -779,25 +785,29 @@ class Projector(object):
             lifted_val = substitute_parents(val)
 
             # a * projection
+            parent_op = self.parent.op()
+            val_op = val.op()
             if (isinstance(val, ir.TableExpr) and
-                (self.parent.op().equals(val.op()) or
+                (ops.all_equal(
+                    getattr(parent_op, 'selections', parent_op),
+                    getattr(val_op, 'selections', val_op)) or
                  # gross we share the same table root. Better way to
                  # detect?
-                 len(roots) == 1 and val._root_tables()[0] is roots[0])):
+                 val.op().root_tables()[0].equals(input_root))):
                 can_fuse = True
 
                 have_root = False
-                for y in root.selections:
+                for root_sel in root_selections:
                     # Don't add the * projection twice
-                    if y.equals(root.table):
-                        fused_exprs.append(root.table)
+                    if root_sel.equals(root_table):
+                        fused_exprs.append(root_table)
                         have_root = True
-                        continue
-                    fused_exprs.append(y)
+                    else:
+                        fused_exprs.append(root_sel)
 
                 # This was a filter, so implicitly a select *
-                if not have_root and len(root.selections) == 0:
-                    fused_exprs = [root.table] + fused_exprs
+                if not have_root and not root_selections:
+                    fused_exprs = [root_table] + fused_exprs
             elif validator.validate(lifted_val):
                 can_fuse = True
                 fused_exprs.append(lifted_val)
@@ -808,11 +818,13 @@ class Projector(object):
                 fused_exprs.append(val)
 
         if can_fuse:
-            return ops.Selection(root.table, fused_exprs,
-                                 predicates=root.predicates,
-                                 sort_keys=root.sort_keys)
-        else:
-            return None
+            return ops.Selection(
+                root_table,
+                fused_exprs,
+                predicates=root.predicates,
+                sort_keys=root.sort_keys
+            )
+        return None
 
 
 def _maybe_resolve_exprs(table, exprs):
@@ -932,7 +944,7 @@ class FilterValidator(ExprValidator):
             is_valid = value_valid
         else:
             roots_valid = []
-            for arg in op.flat_args():
+            for arg in op.flat_args:
                 if isinstance(arg, ir.ScalarExpr):
                     # arg_valid = True
                     pass
@@ -1008,7 +1020,7 @@ def find_source_table(expr):
         else:
             return lin.proceed, None
 
-    first_tables = lin.traverse(finder, expr.op().flat_args())
+    first_tables = lin.traverse(finder, expr.op().flat_args)
     options = list(toolz.unique(first_tables, key=id))
 
     if len(options) > 1:

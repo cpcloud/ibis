@@ -4,8 +4,8 @@ import operator
 import itertools
 import collections
 
-from functools import partial
 from ibis.expr.schema import HasSchema, Schema
+from ibis.compat import functools, map, zip
 
 import ibis.util as util
 import ibis.common as com
@@ -14,6 +14,7 @@ import ibis.expr.types as ir
 import ibis.expr.rules as rlz
 import ibis.expr.schema as sch
 import ibis.expr.datatypes as dt
+
 from ibis.expr.signature import Annotable, Argument as Arg
 
 
@@ -31,7 +32,7 @@ def distinct_roots(*expressions):
 
 class Node(Annotable):
 
-    __slots__ = ('_expr_cached',)
+    __slots__ = '_expr_cached',
 
     def __repr__(self):
         return self._repr()
@@ -61,6 +62,11 @@ class Node(Annotable):
         # analyzed deeper
         return False
 
+    @property
+    def inputs(self):
+        return self.args
+
+    @property
     def flat_args(self):
         for arg in self.args:
             if not isinstance(arg, six.string_types) and isinstance(
@@ -75,26 +81,32 @@ class Node(Annotable):
         if cache is None:
             cache = {}
 
-        if (self, other) in cache:
-            return cache[(self, other)]
-
         if self is other:
-            cache[(self, other)] = True
+            cache[self, other] = True
             return True
 
+        try:
+            return cache[self, other]
+        except KeyError:
+            pass
+
         if type(self) != type(other):
-            cache[(self, other)] = False
+            cache[self, other] = False
             return False
 
-        if len(self.args) != len(other.args):
-            cache[(self, other)] = False
+        left_args = list(self.flat_args)
+        right_args = list(other.flat_args)
+        if len(left_args) != len(right_args):
+            cache[self, other] = False
             return False
 
-        for left, right in zip(self.args, other.args):
-            if not all_equal(left, right, cache=cache):
-                cache[(self, other)] = False
-                return False
-        cache[(self, other)] = True
+        for left, right in zip(left_args, right_args):
+            subexpr_equal = cache[left, right] = all_equal(
+                left, right, cache=cache)
+            if not subexpr_equal:
+                cache[self, other] = subexpr_equal
+                return subexpr_equal
+        cache[self, other] = True
         return True
 
     def is_ancestor(self, other):
@@ -134,20 +146,18 @@ class ValueOp(Node):
 
 
 def all_equal(left, right, cache=None):
-    if isinstance(left, list):
-        if not isinstance(right, list):
-            return False
-        for a, b in zip(left, right):
-            if not all_equal(a, b, cache=cache):
-                return False
-        return True
-
+    if isinstance(left, (list, tuple)):
+        return (
+            isinstance(right, type(left)) and
+            len(left) == len(right) and
+            all(all_equal(x, y, cache=cache) for x, y in zip(left, right))
+        )
     if hasattr(left, 'equals'):
         return left.equals(right, cache=cache)
     return left == right
 
 
-_table_names = ('t{:d}'.format(i) for i in itertools.count())
+_table_names = map('t{:d}'.format, itertools.count(0))
 
 
 def genname():
@@ -219,7 +229,7 @@ def find_all_base_tables(expr, memo=None):
             memo[id(node)] = expr
         return memo
 
-    for arg in expr.op().flat_args():
+    for arg in expr.op().flat_args:
         if isinstance(arg, ir.Expr):
             find_all_base_tables(arg, memo)
 
@@ -473,7 +483,7 @@ class BaseConvert(ValueOp):
     to_base = Arg(rlz.integer)
 
     def output_type(self):
-        return rlz.shape_like(tuple(self.flat_args()), dt.string)
+        return rlz.shape_like(tuple(self.flat_args), dt.string)
 
 
 class RealUnaryOp(UnaryOp):
@@ -608,7 +618,7 @@ class StringJoin(ValueOp):
     arg = Arg(rlz.list_of(rlz.string, min_length=1))
 
     def output_type(self):
-        return rlz.shape_like(tuple(self.flat_args()), dt.string)
+        return rlz.shape_like(tuple(self.flat_args), dt.string)
 
 
 class BooleanValueOp(object):
@@ -727,7 +737,7 @@ class Count(Reduction):
     where = Arg(rlz.boolean, default=None)
 
     def output_type(self):
-        return partial(ir.IntegerScalar, dtype=dt.int64)
+        return functools.partial(ir.IntegerScalar, dtype=dt.int64)
 
 
 class Arbitrary(Reduction):
@@ -827,7 +837,7 @@ class HLLCardinality(Reduction):
     def output_type(self):
         # Impala 2.0 and higher returns a DOUBLE
         # return ir.DoubleScalar
-        return partial(ir.IntegerScalar, dtype=dt.int64)
+        return functools.partial(ir.IntegerScalar, dtype=dt.int64)
 
 
 class GroupConcat(Reduction):
@@ -882,6 +892,11 @@ class WindowOp(ValueOp):
     def over(self, window):
         new_window = self.window.combine(window)
         return WindowOp(self.expr, new_window)
+
+    @property
+    def inputs(self):
+        first_arg = self.expr.op().args[0]
+        return first_arg, self.window
 
     def root_tables(self):
         result = list(toolz.unique(
@@ -1316,7 +1331,7 @@ class SimpleCase(ValueOp):
         )
 
     def output_type(self):
-        exprs = self.results + [self.default]
+        exprs = self.results + (self.default,)
         return rlz.shape_like(self.base, dtype=exprs.type())
 
 
@@ -1339,7 +1354,7 @@ class SearchedCase(ValueOp):
         )
 
     def output_type(self):
-        exprs = self.results + [self.default]
+        exprs = self.results + (self.default,)
         dtype = rlz.highest_precedence_dtype(exprs)
         return rlz.shape_like(self.cases, dtype)
 
@@ -1714,7 +1729,8 @@ class Selection(TableNode, HasSchema):
             predicates if predicates is not None else []
         )))
 
-        super(Selection, self).__init__(table=table, selections=projections,
+        super(Selection, self).__init__(table=table,
+                                        selections=projections,
                                         predicates=predicates,
                                         sort_keys=sort_keys)
 
@@ -2202,7 +2218,7 @@ class TimestampNow(Constant):
 class E(Constant):
 
     def output_type(self):
-        return partial(ir.FloatingScalar, dtype=dt.float64)
+        return functools.partial(ir.FloatingScalar, dtype=dt.float64)
 
 
 class TemporalUnaryOp(UnaryOp):
@@ -2683,12 +2699,11 @@ class ValueList(ValueOp):
     display_argnames = False  # disable showing argnames in repr
 
     def __init__(self, values):
-        values = list(map(rlz.any, values))
-        super(ValueList, self).__init__(values)
+        super(ValueList, self).__init__(tuple(map(rlz.any, values)))
+
+    def output_type(self):
+        dtype = rlz.highest_precedence_dtype(self.values)
+        return functools.partial(ir.ListExpr, dtype=dtype)
 
     def root_tables(self):
         return distinct_roots(*self.values)
-
-    def _make_expr(self):
-        dtype = rlz.highest_precedence_dtype(self.values)
-        return ir.ListExpr(self, dtype=dtype)

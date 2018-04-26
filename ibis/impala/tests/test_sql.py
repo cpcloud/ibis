@@ -141,25 +141,21 @@ t1 AS (
   FROM t0
     INNER JOIN movies t5
       ON t0.`movieid` = t5.`movieid`
-),
-t2 AS (
+)
+SELECT t2.*
+FROM (
   SELECT t1.*
   FROM t1
   WHERE t1.`userid` = 118205 AND
         extract(t1.`datetime`, 'year') > 2001
-)
-SELECT t2.*
-FROM t2
+) t2
 WHERE t2.`movieid` IN (
-  SELECT `movieid`
-  FROM (
-    SELECT t1.*
-    FROM t1
-    WHERE t1.`userid` = 118205 AND
-          extract(t1.`datetime`, 'year') > 2001 AND
-          t1.`userid` = 118205 AND
-          extract(t1.`datetime`, 'year') < 2009
-  ) t4
+  SELECT t1.`movieid`
+  FROM t1
+  WHERE t1.`userid` = 118205 AND
+        extract(t1.`datetime`, 'year') > 2001 AND
+        t1.`userid` = 118205 AND
+        extract(t1.`datetime`, 'year') < 2009
 )"""
     compiled_result = to_sql(result)
     assert compiled_result == expected

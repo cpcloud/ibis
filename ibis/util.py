@@ -7,6 +7,8 @@ import types
 
 import six
 
+import toolz
+
 import ibis.compat as compat
 from ibis.config import options
 
@@ -26,18 +28,12 @@ def indent(text, spaces):
     return ''.join(prefix + line for line in text.splitlines(True))
 
 
-def any_of(values, t):
-    for x in values:
-        if isinstance(x, t):
-            return True
-    return False
+def is_one_of(values, t):
+    return (isinstance(x, t) for x in values)
 
 
-def all_of(values, t):
-    for x in values:
-        if not isinstance(x, t):
-            return False
-    return True
+any_of = toolz.compose(any, is_one_of)
+all_of = toolz.compose(all, is_one_of)
 
 
 def promote_list(val):
