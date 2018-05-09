@@ -1,5 +1,7 @@
 import pytest
 
+from ibis.compat import zip_longest
+
 import ibis
 import ibis.expr.lineage as lin
 
@@ -96,7 +98,7 @@ def test_lineage(companies):
         companies.funding_total_usd,
         companies,
     ]
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
     results = list(lin.lineage(mutated.bucket))
@@ -107,7 +109,7 @@ def test_lineage(companies):
         companies.funding_total_usd,
         companies,
     ]
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
     results = list(lin.lineage(filtered.bucket))
@@ -118,7 +120,7 @@ def test_lineage(companies):
         companies.funding_total_usd,
         companies,
     ]
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
     results = list(lin.lineage(grouped.bucket))
@@ -131,7 +133,7 @@ def test_lineage(companies):
         companies.funding_total_usd,
         companies
     ]
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
 
@@ -144,7 +146,7 @@ def test_lineage_multiple_parents(companies):
         companies,
         companies.funding_rounds,
     ]
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
     # breadth first gives a slightly more aesthetically pleasing result
@@ -155,7 +157,7 @@ def test_lineage_multiple_parents(companies):
         companies.funding_rounds,
         companies,
     ]
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
 
@@ -188,8 +190,7 @@ def test_lineage_join(companies, rounds):
         companies.funding_total_usd,
         companies
     ]
-    assert len(results) == len(expected)
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
 
     results = list(lin.lineage(perc_raised, container=lin.Queue))
