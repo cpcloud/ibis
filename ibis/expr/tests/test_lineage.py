@@ -204,6 +204,34 @@ def test_lineage_join(companies, rounds):
         rounds,
         companies
     ]
-    assert len(results) == len(expected)
-    for r, e in zip(results, expected):
+    for r, e in zip_longest(results, expected):
+        assert_equal(r, e)
+
+
+def test_prune_join(companies, rounds):
+    joined = companies.join(
+        rounds,
+        companies.first_funding_at.cast(
+            'timestamp'
+        ).year() == rounds.funded_year
+    )
+    expr = joined[
+        companies.funding_total_usd,
+        rounds.funding_round_type,
+        rounds.company_city,
+        rounds.raised_amount_usd,
+    ]
+    perc_raised = (
+        expr.raised_amount_usd / expr.funding_total_usd
+    ).name('perc_raised')
+    results = list(lin.used_physical_columns(perc_raised))
+    expected = [
+        companies.first_funding_at,
+        rounds.funded_year,
+        companies.funding_total_usd,
+        rounds.funding_round_type,
+        rounds.company_city,
+        rounds.raised_amount_usd,
+    ]
+    for r, e in zip_longest(results, expected):
         assert_equal(r, e)
