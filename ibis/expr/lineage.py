@@ -1,10 +1,11 @@
 try:
     import queue as q
 except ImportError:
-    import Queue as q  # noqa
+    import Queue as q  # noqa: F401
+
 
 from itertools import chain
-from toolz import identity, compose
+from toolz import identity, compose, unique
 from collections import deque, Iterable
 
 import ibis.expr.types as ir
@@ -219,3 +220,23 @@ def traverse(fn, expr, type=ir.Expr, container=Stack):
 
             todo.extend(arg for arg in todo.visitor(args)
                         if isinstance(arg, type))
+
+
+def used_physical_columns(expr, key=None):
+    """Return a list of the physical columns used in `expr`.
+
+    Notes
+    -----
+    Useful for determining something.
+    """
+    def physical_column_finder(expr):
+        op = expr.op()
+        if isinstance(op, ops.TableColumn) and isinstance(
+            op.table.op(), ops.PhysicalTable):
+            # do not traverse below physical tables
+            return halt, expr
+        return proceed, None
+    if key is None:
+        key = lambda expr: str(expr.op())  # noqa: E731
+    assert callable(key)
+    return list(unique(traverse(physical_column_finder, expr), key=key))
