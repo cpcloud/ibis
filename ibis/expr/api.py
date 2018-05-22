@@ -1120,7 +1120,39 @@ def expr_list(exprs):
     return ops.ExpressionList(exprs).to_expr()
 
 
+def asc(column):
+    """Sort `column` in ascending order.
+
+    Parameters
+    ----------
+    column : ColumnExpr
+        Any column whose type is orderable
+
+    Returns
+    -------
+    result : SortExpr
+    """
+    return ops.SortKey(column, ascending=True).to_expr()
+
+
+def desc(column):
+    """Sort `column` in descending order.
+
+    Parameters
+    ----------
+    column : ColumnExpr
+        Any column whose type is orderable
+
+    Returns
+    -------
+    result : SortExpr
+    """
+    return ops.SortKey(column, ascending=False).to_expr()
+
+
 _generic_column_methods = dict(
+    asc=asc,
+    desc=desc,
     bottomk=bottomk,
     distinct=distinct,
     nunique=nunique,

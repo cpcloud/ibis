@@ -253,3 +253,8 @@ def test_shape_like_with_no_arguments():
     with pytest.raises(ValueError) as e:
         rlz.shape_like([])
     assert str(e.value) == 'Must pass at least one expression'
+
+
+def test_list_of_any_columns():
+    t = ibis.table([('a', 'string'), ('b', 'int64')], name='t')
+    rlz.list_of(rlz.column)([t.a, t.b])

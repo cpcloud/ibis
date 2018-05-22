@@ -1631,19 +1631,19 @@ def to_sort_key(table, key):
     return SortKey(key, ascending=sort_order).to_expr()
 
 
-class SortKey(Node):
+class SortKey(ValueOp):
     expr = Arg(rlz.column(rlz.any))
     ascending = Arg(rlz.validator(bool), default=True)
 
     def __repr__(self):
         # Temporary
         rows = ['Sort key:',
-                '  ascending: {0!s}'.format(self.ascending),
+                '  ascending: {}'.format(self.ascending),
                 util.indent(_safe_repr(self.expr), 2)]
         return '\n'.join(rows)
 
     def output_type(self):
-        return ir.SortExpr
+        return self.expr.type().array_type()
 
     def root_tables(self):
         return self.expr._root_tables()
