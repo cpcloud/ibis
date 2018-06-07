@@ -1,4 +1,5 @@
 import builtins
+import itertools
 import sys
 import tempfile
 
@@ -12,6 +13,11 @@ from ibis.bigquery.udf.core import (
     PythonToJavaScriptTranslator,
     UDFContext,
 )
+
+
+def reset_names():
+    from ibis.bigquery.udf import rewrite as r
+    r._names = itertools.count()
 
 
 @pytest.mark.parametrize(
@@ -585,12 +591,110 @@ function my_range(n) {
     assert js == expected
 
 
-def test_len_rewrite():
+def test_len():
     def my_func(a):
         return len(a)
     js = compile(my_func)
     expected = """\
 function my_func(a) {
     return a.length;
+}"""
+    assert js == expected
+
+
+def test_sum():
+    reset_names()
+
+    def my_func(a):
+        return sum(a)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a) {
+    return a.reduce(((var0, var1) => (var0 + var1)));
+}"""
+    assert js == expected
+
+
+def test_all():
+    reset_names()
+
+    def my_func(a):
+        return all(a)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a) {
+    return a.reduce(((var0, var1) => (var0 && var1)));
+}"""
+    assert js == expected
+
+
+def test_any():
+    reset_names()
+
+    def my_func(a):
+        return any(a)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a) {
+    return a.reduce(((var0, var1) => (var0 || var1)));
+}"""
+    assert js == expected
+
+
+def test_min_array():
+    reset_names()
+
+    def my_func(a):
+        return min(a)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a) {
+    return a.reduce(((var0, var1) => Math.min(var0, var1)));
+}"""
+    assert js == expected
+
+
+def test_min_scalar():
+    reset_names()
+
+    def my_func(a, b):
+        return min(a, b)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a, b) {
+    return Math.min(a, b);
+}"""
+    assert js == expected
+
+
+def test_max_array():
+    reset_names()
+
+    def my_func(a):
+        return max(a)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a) {
+    return a.reduce(((var0, var1) => Math.max(var0, var1)));
+}"""
+    assert js == expected
+
+
+def test_max_scalar():
+    reset_names()
+
+    def my_func(a, b):
+        return max(a, b)
+
+    js = compile(my_func)
+    expected = """\
+function my_func(a, b) {
+    return Math.max(a, b);
 }"""
     assert js == expected

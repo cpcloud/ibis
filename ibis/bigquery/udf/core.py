@@ -80,49 +80,6 @@ def semicolon(f):
     return wrapper
 
 
-@rewrite.register(ast.Call(func=ast.Name(id='print')))
-def rewrite_print(node):
-    return ast.Call(
-        func=ast.Attribute(
-            value=ast.Name(id='console', ctx=ast.Load()),
-            attr='log',
-            ctx=ast.Load()
-        ),
-        args=node.args,
-        keywords=node.keywords,
-    )
-
-
-@rewrite.register(ast.Call(func=ast.Name(id='len')))
-def rewrite_len(node):
-    assert len(node.args) == 1
-    return ast.Attribute(value=node.args[0], attr='length', ctx=ast.Load())
-
-
-@rewrite.register(ast.Call(func=ast.Attribute(attr='append')))
-def rewrite_append(node):
-    return ast.Call(
-        func=ast.Attribute(
-            value=node.func.value,
-            attr='push',
-            ctx=ast.Load(),
-        ),
-        args=node.args,
-        keywords=node.keywords,
-    )
-
-
-@rewrite.register(
-    ast.Call(func=ast.Attribute(value=ast.Name(id='Array'), attr='from_'))
-)
-def rewrite_array_from(node):
-    return ast.Call(
-        func=ast.Attribute(value=node.func.value, attr='from'),
-        args=node.args,
-        keywords=node.keywords,
-    )
-
-
 class PythonToJavaScriptTranslator:
     constructor_map = {
         'list': 'Array',
