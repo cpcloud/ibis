@@ -207,12 +207,12 @@ jobs:
     environment:
       - PYTHON_VERSION: 3.6
 
-  python36_benchmark:
+  benchmark:
     <<: *benchmark
     environment:
       - PYTHON_VERSION: 3.6
 
-  python36_docs:
+  docs:
     <<: *docs
     environment:
       - PYTHON_VERSION: 3.6
@@ -223,12 +223,16 @@ workflows:
   test:
     jobs:
       - python27_test
-      - python27_conda_build
-
       - python35_test
-      - python35_conda_build
-
       - python36_test
+  build:
+    jobs:
+      - python27_conda_build
+      - python35_conda_build
       - python36_conda_build
-      - python36_benchmark
-      - python36_docs
+  benchmark:
+    jobs:
+      - benchmark
+  docs:
+    jobs:
+      - docs
