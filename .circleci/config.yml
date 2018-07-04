@@ -111,7 +111,7 @@ benchmark: &benchmark
         name: Build Ibis Image
         command: docker-compose build --pull ibis
     - run:
-        name: Run Benchmark (ASV)
+        name: Run ASV Benchmarks
         command: |
           docker-compose run ibis ci/benchmark.sh circle "${CIRCLE_SHA1}"
 
@@ -177,41 +177,41 @@ docs: &docs
         path: /tmp/ibis/docs.ibis-project.org
 
 jobs:
+  # unit/integration tests
   python27_test:
     <<: *test
     environment:
       - PYTHON_VERSION: 2.7
-
   python35_test:
     <<: *test
     environment:
       - PYTHON_VERSION: 3.5
-
   python36_test:
     <<: *test
     environment:
       - PYTHON_VERSION: 3.6
 
+  # conda package builds
   python27_conda_build:
     <<: *build
     environment:
       - PYTHON_VERSION: 2.7
-
   python35_conda_build:
     <<: *build
     environment:
       - PYTHON_VERSION: 3.5
-
   python36_conda_build:
     <<: *build
     environment:
       - PYTHON_VERSION: 3.6
 
+  # ASV benchmarks
   benchmark:
     <<: *benchmark
     environment:
       - PYTHON_VERSION: 3.6
 
+  # documentation builds
   docs:
     <<: *docs
     environment:
