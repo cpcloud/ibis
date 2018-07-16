@@ -2,6 +2,7 @@ import pytest
 import decimal
 
 import ibis
+import ibis.expr.datatypes as dt
 from ibis import literal as L
 import ibis.tests.util as tu
 
@@ -94,3 +95,18 @@ def test_notin(backend, alltypes, df, column, elements):
     expected = ~df[column].isin(elements)
     expected = backend.default_series_rename(expected)
     backend.assert_series_equal(result, expected)
+
+
+@tu.skipif_unsupported
+def test_cast_null_scalar_to_bool(con):
+    expr = ibis.NA.cast(dt.boolean)
+    result = con.execute(expr)
+    assert result is None
+
+
+@tu.skipif_unsupported
+def test_cast_null_column_to_bool(backend, con, alltypes, df):
+    t = alltypes
+    col = t.string_col.nullif('1') == '9'
+    result = col.execute()
+    assert set(result.values) == {True, False, None}
