@@ -27,6 +27,10 @@ from ibis.pandas.core import (
     boolean_types,
     integer_types,
     floating_types,
+    timestamp_types,
+    date_types,
+    time_types,
+    timedelta_types,
     simple_types,
     numeric_types,
     fixed_width_types,
@@ -137,6 +141,11 @@ def execute_cast_series_date(op, data, type, **kwargs):
         )
 
     raise TypeError("Don't know how to cast {} to {}".format(from_type, type))
+
+
+@execute_node.register(ops.Cast, type(None), dt.DataType)
+def execute_cast_na_to_datatype(op, data, type, **kwargs):
+    return None
 
 
 def call_numpy_ufunc(func, op, data, **kwargs):
@@ -558,17 +567,12 @@ def execute_not_bool(op, data, **kwargs):
 
 
 @execute_node.register(
-    ops.BinaryOp, (pd.Series, numeric_types), (pd.Series, numeric_types)
+    ops.BinaryOp,
+    (pd.Series, numeric_types),
+    (pd.Series, numeric_types)
 )
-@execute_node.register(ops.Comparison, six.string_types, six.string_types)
-@execute_node.register(
-    (ops.Comparison, ops.Multiply),
-    pd.Series, six.string_types
-)
-@execute_node.register(
-    (ops.Comparison, ops.Multiply),
-    six.string_types, pd.Series
-)
+@execute_node.register(ops.Multiply, pd.Series, six.string_types)
+@execute_node.register(ops.Multiply, six.string_types, pd.Series)
 @execute_node.register(ops.Multiply, integer_types, six.string_types)
 @execute_node.register(ops.Multiply, six.string_types, integer_types)
 def execute_binary_op(op, left, right, **kwargs):
@@ -581,6 +585,46 @@ def execute_binary_op(op, left, right, **kwargs):
         )
     else:
         return operation(left, right)
+
+
+@execute_node.register(ops.Comparison, (pd.Series, simple_types), pd.Series)
+@execute_node.register(ops.Comparison, pd.Series, simple_types)
+def execute_comparison_op_series(op, left, right, **kwargs):
+    op_type = type(op)
+    try:
+        operation = constants.BINARY_OPERATIONS[op_type]
+    except KeyError:
+        raise NotImplementedError(
+            'Comparison operation {} not implemented'.format(op_type.__name__)
+        )
+    else:
+        missing = pd.isnull(left) | pd.isnull(right)
+        result = operation(left, right)
+        if not missing.any():
+            return result
+        result = result.astype('object')
+        result.loc[missing] = None
+        return result
+
+
+@execute_node.register(ops.Comparison, six.string_types, six.string_types)
+@execute_node.register(ops.Comparison, numeric_types, numeric_types)
+@execute_node.register(ops.Comparison, boolean_types, boolean_types)
+@execute_node.register(ops.Comparison, timestamp_types, timestamp_types)
+@execute_node.register(ops.Comparison, date_types, date_types)
+@execute_node.register(ops.Comparison, time_types, time_types)
+@execute_node.register(ops.Comparison, timedelta_types, timedelta_types)
+def execute_comparison_op_strings(op, left, right, **kwargs):
+    op_type = type(op)
+    try:
+        operation = constants.BINARY_OPERATIONS[op_type]
+    except KeyError:
+        raise NotImplementedError(
+            'Comparison operation {} not implemented'.format(op_type.__name__)
+        )
+    else:
+        missing = pd.isnull(left) | pd.isnull(right)
+        return None if missing else operation(left, right)
 
 
 @execute_node.register(ops.BinaryOp, SeriesGroupBy, SeriesGroupBy)
@@ -827,25 +871,45 @@ def execute_node_if_scalars(op, value, replacement, **kwargs):
     return replacement if pd.isnull(value) else value
 
 
-@execute_node.register(ops.NullIf, bool, scalar_types + (type(None),))
-def execute_node_nullif_scalars(op, condition, value, **kwargs):
-    return np.nan if condition else value
+@execute_node.register(
+    ops.NullIf,
+    scalar_types + six.string_types + (type(None),),
+    scalar_types + six.string_types + (type(None),)
+)
+def execute_node_nullif_scalars(op, data, value, **kwargs):
+    if pd.isnull(data) or pd.isnull(value):
+        return None
+    return None if data == value else data
 
 
 @execute_node.register(ops.NullIf, pd.Series, pd.Series)
-def execute_node_nullif_series(op, condition, series, **kwargs):
-    return pd.Series(np.where(condition.values, np.nan, series.values))
+def execute_node_nullif_series_series(op, data, value, **kwargs):
+    result = data.copy()
+    result[pd.isnull(data) | (data == value)] = None
+    return result
 
 
-@execute_node.register(ops.NullIf, pd.Series, scalar_types + (type(None),))
-def execute_node_nullif_series_scalar(op, condition, value, **kwargs):
-    values = np.repeat(value, len(condition))
-    return pd.Series(np.where(condition.values, np.nan, values))
+@execute_node.register(
+    ops.NullIf, pd.Series, scalar_types + six.string_types + (type(None),))
+def execute_node_nullif_series_scalar(op, data, value, **kwargs):
+    if pd.isnull(value):
+        return data
+    result = data.copy()
+    result[pd.isnull(data) | (data == value)] = None
+    return result
 
 
-@execute_node.register(ops.NullIf, bool, pd.Series)
-def execute_node_nullif_scalar_series(op, condition, value, **kwargs):
-    return pd.Series([None], index=value.index) if condition else value
+@execute_node.register(
+    ops.NullIf,
+    scalar_types + six.string_types + (type(None),),
+    pd.Series
+)
+def execute_node_nullif_scalar_series(op, data, value, **kwargs):
+    if pd.isnull(data):
+        return data
+    result = value.copy()
+    result[data == value] = None
+    return result
 
 
 def coalesce(values):
