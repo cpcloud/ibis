@@ -109,10 +109,11 @@ floating_types = numbers.Real,
 numeric_types = integer_types + floating_types
 boolean_types = bool, np.bool_
 fixed_width_types = numeric_types + boolean_types
-temporal_types = (
-    datetime.datetime, datetime.date, datetime.timedelta, datetime.time,
-    np.datetime64, np.timedelta64,
-)
+timestamp_types = datetime.datetime, np.datetime64
+date_types = datetime.date,
+time_types = datetime.time,
+timedelta_types = datetime.timedelta, np.timedelta64
+temporal_types = timestamp_types + date_types + time_types + timedelta_types
 scalar_types = fixed_width_types + temporal_types
 simple_types = scalar_types + six.string_types
 
