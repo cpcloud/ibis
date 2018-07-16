@@ -23,7 +23,7 @@ import pandas.util.testing as tm
 sa = pytest.importorskip('sqlalchemy')
 pytest.importorskip('psycopg2')
 
-pytestmark = pytest.mark.postgresql
+pytestmark = pytest.mark.postgres
 
 
 @pytest.yield_fixture
