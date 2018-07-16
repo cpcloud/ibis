@@ -17,6 +17,15 @@ def test_fillna_nullif(backend, con, expr, expected):
     assert con.execute(expr) == expected
 
 
+@tu.skipif_unsupported
+def test_nullif_column(backend, con, alltypes, df):
+    value = '1'
+    expr = alltypes.string_col.nullif(value)
+    result = expr.execute()
+    expected = df.string_col.where(df.string_col != value)
+    backend.assert_series_equal(result, expected)
+
+
 @pytest.mark.parametrize(('expr', 'expected'), [
     (ibis.coalesce(5, None, 4), 5),
     (ibis.coalesce(ibis.NA, 4, ibis.NA), 4),
