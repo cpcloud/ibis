@@ -290,6 +290,14 @@ def convert_any_to_any(_, out_dtype, column):
     return column.astype(out_dtype.to_pandas(), errors='ignore')
 
 
+@convert.register(np.dtype, dt.Boolean, pd.Series)
+def convert_any_to_bool(in_dtype, out_dtype, column):
+    import pdb; pdb.set_trace()  # noqa
+    if in_dtype == np.dtype('object'):
+        return column
+    return convert_any_to_any(in_dtype, out_dtype, column)
+
+
 def ibis_schema_apply_to(schema, df):
     """Applies the Ibis schema to a pandas DataFrame
 
