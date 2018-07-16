@@ -882,7 +882,8 @@ class AlchemyQuery(Query):
         df = pd.DataFrame.from_records(cursor.proxy.fetchall(),
                                        columns=cursor.proxy.keys(),
                                        coerce_float=True)
-        return self.schema().apply_to(df)
+        schema = self.schema()
+        return schema.apply_to(df)
 
 
 class AlchemyAsyncQuery(AsyncQuery):
