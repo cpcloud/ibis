@@ -503,16 +503,26 @@ def bigquery_rewrite_notany(expr):
     return arg.cast(dt.int64).sum() == 0
 
 
-@rewrites(ops.All)
-def bigquery_rewrite_all(expr):
-    arg, = expr.op().args
-    return (1 - arg.cast(dt.int64)).sum() == 0
+@compiles(ops.Any)
+def bigquery_compiles_any(translator, expr):
+    return 'LOGICAL_OR({})'.format(*map(translator.translate, expr.op().args))
 
 
-@rewrites(ops.NotAll)
-def bigquery_rewrite_notall(expr):
-    arg, = expr.op().args
-    return (1 - arg.cast(dt.int64)).sum() != 0
+@compiles(ops.NotAny)
+def bigquery_compiles_notany(translator, expr):
+    return '(NOT LOGICAL_OR({}))'.format(
+        *map(translator.translate, expr.op().args))
+
+
+@compiles(ops.All)
+def bigquery_compiles_all(translator, expr):
+    return 'LOGICAL_AND({})'.format(*map(translator.translate, expr.op().args))
+
+
+@compiles(ops.NotAll)
+def bigquery_compiles_notall(translator, expr):
+    return '(NOT LOGICAL_AND({}))'.format(
+        *map(translator.translate, expr.op().args))
 
 
 class BigQueryTableSetFormatter(ImpalaTableSetFormatter):
