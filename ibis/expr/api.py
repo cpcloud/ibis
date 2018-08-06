@@ -599,16 +599,21 @@ def _extract_field(name, klass):
 def cast(arg, target_type):
     # validate
     op = ops.Cast(arg, to=target_type)
+    arg_op = arg.op()
 
     if op.to.equals(arg.type()):
         # noop case if passed type is the same
         return arg
-    else:
+    if not isinstance(
+        arg_op, (ops.TimestampDiff, ops.DateDiff, ops.TimeDiff)
+    ) or not isinstance(target_type, dt.Interval):
         result = op.to_expr()
         if not arg.has_name():
             return result
         expr_name = 'cast({}, {})'.format(arg.get_name(), op.to)
         return result.name(expr_name)
+    return type(arg_op)(
+        arg_op.args[0], arg_op.args[1], target_type.unit).to_expr()
 
 
 cast.__doc__ = """

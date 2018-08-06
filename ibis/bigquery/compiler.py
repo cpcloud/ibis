@@ -410,8 +410,6 @@ _invalid_operations = {
     ops.Translate,
     ops.FindInSet,
     ops.Capitalize,
-    ops.DateDiff,
-    ops.TimestampDiff
 }
 
 _operation_registry = {
@@ -491,16 +489,19 @@ def compiles_string_to_timestamp(translator, expr):
     return 'PARSE_TIMESTAMP({}, {})'.format(fmt_string, arg_formatted)
 
 
-@rewrites(ops.Any)
-def bigquery_rewrite_any(expr):
-    arg, = expr.op().args
-    return arg.cast(dt.int64).sum() > 0
+@compiles(ops.TimestampDiff)
+def compiles_timestamp_diff(translator, expr):
+    left_arg, right_arg, unit = expr.op().args
+    left, right = map(translator.translate, (left_arg, right_arg))
+    return 'TIMESTAMP_DIFF({}, {}, {})'.format(
+        left, right, _timestamp_units[unit])
 
 
-@rewrites(ops.NotAny)
-def bigquery_rewrite_notany(expr):
-    arg, = expr.op().args
-    return arg.cast(dt.int64).sum() == 0
+@compiles(ops.DateDiff)
+def compiles_date_diff(translator, expr):
+    left_arg, right_arg, unit = expr.op().args
+    left, right = map(translator.translate, (left_arg, right_arg))
+    return 'DATE_DIFF({}, {}, {})'.format(left, right, _date_units[unit])
 
 
 @compiles(ops.Any)
