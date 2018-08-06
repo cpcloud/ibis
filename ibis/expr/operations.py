@@ -2531,7 +2531,10 @@ class DateSub(BinaryOp):
 class DateDiff(BinaryOp):
     left = Arg(rlz.date)
     right = Arg(rlz.date)
-    output_type = rlz.shape_like('left', dt.Interval('D'))
+    unit = Arg(rlz.isin({'Y', 'Q', 'M', 'W', 'D'}), default='D')
+
+    def output_type(self):
+        return rlz.shape_like(self.left, dt.Interval(self.unit))
 
 
 class TimeAdd(BinaryOp):
@@ -2549,7 +2552,10 @@ class TimeSub(BinaryOp):
 class TimeDiff(BinaryOp):
     left = Arg(rlz.time)
     right = Arg(rlz.time)
-    output_type = rlz.shape_like('left', dt.Interval('s'))
+    unit = Arg(rlz.isin({'h', 'm', 's', 'ms', 'us', 'ns'}), default='s')
+
+    def output_type(self):
+        return rlz.shape_like(self.left, dt.Interval(self.unit))
 
 
 class TimestampAdd(BinaryOp):
@@ -2569,7 +2575,12 @@ class TimestampSub(BinaryOp):
 class TimestampDiff(BinaryOp):
     left = Arg(rlz.timestamp)
     right = Arg(rlz.timestamp)
-    output_type = rlz.shape_like('left', dt.Interval('s'))
+    unit = Arg(
+        rlz.isin({'Y', 'Q', 'M', 'W', 'D', 'h', 'm', 's', 'ms', 'us', 'ns'}),
+        default='s')
+
+    def output_type(self):
+        return rlz.shape_like(self.left, dt.Interval(self.unit))
 
 
 class IntervalBinaryOp(BinaryOp):

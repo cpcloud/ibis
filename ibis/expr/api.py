@@ -2303,6 +2303,11 @@ DayOfWeek
 )
 
 
+def _timestamp_diffwith(left, right, unit='s'):
+    right = as_value_expr(right)
+    return ops.TimestampDiff(left, right, unit).to_expr()
+
+
 _timestamp_value_methods = dict(
     strftime=_timestamp_strftime,
     year=_extract_field('year', ops.ExtractYear),
@@ -2318,6 +2323,7 @@ _timestamp_value_methods = dict(
 
     __sub__=_timestamp_sub,
     sub=_timestamp_sub,
+    diffwith=_timestamp_diffwith,
 
     __add__=_timestamp_add,
     add=_timestamp_add,
@@ -2369,6 +2375,11 @@ def _date_sub(left, right):
     return op.to_expr()
 
 
+def _date_diffwith(left, right, unit='D'):
+    right = rlz.one_of([rlz.date, rlz.interval], right)
+    return ops.DateDiff(left, right, unit).to_expr()
+
+
 _date_add = _binop_expr('__add__', ops.DateAdd)
 
 _date_value_methods = dict(
@@ -2382,6 +2393,7 @@ _date_value_methods = dict(
 
     __sub__=_date_sub,
     sub=_date_sub,
+    diffwith=_date_diffwith,
 
     __rsub__=_date_sub,
     rsub=_date_sub,
@@ -2529,6 +2541,11 @@ def _time_sub(left, right):
     return op.to_expr()
 
 
+def _time_diffwith(left, right, unit='s'):
+    right = as_value_expr(right)
+    return ops.TimeDiff(left, right, unit).to_expr()
+
+
 _time_add = _binop_expr('__add__', ops.TimeAdd)
 
 
@@ -2542,6 +2559,7 @@ _time_value_methods = dict(
 
     __sub__=_time_sub,
     sub=_time_sub,
+    diffwith=_time_diffwith,
 
     __rsub__=_time_sub,
     rsub=_time_sub,
