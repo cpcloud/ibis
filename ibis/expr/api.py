@@ -604,14 +604,15 @@ def cast(arg, target_type):
     if op.to.equals(arg.type()):
         # noop case if passed type is the same
         return arg
-    if not isinstance(
-        arg_op, (ops.TimestampDiff, ops.DateDiff, ops.TimeDiff)
-    ) or not isinstance(target_type, dt.Interval):
+
+    if (not isinstance(arg_op, (ops.TimestampDiff, ops.DateDiff, ops.TimeDiff))
+            or not isinstance(target_type, dt.Interval)):
         result = op.to_expr()
         if not arg.has_name():
             return result
         expr_name = 'cast({}, {})'.format(arg.get_name(), op.to)
         return result.name(expr_name)
+
     return type(arg_op)(
         arg_op.args[0], arg_op.args[1], target_type.unit).to_expr()
 
