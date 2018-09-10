@@ -3311,3 +3311,19 @@ def prevent_rewrite(expr, client=None):
         client, = ibis.client.find_backends(expr)
     query = client.compile(expr)
     return ops.SQLQueryResult(query, expr.schema(), client).to_expr()
+
+
+def date_range(start, stop, step=None):
+    return dt.Date.range(start, stop, step)
+
+
+def time_range(start, stop, step=None):
+    return dt.Time.range(start, stop, step)
+
+
+def timestamp_range(start, stop, step=None, timezone=None):
+    return dt.Timestamp.range(start, stop, step, timezone=timezone)
+
+
+def range(start, stop=None, step=None):
+    return dt.Integer.range(start, stop, step)

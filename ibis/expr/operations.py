@@ -2875,3 +2875,42 @@ class ValueList(ValueOp):
 
     def root_tables(self):
         return distinct_roots(*self.values)
+
+
+class DateRange(ValueOp):
+    start = Arg(rlz.date)
+    stop = Arg(rlz.date)
+    step = Arg(rlz.interval(units={'Y', 'Q', 'M', 'W', 'D'}))
+
+    def output_type(self):
+        return rlz.shape_like('args', dtype=dt.Array(dt.date))
+
+
+class TimeRange(ValueOp):
+    start = Arg(rlz.time)
+    stop = Arg(rlz.time)
+    step = Arg(rlz.interval(units={'h', 'm', 's', 'ms', 'us', 'ns'}))
+
+    def output_type(self):
+        return rlz.shape_like('args', dtype=dt.Array(dt.time))
+
+
+class TimestampRange(ValueOp):
+    start = Arg(rlz.timestamp)
+    stop = Arg(rlz.timestamp)
+    step = Arg(rlz.interval(units={'Y', 'Q', 'M', 'W', 'D',
+                                   'h', 'm', 's', 'ms', 'us', 'ns'}))
+    timezone = Arg(rlz.instance_of(six.string_types), default=None)
+
+    def output_type(self):
+        return rlz.shape_like(
+            'args', dtype=dt.Array(dt.Timestamp(timezone=self.timezone)))
+
+
+class IntegerRange(ValueOp):
+    start = Arg(rlz.integer)
+    stop = Arg(rlz.integer)
+    step = Arg(rlz.integer, default=1)
+
+    def output_type(self):
+        return rlz.shape_like('args', dtype=dt.Array(dt.integer))

@@ -144,6 +144,15 @@ class Integer(Primitive):
         lower = -1 << exp
         return Bounds(lower=lower, upper=~lower)
 
+    @staticmethod
+    def range(start, stop=None, step=None):
+        import ibis.expr.operations as ops
+        return ops.IntegerRange(
+            0 if stop is None else start,
+            start if stop is None else stop,
+            1 if step is None else step,
+        ).to_expr()
+
 
 class String(Variadic):
     """A type representing a string.
@@ -181,12 +190,27 @@ class Date(Primitive):
 
     __slots__ = ()
 
+    @staticmethod
+    def range(start, stop, step=None):
+        import ibis
+        import ibis.expr.operation as ops
+        return ops.DateRange(
+            start, stop, step if step is not None else ibis.days(1)).to_expr()
+
 
 class Time(Primitive):
     scalar = ir.TimeScalar
     column = ir.TimeColumn
 
     __slots__ = ()
+
+    @staticmethod
+    def range(start, stop, step=None):
+        import ibis
+        import ibis.expr.operation as ops
+        return ops.TimeRange(
+            start, stop, step if step is not None else ibis.seconds(1)
+        ).to_expr()
 
 
 class Timestamp(Primitive):
@@ -214,6 +238,11 @@ class Timestamp(Primitive):
 
     def __repr__(self):
         return DataType.__repr__(self)
+
+    @staticmethod
+    def range(start, stop, step, timezone=None):
+        import ibis.expr.operation as ops
+        return ops.TimestampRange(start, stop, step, timezone).to_expr()
 
 
 class SignedInteger(Integer):
