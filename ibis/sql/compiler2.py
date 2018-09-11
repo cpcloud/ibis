@@ -2,12 +2,12 @@
 
 Dependencies:
 
-* Hashable expressions
+* Hashable expressions #DONE
 * An "unsafe" expression substitution function that will recursively replace
-  all the things
+  all the things  #DONE
 * Remove the notion of a "blocking" operation.
 
-#. Expression comes in as an unoptimized tree
+#. Expression comes in as unoptimized
 
 #. Optimize the expression (no-op right now, these are potentially interesting
    to implement)
@@ -26,3 +26,64 @@ Dependencies:
 #. Provide aliases to unnamed subqueries
 #. The query is compiled into a string
 """
+
+import collections
+
+import toolz
+
+from multipledispatch import Dispatcher
+
+import ibis.expr.types as ir
+
+from ibis.common import IbisTypeError
+
+
+transform = Dispatcher('transform')
+
+
+@transform.register(ir.Expr, collections.Mapping)
+def transform_expr(expr, mapping, recur=None):
+    return recur(expr, mapping)
+
+
+@transform.register(object, collections.Mapping)
+def transform_other(obj, mapping, substitutor=None):
+    return obj
+
+
+def substitute(expr, mapping):
+    @toolz.memoize(key=lambda args, kwargs: args[0]._key)
+    def substitutor(expr, mapping):
+        node = expr.op()
+        remapping = {old.op(): new for old, new in mapping.items()}
+        result = remapping.get(node)
+        if result is not None:
+            return result
+        else:
+            node_type = type(node)
+            try:
+                new_node = node_type(
+                    *(transform(arg, mapping, recur=substitutor)
+                        for arg in node.args)
+                )
+            except IbisTypeError:
+                return expr
+            else:
+                return expr._factory(new_node, name=expr._safe_name)
+    return substitutor(expr, mapping)
+
+
+class Optimizer:
+    pass
+
+
+class Optimization:
+    pass
+
+
+class ReassociateConstants(Optimization):
+    pass
+
+
+class ConstantFold(Optimization):
+    pass

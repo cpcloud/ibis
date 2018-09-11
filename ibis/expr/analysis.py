@@ -85,12 +85,7 @@ class Substitutor(object):
                 new_node = type(node)(*new_args)
             except IbisTypeError:
                 return expr
-
-            try:
-                name = expr.get_name()
-            except ExpressionError:
-                name = None
-            return expr._factory(new_node, name=name)
+            return expr._factory(new_node, name=expr._safe_name)
 
 
 class ScalarAggregate(object):
