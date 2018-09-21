@@ -1393,3 +1393,10 @@ def test_valid_negate_float128():
     value = np.float128(1)
     expr = ibis.literal(value)
     assert -expr is not None
+
+
+def test_struct_literal_with_column_expressions():
+    t = ibis.table([('a', 'int64')], name='t')
+    expr = ibis.struct([('foo', t.a)])
+    assert isinstance(expr, ir.StructColumn)
+    assert expr.type() == dt.Struct.from_tuples([('foo', 'int64')])

@@ -1112,6 +1112,11 @@ def infer_dtype_default(value):
     raise com.InputTypeError(value)
 
 
+@infer.register(ir.ColumnExpr)
+def infer_dtype_column_expr(column):
+    return column.type()
+
+
 @infer.register(collections.OrderedDict)
 def infer_struct(value):
     if not value:

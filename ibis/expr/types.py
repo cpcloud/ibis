@@ -71,7 +71,7 @@ class Expr(object):
         Returns
         -------
         Tuple[Type[Expr], Optional[str], ibis.expr.operations.Node]
-            A tuple of hashable objects uniquely identifying this expression.
+            A tuple of hashable objects uniquely identifying this expression
         """
         return type(self), self._safe_name, self.op()
 

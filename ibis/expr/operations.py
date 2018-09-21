@@ -2802,6 +2802,8 @@ class Literal(ValueOp):
         )
 
     def output_type(self):
+        if isinstance(self.dtype, dt.Struct):
+            import pdb; pdb.set_trace()  # noqa
         return self.dtype.scalar_type()
 
     def root_tables(self):

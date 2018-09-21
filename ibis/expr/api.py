@@ -57,6 +57,7 @@ from ibis.expr.types import (  # noqa
 
 __all__ = (
     'aggregate',
+    'array',
     'case',
     'cast',
     'coalesce',
@@ -94,6 +95,7 @@ __all__ = (
     'Schema',
     'second',
     'sequence',
+    'struct',
     'table',
     'time',
     'timestamp',
@@ -333,6 +335,14 @@ second = _timedelta('second', 's')
 millisecond = _timedelta('millisecond', 'ms')
 microsecond = _timedelta('microsecond', 'us')
 nanosecond = _timedelta('nanosecond', 'ns')
+
+
+def struct(field_list):
+    return ibis.literal(collections.OrderedDict(field_list))
+
+
+def array(values):
+    return ibis.literal(list(values))
 
 
 schema.__doc__ = """\
