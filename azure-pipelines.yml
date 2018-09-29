@@ -1,7 +1,11 @@
+parameters:
+  name: Windows
+  vmImage: vs2017-win2017
+
 jobs:
-- job: windows
+- job: Windows
   pool:
-    vmImage: ''
+    vmImage: vs2017-win2017
   strategy:
     maxParallel: 3
     matrix:
@@ -12,24 +16,16 @@ jobs:
       py36:
         PYTHON_VERSION: "3.6"
    steps:
-    - task: test
      - script: |
-        call deactivate
-        conda list
-        conda config --set always_yes true
-        conda create --name "ibis_%PYTHON_VERSION%" python=%PYTHON_VERSION% --channel conda-forge
-        call activate "ibis_%PYTHON_VERSION%"
-        conda install -c conda-forge pytables numpy sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
-        conda list
-        pip install -e . "[sqlite,postgres,mysql,visualization,pandas,csv,hdf5]"
-      displayName: 'Create Conda Environment'
-    - script: |
-      displayName: 'Install Ibis'
-    - script: |
-      displayName: 'Download Data'
-    - script: |
-      displayName: 'Install Data'
-    - script: |
-        call activate %CONDA_ENV%
-        pytest --skip-slow --skip-network pandas -n 2 -r sxX --strict %*
-      displayName: 'Run Tests'
+         call deactivate
+         conda list
+         conda config --set always_yes true
+         conda create --name "ibis_%PYTHON_VERSION%" python=%PYTHON_VERSION% --channel conda-forge
+         call activate "ibis_%PYTHON_VERSION%"
+         conda install -c conda-forge pytables numpy sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
+         conda list
+         pip install -e . "[sqlite,postgres,mysql,visualization,pandas,csv,hdf5]"
+       displayName: 'Create Conda Environment'
+     - script: |
+       python setup.py develop
+       displayName: 'Install Ibis'
