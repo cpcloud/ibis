@@ -12,4 +12,17 @@ jobs:
       py36:
         PYTHON_VERSION: "3.6"
   steps:
+    - task: CondaEnvironment@1
+      inputs:
+        createCustomEnvironment: True
+        environmentName: "ibis_%PYTHON_VERSION%"
+        packageSpecs: pytables numpy sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
+        installOptions: -c conda-forge
+        createOptions: python="%PYTHON_VERSION%" -c conda-forge
+        cleanEnvironment: True
+        updateConda: True
     - script: conda list
+    #- script: call activate "ibis_%PYTHON_VERSION%"
+      #displayName: 'Activate Conda Environment'
+    #- script: pip install -e . "[sqlite,postgres,mysql,visualization,pandas,csv,hdf5]"
+      #displayName: 'Install Ibis'
