@@ -11,17 +11,17 @@ jobs:
         PYTHON_VERSION: "3.5"
       py36:
         PYTHON_VERSION: "3.6"
-    steps:
-      - script: |
-          call deactivate
-          conda list
-          conda config --set always_yes true
-          conda create --name "ibis_%PYTHON_VERSION%" python=%PYTHON_VERSION% --channel conda-forge
-          call activate "ibis_%PYTHON_VERSION%"
-          conda install -c conda-forge pytables numpy sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
-          conda list
-          pip install -e . "[sqlite,postgres,mysql,visualization,pandas,csv,hdf5]"
-        displayName: 'Create Conda Environment'
-      - script: |
-          python setup.py develop
-        displayName: 'Install Ibis'
+  steps:
+    - script: |
+        call deactivate
+        conda list
+        conda config --set always_yes true
+        conda create --name "ibis_%PYTHON_VERSION%" python=%PYTHON_VERSION% --channel conda-forge
+        call activate "ibis_%PYTHON_VERSION%"
+        conda install -c conda-forge pytables numpy sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
+        conda list
+        pip install -e . "[sqlite,postgres,mysql,visualization,pandas,csv,hdf5]"
+      displayName: 'Create Conda Environment'
+    - script: |
+        python setup.py develop
+      displayName: 'Install Ibis'
