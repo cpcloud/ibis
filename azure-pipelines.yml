@@ -2,5 +2,14 @@ jobs:
 - job: Windows
   pool:
     vmImage: vs2017-win2017
+  strategy:
+    maxParallel: 3
+    matrix:
+      py27:
+        PYTHON_VERSION: "2.7"
+      py35:
+        PYTHON_VERSION: "3.5"
+      py36:
+        PYTHON_VERSION: "3.6"
   steps:
-    - script: echo Foo
+    - script: conda list
