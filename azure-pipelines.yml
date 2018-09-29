@@ -1,7 +1,4 @@
-parameters:
-  name: ''
-  vmImage: ''
- jobs:
+jobs:
 - job: windows
   pool:
     vmImage: ''
