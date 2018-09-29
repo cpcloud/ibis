@@ -1,7 +1,3 @@
-parameters:
-  name: Windows
-  vmImage: vs2017-win2017
-
 jobs:
 - job: Windows
   pool:
