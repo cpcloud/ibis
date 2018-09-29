@@ -3,15 +3,22 @@ jobs:
   pool:
     vmImage: vs2017-win2017
   strategy:
-    maxParallel: 10
+    maxParallel: 3
+    matrix:
+      py27:
+        PYTHON_VERSION: "2.7"
+      py35:
+        PYTHON_VERSION: "3.5"
+      py36:
+        PYTHON_VERSION: "3.6"
   steps:
     - task: CondaEnvironment@1
       inputs:
         createCustomEnvironment: True
-        environmentName: "ibis"
+        environmentName: "ibis_$(PYTHON_VERSION)"
         packageSpecs: pytables numpy sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
         installOptions: -c conda-forge
-        createOptions: python=3.5 -c conda-forge
+        createOptions: python="$(PYTHON_VERSION)" -c conda-forge
         cleanEnvironment: True
         updateConda: False
     - script: conda list
