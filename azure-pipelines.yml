@@ -19,9 +19,9 @@ jobs:
         packageSpecs: pytables numpy pandas multipledispatch sqlalchemy psycopg2 graphviz click mock plumbum flake8 pytest-xdist
         installOptions: -c conda-forge
         createOptions: python="$(PYTHON_VERSION)" -c conda-forge
-        cleanEnvironment: True
+        cleanEnvironment: False
         updateConda: False
-    - script: pip install -e . "[visualization,csv,hdf5]"
+    - script: pip install -e . [visualization, csv, hdf5]
       displayName: 'Install ibis'
     - script: conda list
       displayName: 'Show installed packages'
