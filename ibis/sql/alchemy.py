@@ -51,13 +51,15 @@ _ibis_type_to_sqla = {
     dt.Int8: sa.SmallInteger,
     dt.Int16: sa.SmallInteger,
     dt.Int32: sa.Integer,
-    dt.Int64: sa.BigInteger
+    dt.Int64: sa.BigInteger,
 }
 
 
 def _to_sqla_type(itype, type_map=None):
     if type_map is None:
         type_map = _ibis_type_to_sqla
+    if isinstance(itype, dt.Interval):
+        return sa.types.Interval()
     if isinstance(itype, dt.Decimal):
         return sa.types.NUMERIC(itype.precision, itype.scale)
     elif isinstance(itype, dt.Date):
@@ -82,6 +84,37 @@ def _to_sqla_type(itype, type_map=None):
 @dt.dtype.register(SQLAlchemyDialect, sa.types.NullType)
 def sa_null(_, satype, nullable=True):
     return dt.null
+
+
+@dt.dtype.register(SQLAlchemyDialect, sa.types.Interval)
+def sa_interval(_, sa_type, nullable=True):
+    return dt.Interval(nullable=nullable)
+
+
+_postgresql_interval_fields_to_ibis_unit = {
+    'YEAR': 'Y',
+    'MONTH': 'M',
+    'DAY': 'D',
+    'HOUR': 'h',
+    'MINUTE': 'm',
+    'SECOND': 's',
+    'YEAR TO MONTH': 'M',
+    'DAY TO HOUR': 'h',
+    'DAY TO MINUTE': 'm',
+    'DAY TO SECOND': 's',
+    'HOUR TO MINUTE': 'm',
+    'HOUR TO SECOND': 's',
+    'MINUTE TO SECOND': 's',
+}
+
+
+@dt.dtype.register(PostgreSQLDialect, sa.dialects.postgresql.INTERVAL)
+def sa_postgres_interval(_, sa_type, nullable=True):
+    fields = getattr(sa_type, 'fields', None)
+    unit = 'us'
+    if fields is not None:
+        unit = _postgresql_interval_fields_to_ibis_unit[fields.upper()]
+    return dt.Interval(unit, nullable=nullable)
 
 
 @dt.dtype.register(SQLAlchemyDialect, sa.types.Boolean)
