@@ -77,7 +77,6 @@ def cast(source, target):
 
 
 class validator(curry):
-
     def __repr__(self):
         return '{}({}{})'.format(
             self.func.__name__,
