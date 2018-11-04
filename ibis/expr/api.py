@@ -206,10 +206,10 @@ def timestamp(value):
         except pd.errors.OutOfBoundsDatetime:
             value = dateutil.parser.parse(value)
     if isinstance(value, six.integer_types):
-        warnings.warn(
-            'Integer values for timestamp literals are deprecated in 0.11.0 '
-            'and will be removed in 0.12.0. To pass integers as timestamp '
-            'literals, use pd.Timestamp({:d}, unit=...)'.format(value)
+        raise TypeError(
+            'Integer values are not supported when constructing timestamps. '
+            'Use pandas.Timestamp to construct a timestamp with an integer '
+            'and pass that to ibis.'
         )
     return literal(value, type=dt.timestamp)
 
@@ -306,33 +306,24 @@ def interval(value=None, unit='s', years=None, quarters=None, months=None,
     return literal(value, type=type).op().to_expr()
 
 
-@functools.wraps(interval)
-def timedelta(*args, **kwargs):
-    warnings.warn('ibis.timedelta is deprecated, use ibis.interval instead',
-                  DeprecationWarning)
-    return interval(*args, **kwargs)
-
-
-def _timedelta(name, unit):
+def _interval(name, unit):
     def f(value=1):
-        msg = 'ibis.{0} is deprecated, use ibis.interval({0}s=n) instead'
-        warnings.warn(msg.format(name), DeprecationWarning)
         return interval(value, unit=unit)
     f.__name__ = name
     return f
 
 
-year = _timedelta('year', 'Y')
-quarter = _timedelta('quarter', 'Q')
-month = _timedelta('month', 'M')
-week = _timedelta('week', 'W')
-day = _timedelta('day', 'D')
-hour = _timedelta('hour', 'h')
-minute = _timedelta('minute', 'm')
-second = _timedelta('second', 's')
-millisecond = _timedelta('millisecond', 'ms')
-microsecond = _timedelta('microsecond', 'us')
-nanosecond = _timedelta('nanosecond', 'ns')
+year = _interval('year', 'Y')
+quarter = _interval('quarter', 'Q')
+month = _interval('month', 'M')
+week = _interval('week', 'W')
+day = _interval('day', 'D')
+hour = _interval('hour', 'h')
+minute = _interval('minute', 'm')
+second = _interval('second', 's')
+millisecond = _interval('millisecond', 'ms')
+microsecond = _interval('microsecond', 'us')
+nanosecond = _interval('nanosecond', 'ns')
 
 
 schema.__doc__ = """\
