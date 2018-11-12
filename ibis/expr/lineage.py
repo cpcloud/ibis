@@ -1,12 +1,32 @@
+import collections
+
 from itertools import chain
+from typing import (  # noqa: F401
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
+
 from toolz import identity, compose
-from collections import deque, Iterable
 
 import ibis.expr.types as ir
 import ibis.expr.operations as ops
 
 
-def roots(expr, types=(ops.PhysicalTable,)):
+def roots(
+    expr: ir.Expr,
+    types: Sequence[Type[ops.PhysicalTable]] = (ops.PhysicalTable,),
+) -> Iterator[ops.TableNode]:
     """Yield every node of a particular type on which an expression depends.
 
     Parameters
@@ -19,7 +39,7 @@ def roots(expr, types=(ops.PhysicalTable,)):
 
     Yields
     ------
-    table : Expr
+    PhysicalTable
         Unique node types on which an expression depends
 
     Notes
@@ -27,11 +47,16 @@ def roots(expr, types=(ops.PhysicalTable,)):
     If your question is: "What nodes of type T does `expr` depend on?", then
     you've come to the right place. By default, we yield the physical tables
     that an expression depends on.
-    """
-    seen = set()
 
-    stack = [arg for arg in reversed(expr.op().root_tables())
-             if isinstance(arg, types)]
+    """
+    seen = set()  # type: Set[ops.PhysicalTable]
+
+    tuple_of_types = tuple(types)
+    stack = [
+        arg
+        for arg in reversed(expr.op().root_tables())
+        if isinstance(arg, tuple_of_types)
+    ]
 
     while stack:
         table = stack.pop()
@@ -41,70 +66,83 @@ def roots(expr, types=(ops.PhysicalTable,)):
             yield table
 
         # flatten and reverse so that we traverse in preorder
-        stack.extend(reversed(list(chain.from_iterable(
-            arg.op().root_tables() for arg in table.flat_args()
-            if isinstance(arg, types)
-        ))))
+        stack.extend(
+            reversed(
+                list(
+                    chain.from_iterable(
+                        arg.op().root_tables()
+                        for arg in table.flat_args()
+                        if isinstance(arg, tuple_of_types)
+                    )
+                )
+            )
+        )
 
 
-class Container:
+T = TypeVar('T')
+U = TypeVar('U')
 
-    __slots__ = 'data',
 
-    def __init__(self, data):
-        self.data = deque(self.visitor(data))
+class Container(Generic[T]):
+    __slots__ = ('data',)
 
-    def append(self, item):
+    def __init__(self, data: Iterable[T]) -> None:
+        self.data = collections.deque(self.visitor(data))
+
+    def append(self, item: T) -> None:
         self.data.append(item)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.data)
 
-    def get(self):
-        raise NotImplementedError('Child classes must implement get')
+    def get(self) -> T:
+        raise NotImplementedError(
+            'Child class {!r} must implement get'.format(type(self).__name__)
+        )
 
     @property
-    def visitor(self):
-        raise NotImplementedError('Child classes must implement visitor')
+    def visitor(self) -> Callable[[Iterable[U]], Iterable[U]]:
+        raise NotImplementedError(
+            'Child class {!r} must implement visitor'.format(
+                type(self).__name__
+            )
+        )
 
-    def extend(self, items):
-        return self.data.extend(items)
+    def extend(self, items: Iterable[T]) -> None:
+        self.data.extend(items)
 
 
-class Stack(Container):
+class Stack(Container[T]):
+    """Wrapper around a deque to provide convenient depth-first traversal."""
 
-    """Wrapper around a list to provide a common API for graph traversal
-    """
+    __slots__ = ('data',)
 
-    __slots__ = 'data',
-
-    def get(self):
+    def get(self) -> T:
         return self.data.pop()
 
     @property
-    def visitor(self):
+    def visitor(self) -> Callable[[Iterable[U]], Iterable[U]]:
         return compose(reversed, list)
 
 
-class Queue(Container):
+class Queue(Container[T]):
+    """Wrapper around a deque to provide convenient breadth-first traversal."""
 
-    """Wrapper around a queue.Queue to provide a common API for graph traversal
-    """
+    __slots__ = ('data',)
 
-    __slots__ = 'data',
-
-    def get(self):
+    def get(self) -> T:
         return self.data.popleft()
 
     @property
-    def visitor(self):
+    def visitor(self) -> Callable[[Iterable[U]], Iterable[U]]:
         return identity
 
 
-def _get_args(op, name):
+def _get_args(op: ops.Node, name: Optional[str]) -> List[ir.Expr]:
     """Hack to get relevant arguments for lineage computation.
 
     We need a better way to determine the relevant arguments of an expression.
+
     """
     # Could use multipledispatch here to avoid the pasta
     if isinstance(op, ops.Selection):
@@ -121,17 +159,23 @@ def _get_args(op, name):
         return op.args
 
 
-def lineage(expr, container=Stack):
+LineagePair = Tuple[ir.Expr, Optional[str]]
+
+
+def lineage(
+    expr: ir.ColumnExpr,
+    container: Type[Container[LineagePair]] = Stack[LineagePair],
+) -> Iterator[ir.Expr]:
     """Yield the path of the expression tree that comprises a column
     expression.
 
     Parameters
     ----------
-    expr : Expr
+    expr
         An ibis expression. It must be an instance of
         :class:`ibis.expr.types.ColumnExpr`.
-    container : Container, {Stack, Queue}
-        Stack for depth-first traversal, and Queue for breadth-first.
+    container
+        Stack for depth-first traversal, Queue for breadth-first.
         Depth-first will reach root table nodes before continuing on to other
         columns in a column that is derived from multiple column. Breadth-
         first will traverse all columns at each level before reaching root
@@ -139,15 +183,16 @@ def lineage(expr, container=Stack):
 
     Yields
     ------
-    node : Expr
+    Expr
         A column and its dependencies
+
     """
     if not isinstance(expr, ir.ColumnExpr):
         raise TypeError('Input expression must be an instance of ColumnExpr')
 
     c = container([(expr, expr._name)])
 
-    seen = set()
+    seen = set()  # type: Set[ir.Expr]
 
     # while we haven't visited everything
     while c:
@@ -170,26 +215,35 @@ def lineage(expr, container=Stack):
 proceed = True
 halt = False
 
+Output = TypeVar('Output')
 
-def traverse(fn, expr, type=ir.Expr, container=Stack):
+
+def traverse(
+    fn: Callable[[ir.Expr], Tuple[bool, Output]],
+    expr: ir.Expr,
+    type: Type[ir.Expr] = ir.Expr,
+    container: Type[Container[ir.Expr]] = Stack[ir.Expr],
+) -> Iterator[Output]:
     """Utility for generic expression tree traversal
 
     Parameters
     ----------
-    fn : Callable[[ir.Expr], Tuple[Union[Boolean, Iterable], Any]]
+    fn
         This function will be applied on each expressions, it must
         return a tuple. The first element of the tuple controls the
         traversal, and the second is the result if its not None.
-    expr: ir.Expr
+    expr
         The traversable expression or a list of expressions.
-    type: Type
+    type
         Only the instances if this type are traversed.
-    container: Union[Stack, Queue], default Stack
-        Defines the traversing order.
+    container
+        Defines the traversing order. Defaults to Stack, providing depth-first
+        traversal.
+
     """
-    args = expr if isinstance(expr, Iterable) else [expr]
+    args = expr if isinstance(expr, collections.Iterable) else [expr]
     todo = container(arg for arg in args if isinstance(arg, type))
-    seen = set()
+    seen = set()  # type: Set[ops.Node]
 
     while todo:
         expr = todo.get()
@@ -206,11 +260,11 @@ def traverse(fn, expr, type=ir.Expr, container=Stack):
         if control is not halt:
             if control is proceed:
                 args = op.flat_args()
-            elif isinstance(control, Iterable):
-                args = control
             else:
-                raise TypeError('First item of the returned tuple must be '
-                                'an instance of boolean or iterable')
+                raise TypeError(
+                    'First item of the returned tuple must be True or False'
+                )
 
-            todo.extend(arg for arg in todo.visitor(args)
-                        if isinstance(arg, type))
+            todo.extend(
+                arg for arg in todo.visitor(args) if isinstance(arg, type)
+            )
