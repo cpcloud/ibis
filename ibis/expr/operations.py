@@ -265,7 +265,6 @@ def find_all_base_tables(expr, memo=None):
 
 
 class PhysicalTable(TableNode, HasSchema):
-
     def blocks(self):
         return True
 
@@ -285,7 +284,7 @@ class DatabaseTable(PhysicalTable):
 
 
 class SQLQueryResult(TableNode, HasSchema):
-    """A table sourced from the result set of a select query"""
+    """A table sourced from the result set of a select query."""
 
     query = Arg(rlz.noop)
     schema = Arg(sch.Schema)
@@ -296,11 +295,14 @@ class SQLQueryResult(TableNode, HasSchema):
 
 
 class TableArrayView(ValueOp):
+    """Helper operation class for SQL translation.
+
+    Notes
+    -----
+    Fully formed table subqueries to be viewed as arrays
 
     """
-    (Temporary?) Helper operation class for SQL translation (fully formed table
-    subqueries to be viewed as arrays)
-    """
+
     table = Arg(ir.TableExpr)
     name = Arg(str)
 
@@ -1185,8 +1187,7 @@ class NthValue(AnalyticOp):
 
 
 class Distinct(TableNode, HasSchema):
-    """
-    Distinct is a table-level unique-ing operation.
+    """Distinct is a table-level unique-ing operation.
 
     In SQL, you might have:
 
@@ -1195,7 +1196,9 @@ class Distinct(TableNode, HasSchema):
 
     SELECT DISTINCT foo, bar
     FROM table
+
     """
+
     table = Arg(ir.TableExpr)
 
     def _validate(self):
@@ -1657,16 +1660,16 @@ class CrossJoin(InnerJoin):
 
     def __init__(self, *args, **kwargs):
         if 'prefixes' in kwargs:
-            raise NotImplementedError
+            raise NotImplementedError('prefixes argument not yet implemented')
 
         if len(args) < 2:
-            raise com.IbisInputError('Must pass at least 2 tables')
+            raise com.IbisInputError(
+                'Must pass at least 2 tables when constructing a cross join'
+            )
 
-        left = args[0]
-        right = args[1]
-        for t in args[2:]:
-            right = right.cross_join(t)
-        InnerJoin.__init__(self, left, right, [])
+        left, *rest = args
+        right = functools.reduce(ir.TableExpr.cross_join, rest)
+        super().__init__(left, right, [])
 
 
 class AsOfJoin(Join):
@@ -1689,8 +1692,8 @@ class Union(TableNode, HasSchema):
 
     def _validate(self):
         if not self.left.schema().equals(self.right.schema()):
-            raise com.RelationError('Table schemas must be equal '
-                                    'to form union')
+            raise com.RelationError(
+                'Table schemas must be equal to form union')
 
     @property
     def schema(self):
@@ -1793,12 +1796,6 @@ class SelfReference(TableNode, HasSchema):
     @property
     def schema(self):
         return self.table.schema()
-
-    def root_tables(self):
-        # The dependencies of this operation are not walked, which makes the
-        # table expression holding this relationally distinct from other
-        # expressions, so things like self-joins are possible
-        return [self]
 
     def blocks(self):
         return True
