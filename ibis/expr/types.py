@@ -2,6 +2,8 @@ import os
 import itertools
 import webbrowser
 
+from typing import Union
+
 import ibis
 import ibis.util as util
 import ibis.common as com
@@ -941,3 +943,6 @@ class UnnamedMarker:
 
 
 unnamed = UnnamedMarker()
+
+
+ConcreteExpr = Union[ValueExpr, TableExpr]
