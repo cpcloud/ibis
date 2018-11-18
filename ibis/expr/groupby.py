@@ -1,20 +1,8 @@
-# Copyright 2014 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# User API for grouped data operations
+"""User API for grouped data operations."""
 
 from __future__ import absolute_import
+
+from typing import Any, List, Optional, Union
 
 import types
 
@@ -32,6 +20,9 @@ def _resolve_exprs(table, exprs):
     return table._resolve(exprs)
 
 
+InputExpr = Union[ir.ValueExpr, List[ir.ValueExpr]]
+
+
 _function_types = tuple(
     filter(
         None,
@@ -42,12 +33,12 @@ _function_types = tuple(
             types.LambdaType,
             types.MethodType,
             getattr(types, 'UnboundMethodType', None),
-        )
+        ),
     )
 )
 
 
-def _get_group_by_key(table, value):
+def _get_group_by_key(table: ir.TableExpr, value: Any) -> ir.ValueExpr:
     if isinstance(value, str):
         return table[value]
     if isinstance(value, _function_types):
@@ -56,65 +47,80 @@ def _get_group_by_key(table, value):
 
 
 class GroupedTableExpr:
-
-    """
-    Helper intermediate construct
-    """
+    """Helper intermediate construct."""
 
     def __init__(
-        self, table, by, having=None, order_by=None, window=None, **expressions
-    ):
+        self,
+        table: ir.TableExpr,
+        by: List[ir.ColumnExpr],
+        having: Optional[List[ir.BooleanScalar]] = None,
+        order_by: Optional[List[ir.ColumnExpr]] = None,
+        window: Optional[_window.Window] = None,
+        **expressions: ir.ValueExpr
+    ) -> None:
         self.table = table
         self.by = util.promote_list(by if by is not None else []) + [
             _get_group_by_key(table, v).name(k)
             for k, v in sorted(expressions.items(), key=toolz.first)
         ]
-        self._order_by = order_by or []
-        self._having = having or []
+        self._order_by = (
+            order_by if order_by is not None else []
+        )  # type: List[ir.ColumnExpr]
+        self._having = (
+            having if having is not None else []
+        )  # type: List[ir.BooleanScalar]
         self._window = window
 
     def __getitem__(self, args):
         # Shortcut for projection with window functions
         return self.projection(list(args))
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> 'GroupedColumn':
         if hasattr(self.table, attr):
             return self._column_wrapper(attr)
+        raise AttributeError("GroupBy has no attribute {!r}".format(attr))
 
-        raise AttributeError("GroupBy has no attribute %r" % attr)
-
-    def _column_wrapper(self, attr):
+    def _column_wrapper(self, attr: str) -> 'GroupedColumn':
         col = self.table[attr]
-        if isinstance(col, ir.NumericValue):
+        if isinstance(col, ir.NumericColumn):
             return GroupedNumbers(col, self)
         else:
-            return GroupedArray(col, self)
+            return GroupedColumn(col, self)
 
-    def aggregate(self, metrics=None, **kwds):
-        return self.table.aggregate(metrics, by=self.by,
-                                    having=self._having, **kwds)
+    def aggregate(self, metrics=None, **kwargs) -> ir.TableExpr:
+        return self.table.aggregate(
+            metrics, by=self.by, having=self._having, **kwargs
+        )
 
-    def having(self, expr):
-        """
-        Add a post-aggregation result filter (like the having argument in
-        `aggregate`), for composability with the group_by API
+    def having(
+        self, expr: Union[List[ir.BooleanScalar], ir.BooleanScalar]
+    ) -> 'GroupedTableExpr':
+        """Add a post-aggregation result filter.
+
+        This exists for composability with the group_by API.
 
         Parameters
         ----------
-        expr : ibis.expr.types.Expr
+        expr
 
         Returns
         -------
-        grouped : GroupedTableExpr
+        GroupedTableExpr
+
         """
         exprs = util.promote_list(expr)
         new_having = self._having + exprs
         return GroupedTableExpr(
-            self.table, self.by,
-            having=new_having, order_by=self._order_by, window=self._window
+            self.table,
+            self.by,
+            having=new_having,
+            order_by=self._order_by,
+            window=self._window,
         )
 
-    def order_by(self, expr):
+    def order_by(
+        self, expr: Union[ir.ColumnExpr, List[ir.ColumnExpr]]
+    ) -> 'GroupedTableExpr':
         """
         Expressions to use for ordering data for a window function
         computation. Ignored in aggregations.
@@ -130,19 +136,28 @@ class GroupedTableExpr:
         exprs = util.promote_list(expr)
         new_order = self._order_by + exprs
         return GroupedTableExpr(
-            self.table, self.by,
-            having=self._having, order_by=new_order, window=self._window
+            self.table,
+            self.by,
+            having=self._having,
+            order_by=new_order,
+            window=self._window,
         )
 
-    def mutate(self, exprs=None, **kwds):
-        """
-        Returns a table projection with analytic / window functions
-        applied. Any arguments can be functions.
+    def mutate(
+        self,
+        exprs: Optional[Union[ir.ValueExpr, List[ir.ValueExpr]]] = None,
+        **kwargs: ir.ValueExpr
+    ) -> ir.TableExpr:
+        """Returns a table projection with analytic / window functions applied.
 
         Parameters
         ----------
-        exprs : list, default None
-        kwds : key=value pairs
+        exprs
+        kwargs
+
+        Returns
+        -------
+        TableExpr
 
         Examples
         --------
@@ -195,37 +210,27 @@ class GroupedTableExpr:
                   None
               <ibis.expr.window.Window object at 0x...>
 
-        Returns
-        -------
-        mutated : TableExpr
         """
-        if exprs is None:
-            exprs = []
-        else:
-            exprs = util.promote_list(exprs)
+        all_exprs = [] if exprs is None else util.promote_list(exprs)
 
-        kwd_names = list(kwds.keys())
-        kwd_values = list(kwds.values())
+        kwd_names = list(kwargs.keys())
+        kwd_values = list(kwargs.values())
         kwd_values = self.table._resolve(kwd_values)
 
-        for k, v in sorted(zip(kwd_names, kwd_values)):
-            exprs.append(v.name(k))
+        all_exprs.extend(
+            v.name(k) for k, v in sorted(zip(kwd_names, kwd_values))
+        )
 
-        return self.projection([self.table] + exprs)
+        return self.projection([self.table] + all_exprs)
 
-    def projection(self, exprs):
-        """
-        Like mutate, but do not include existing table columns
-        """
+    def projection(self, exprs: List[ir.ValueExpr]) -> ir.TableExpr:
+        """Project expressions in `exprs` to a new ``TableExpr``."""
         w = self._get_window()
-        windowed_exprs = []
         exprs = self.table._resolve(exprs)
-        for expr in exprs:
-            expr = L.windowize_function(expr, w=w)
-            windowed_exprs.append(expr)
+        windowed_exprs = [L.windowize_function(expr, w=w) for expr in exprs]
         return self.table.projection(windowed_exprs)
 
-    def _get_window(self):
+    def _get_window(self) -> _window.Window:
         if self._window is None:
             groups = self.by
             sorts = self._order_by
@@ -240,31 +245,36 @@ class GroupedTableExpr:
 
         groups = _resolve_exprs(self.table, groups)
 
-        return _window.window(preceding=preceding, following=following,
-                              group_by=groups, order_by=sorts)
+        return _window.window(
+            preceding=preceding,
+            following=following,
+            group_by=groups,
+            order_by=sorts,
+        )
 
-    def over(self, window):
-        """
-        Add a window clause to be applied to downstream analytic expressions
-        """
-        return GroupedTableExpr(self.table, self.by, having=self._having,
-                                order_by=self._order_by,
-                                window=window)
+    def over(self, window: _window.Window) -> 'GroupedTableExpr':
+        """Add a window clause to an analytic expression."""
+        return GroupedTableExpr(
+            self.table,
+            self.by,
+            having=self._having,
+            order_by=self._order_by,
+            window=window,
+        )
 
-    def count(self, metric_name='count'):
-        """
-        Convenience function for computing the group sizes (number of rows per
-        group) given a grouped table.
+    def count(self, metric_name: str = 'count') -> ir.TableExpr:
+        """Compute group sizes.
 
         Parameters
         ----------
-        metric_name : string, default 'count'
-          Name to use for the row count metric
+        metric_name
+            Name to use for the row count metric
 
         Returns
         -------
-        aggregated : TableExpr
-          The aggregated table
+        TableExpr
+            The aggregated table
+
         """
         metric = self.table.count().name(metric_name)
         return self.table.aggregate([metric], by=self.by, having=self._having)
@@ -272,41 +282,45 @@ class GroupedTableExpr:
     size = count
 
 
-def _group_agg_dispatch(name):
-    def wrapper(self, *args, **kwargs):
-        f = getattr(self.arr, name)
+def _group_agg_dispatch(name: str):
+    def wrapper(self: 'GroupedColumn', *args, **kwargs) -> ir.TableExpr:
+        column = self.column
+        f = getattr(column, name)
         metric = f(*args, **kwargs)
-        alias = '{0}({1})'.format(name, self.arr.get_name())
+        alias = '{}({})'.format(name, column.get_name())
         return self.parent.aggregate(metric.name(alias))
 
     wrapper.__name__ = name
     return wrapper
 
 
-class GroupedArray:
+class GroupedColumn:
+    __slots__ = 'column', 'parent'
 
-    def __init__(self, arr, parent):
-        self.arr = arr
+    def __init__(
+        self, column: ir.ColumnExpr, parent: 'GroupedTableExpr'
+    ) -> None:
+        self.column = column
         self.parent = parent
 
-    count = _group_agg_dispatch('count')
-    size = count
+    size = count = _group_agg_dispatch('count')
     min = _group_agg_dispatch('min')
     max = _group_agg_dispatch('max')
     approx_nunique = _group_agg_dispatch('approx_nunique')
     approx_median = _group_agg_dispatch('approx_median')
     group_concat = _group_agg_dispatch('group_concat')
 
-    def summary(self, exact_nunique=False):
-        metric = self.arr.summary(exact_nunique=exact_nunique)
+    def summary(self, exact_nunique: bool = False) -> ir.TableExpr:
+        metric = self.column.summary(exact_nunique=exact_nunique)
         return self.parent.aggregate(metric)
 
 
-class GroupedNumbers(GroupedArray):
+class GroupedNumbers(GroupedColumn):
+    __slots__ = ()
 
     mean = _group_agg_dispatch('mean')
     sum = _group_agg_dispatch('sum')
 
-    def summary(self, exact_nunique=False):
-        metric = self.arr.summary(exact_nunique=exact_nunique)
+    def summary(self, exact_nunique: bool = False) -> ir.TableExpr:
+        metric = self.column.summary(exact_nunique=exact_nunique)
         return self.parent.aggregate(metric)
