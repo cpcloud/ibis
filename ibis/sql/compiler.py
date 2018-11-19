@@ -1,5 +1,4 @@
-"""Core expression to SQL infrastructure.
-"""
+"""Core expression to SQL infrastructure."""
 
 import abc
 
@@ -754,11 +753,11 @@ class CorrelatedRefCheck:
                            visit_cache=visit_cache,
                            visit_table_cache=visit_table_cache)
 
-    def is_subquery(self, node):
+    def is_subquery(self, node) -> bool:
         # XXX
-        if isinstance(node, (ops.TableArrayView,
-                             transforms.ExistsSubquery,
-                             transforms.NotExistsSubquery)):
+        if isinstance(
+            node, (transforms.ExistsSubquery, transforms.NotExistsSubquery)
+        ):
             return True
 
         if isinstance(node, ops.TableColumn):

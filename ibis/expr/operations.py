@@ -295,29 +295,6 @@ class SQLQueryResult(TableNode, HasSchema):
         return True
 
 
-class TableArrayView(ValueOp):
-
-    """
-    (Temporary?) Helper operation class for SQL translation (fully formed table
-    subqueries to be viewed as arrays)
-    """
-    table = Arg(ir.TableExpr)
-    name = Arg(str)
-
-    def __init__(self, table):
-        schema = table.schema()
-        if len(schema) > 1:
-            raise com.ExpressionError('Table can only have a single column')
-
-        name = schema.names[0]
-        return super().__init__(table, name)
-
-    def _make_expr(self):
-        ctype = self.table._get_type(self.name)
-        klass = ctype.column_type()
-        return klass(self, name=self.name)
-
-
 class UnaryOp(ValueOp):
     arg = Arg(rlz.any)
 

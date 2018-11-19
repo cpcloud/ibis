@@ -2952,14 +2952,6 @@ def _table_union(left, right, distinct=False):
     return op.to_expr()
 
 
-def _table_to_array(self):
-    """
-    Single column tables can be viewed as arrays.
-    """
-    op = ops.TableArrayView(self)
-    return op.to_expr()
-
-
 def _table_materialize(table):
     """
     Force schema resolution for a joined table, selecting all fields from
@@ -3285,7 +3277,6 @@ _table_methods = dict(
     anti_join=_regular_join_method('anti_join', 'anti'),
     asof_join=asof_join,
     sort_by=_table_sort_by,
-    to_array=_table_to_array,
     union=_table_union,
     view=_table_view
 )

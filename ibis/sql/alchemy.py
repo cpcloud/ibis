@@ -597,7 +597,6 @@ _operation_registry = {
     ops.SearchedCase: _searched_case,
 
     ops.TableColumn: _table_column,
-    ops.TableArrayView: _table_array_view,
 
     transforms.ExistsSubquery: _exists_subquery,
     transforms.NotExistsSubquery: _exists_subquery,

@@ -631,7 +631,6 @@ _operation_registry = {
     ops.SearchedCase: _searched_case,
 
     ops.TableColumn: _table_column,
-    ops.TableArrayView: _table_array_view,
 
     ops.DateAdd: binary_infix_op('+'),
     ops.DateSub: binary_infix_op('-'),

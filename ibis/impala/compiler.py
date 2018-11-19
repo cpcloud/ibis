@@ -1209,8 +1209,6 @@ _operation_registry = {
 
     ops.TableColumn: _table_column,
 
-    ops.TableArrayView: _table_array_view,
-
     ops.DateAdd: _timestamp_op('date_add'),
     ops.DateSub: _timestamp_op('date_sub'),
     ops.DateDiff: _timestamp_op('datediff'),
