@@ -1048,6 +1048,7 @@ def flatten_predicate(expr):
       right:
         Literal[string]
           foo
+
     """
     def predicate(expr):
         if isinstance(expr.op(), ops.And):
@@ -1055,7 +1056,7 @@ def flatten_predicate(expr):
         else:
             return lin.halt, expr
 
-    return list(lin.traverse(predicate, expr, type=ir.BooleanColumn))
+    return tuple(lin.traverse(predicate, expr, type=ir.BooleanColumn))
 
 
 def is_analytic(expr, exclude_windows=False):
