@@ -76,7 +76,6 @@ def cast(source, target):
 
 
 class validator(curry):
-
     def __repr__(self):
         return '{}({}{})'.format(
             self.func.__name__,
@@ -90,35 +89,44 @@ noop = validator(identity)
 
 @validator
 def one_of(inners, arg):
-    """At least one of the inner validators must pass"""
+    """Check that `arg` passes at least one of the `inners` validators."""
     for inner in inners:
         with suppress(com.IbisTypeError, ValueError):
             return inner(arg)
 
     rules_formatted = ', '.join(map(repr, inners))
     raise com.IbisTypeError(
-        'Arg passes neither of the following rules: {}'.format(rules_formatted)
+        'argument {} passes none of the following rules: {}'.format(
+            arg,
+            rules_formatted,
+        )
     )
 
 
 @validator
 def all_of(inners, arg):
-    """All of the inner valudators must pass.
+    """All of the inner validators must pass.
 
     The order of inner validators matters.
 
     Parameters
     ----------
     inners : List[validator]
-      Functions are applied from right to left so allof([rule1, rule2], arg) is
-      the same as rule1(rule2(arg)).
+        Functions are applied from right to left so::
+
+            all_of([rule1, rule2], arg)
+
+        is the same as::
+
+            rule1(rule2(arg))
     arg : Any
-      Value to be validated.
+        Value to be validated.
 
     Returns
     -------
     arg : Any
-      Value maybe coerced by inner validators to the appropiate types
+        Value may be coerced by inner validators to the appropiate type
+
     """
     return compose(*inners)(arg)
 
@@ -192,8 +200,8 @@ def value(dtype, arg):
 
     Returns
     -------
-    arg : AnyValue
-      An ibis value expression with the specified datatype
+    AnyValue
+        An ibis value expression with the specified datatype
     """
     if not isinstance(arg, ir.Expr):
         # coerce python literal to ibis literal
