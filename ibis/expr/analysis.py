@@ -363,7 +363,7 @@ class ExprSimplifier:
             #     can_lift = False
 
             if can_lift and not block:
-                lifted_node = ops.TableColumn(node.name, lifted_root)
+                lifted_node = ops.TableColumn(lifted_root, node.name)
                 result = expr._factory(lifted_node, name=expr._name)
 
         return result

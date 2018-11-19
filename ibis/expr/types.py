@@ -514,7 +514,7 @@ class TableExpr(Expr):
         column : array expression
         """
         import ibis.expr.operations as ops
-        ref = ops.TableColumn(name, self)
+        ref = ops.TableColumn(self, name)
         return ref.to_expr()
 
     @property
