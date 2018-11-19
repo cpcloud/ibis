@@ -402,6 +402,12 @@ def execute_series_join_scalar_sep(op, sep, data, **kwargs):
     return reduce(lambda x, y: x + sep + y, data)
 
 
+def promote_list(value):
+    if not isinstance(value, list):
+        return [value]
+    return value
+
+
 def haystack_to_series_of_lists(haystack, index=None):
     if index is None:
         index = toolz.first(
@@ -411,7 +417,7 @@ def haystack_to_series_of_lists(haystack, index=None):
         operator.add,
         (
             pd.Series(getattr(piece, 'values', piece), index=index).map(
-                ibis.util.promote_list
+                promote_list
             ) for piece in haystack
         )
     )

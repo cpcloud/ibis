@@ -207,7 +207,7 @@ class ExprFormatter:
             signature = op.signature
             arg_name_pairs = (
                 (arg, name) for arg, name in zip(op.args, arg_names)
-                if signature[name].show
+                if getattr(signature, name).metadata['show'](arg)
             )
             for arg, name in arg_name_pairs:
                 if name == 'arg' and isinstance(op, ops.ValueOp):

@@ -1813,7 +1813,7 @@ def _string_like(self, patterns):
         operator.or_,
         (
             ops.StringSQLLike(self, pattern).to_expr()
-            for pattern in util.promote_list(patterns)
+            for pattern in util.promote_tuple(patterns)
         )
     )
 
@@ -1841,7 +1841,7 @@ def _string_ilike(self, patterns):
         operator.or_,
         (
             ops.StringSQLILike(self, pattern).to_expr()
-            for pattern in util.promote_list(patterns)
+            for pattern in util.promote_tuple(patterns)
         )
     )
 
@@ -2620,6 +2620,8 @@ def join(left, right, predicates=(), how='inner'):
     klass = _join_classes[how.lower()]
     if isinstance(predicates, Expr):
         predicates = _L.flatten_predicate(predicates)
+    else:
+        predicates = tuple(predicates)
 
     op = klass(left, right, predicates)
     return op.to_expr()
@@ -2643,8 +2645,9 @@ def asof_join(left, right, predicates=(), by=(), tolerance=None):
 
     Returns
     -------
-    joined : TableExpr
+    TableExpr
         Note that the schema is not materialized yet
+
     """
     return ops.AsOfJoin(left, right, predicates, by, tolerance).to_expr()
 
@@ -2716,7 +2719,12 @@ def cross_join(*tables, **kwargs):
 
     """
     # TODO(phillipc): Implement prefix keyword argument
-    op = ops.CrossJoin(*tables, **kwargs)
+    first, *rest = tables
+    op = ops.CrossJoin(
+        first,
+        functools.reduce(ir.TableExpr.cross_join, rest),
+        **kwargs
+    )
     return op.to_expr()
 
 
@@ -2817,15 +2825,16 @@ def filter(table, predicates):
 
 def _resolve_predicates(table, predicates):
     if isinstance(predicates, Expr):
-        predicates = _L.flatten_predicate(predicates)
-    predicates = util.promote_list(predicates)
-    predicates = [ir.bind_expr(table, x) for x in predicates]
-    resolved_predicates = []
-    for pred in predicates:
-        if isinstance(pred, ir.AnalyticExpr):
-            pred = pred.to_filter()
-        resolved_predicates.append(pred)
-
+        preds = _L.flatten_predicate(predicates)
+    else:
+        preds = predicates
+    pred_gen = (ir.bind_expr(table, x) for x in util.promote_tuple(preds))
+    resolved_predicates = tuple(
+        pred.to_filter()
+        if isinstance(pred, ir.AnalyticExpr)
+        else pred
+        for pred in pred_gen
+    )
     return resolved_predicates
 
 
@@ -2990,7 +2999,7 @@ def _safe_get_name(expr):
         return None
 
 
-def mutate(table, exprs=None, **mutations):
+def mutate(table, new_columns=None, **mutations):
     """
     Convenience function for table projections involving adding columns
 
@@ -3042,18 +3051,11 @@ def mutate(table, exprs=None, **mutations):
     >>> expr.equals(expr2)
     True
     """
-    if exprs is None:
-        exprs = []
-    else:
-        exprs = util.promote_list(exprs)
-
-    for k, v in sorted(mutations.items(), key=operator.itemgetter(0)):
-        if util.is_function(v):
-            v = v(table)
-        else:
-            v = as_value_expr(v)
-
-        exprs.append(v.name(k))
+    exprs = () if new_columns is None else util.to_tuple(new_columns)
+    exprs += tuple(
+        (v(table) if util.is_function(v) else as_value_expr(v)).name(k)
+        for k, v in sorted(mutations.items(), key=operator.itemgetter(0))
+    )
 
     has_replacement = False
     for expr in exprs:
@@ -3061,7 +3063,7 @@ def mutate(table, exprs=None, **mutations):
             has_replacement = True
 
     if has_replacement:
-        by_name = dict((x.get_name(), x) for x in exprs)
+        by_name = {x.get_name(): x for x in exprs}
         used = set()
         proj_exprs = []
         for c in table.columns:
@@ -3075,9 +3077,9 @@ def mutate(table, exprs=None, **mutations):
             if x.get_name() not in used:
                 proj_exprs.append(x)
 
-        return table.projection(proj_exprs)
+        return table.projection(tuple(proj_exprs))
     else:
-        return table.projection([table] + exprs)
+        return table.projection((table,) + exprs)
 
 
 def projection(table, exprs):
@@ -3177,8 +3179,7 @@ def projection(table, exprs):
     if isinstance(exprs, (Expr, str)):
         exprs = [exprs]
 
-    projector = L.Projector(table, exprs)
-
+    projector = L.Projector(table, tuple(exprs))
     op = projector.get_result()
     return op.to_expr()
 

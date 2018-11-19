@@ -515,11 +515,11 @@ def apply_filter(expr, predicates):
     elif isinstance(op, ops.Aggregation):
         # Potential fusion opportunity
         # GH1344: We can't sub in things with correlated subqueries
-        simplified_predicates = [
+        simplified_predicates = tuple(
             sub_for(predicate, [(expr, op.table)])
             if not has_reduction(predicate) else predicate
             for predicate in predicates
-        ]
+        )
 
         if op.table._is_valid(simplified_predicates):
             result = ops.Aggregation(
@@ -531,7 +531,7 @@ def apply_filter(expr, predicates):
     elif isinstance(op, ops.Join):
         expr = expr.materialize()
 
-    result = ops.Selection(expr, [], predicates)
+    result = ops.Selection(expr, (), predicates)
     return ir.TableExpr(result)
 
 

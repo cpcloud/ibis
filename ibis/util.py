@@ -7,6 +7,7 @@ import operator
 import os
 import types
 
+from typing import Tuple
 from uuid import uuid4
 
 import toolz
@@ -31,10 +32,12 @@ any_of = toolz.compose(any, is_one_of)
 all_of = toolz.compose(all, is_one_of)
 
 
-def promote_list(val):
-    if not isinstance(val, list):
-        val = [val]
-    return val
+def promote_tuple(val) -> Tuple:
+    return (val,) if not isinstance(val, tuple) else val
+
+
+def to_tuple(val) -> Tuple:
+    return promote_tuple(tuple(val) if isinstance(val, list) else val)
 
 
 def is_function(v):

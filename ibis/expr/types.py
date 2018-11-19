@@ -2,6 +2,8 @@ import os
 import itertools
 import webbrowser
 
+from typing import Iterable, Tuple
+
 import ibis
 import ibis.util as util
 import ibis.common as com
@@ -380,7 +382,7 @@ class TableExpr(Expr):
 
     def _is_valid(self, exprs):
         try:
-            self._assert_valid(util.promote_list(exprs))
+            self._assert_valid(util.promote_tuple(exprs))
         except com.RelationError:
             return False
         else:
@@ -388,7 +390,7 @@ class TableExpr(Expr):
 
     def _assert_valid(self, exprs):
         from ibis.expr.analysis import ExprValidator
-        ExprValidator([self]).validate_all(exprs)
+        ExprValidator((self,)).validate_all(exprs)
 
     def __contains__(self, name):
         return name in self.schema()
@@ -422,7 +424,7 @@ class TableExpr(Expr):
             return self.projection(what)
         elif isinstance(what, BooleanColumn):
             # Boolean predicate
-            return self.filter([what])
+            return self.filter((what,))
         elif isinstance(what, ColumnExpr):
             # Projection convenience
             return self.projection(what)
@@ -458,15 +460,9 @@ class TableExpr(Expr):
             attrs = frozenset(attrs + self.schema().names)
         return sorted(attrs)
 
-    def _resolve(self, exprs):
-        exprs = util.promote_list(exprs)
-
+    def _resolve(self, exprs: Iterable) -> Tuple[Expr]:
         # Stash this helper method here for now
-        out_exprs = []
-        for expr in exprs:
-            expr = self._ensure_expr(expr)
-            out_exprs.append(expr)
-        return out_exprs
+        return tuple(map(self._ensure_expr, util.promote_tuple(exprs)))
 
     def _ensure_expr(self, expr):
         if isinstance(expr, str):

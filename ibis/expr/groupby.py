@@ -1,17 +1,3 @@
-# Copyright 2014 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # User API for grouped data operations
 
 from __future__ import absolute_import
@@ -24,11 +10,12 @@ import ibis.expr.types as ir
 import ibis.expr.window as _window
 import ibis.util as util
 
+import attr
 import toolz
 
 
 def _resolve_exprs(table, exprs):
-    exprs = util.promote_list(exprs)
+    exprs = util.promote_tuple(exprs)
     return table._resolve(exprs)
 
 
@@ -56,26 +43,23 @@ def _get_group_by_key(table, value):
 
 
 class GroupedTableExpr:
-
-    """
-    Helper intermediate construct
-    """
+    """Helper intermediate construct."""
 
     def __init__(
         self, table, by, having=None, order_by=None, window=None, **expressions
     ):
         self.table = table
-        self.by = util.promote_list(by if by is not None else []) + [
+        self.by = util.to_tuple(by if by is not None else ()) + tuple(
             _get_group_by_key(table, v).name(k)
             for k, v in sorted(expressions.items(), key=toolz.first)
-        ]
-        self._order_by = order_by or []
-        self._having = having or []
+        )
+        self._order_by = util.to_tuple(order_by or ())
+        self._having = util.to_tuple(having or ())
         self._window = window
 
     def __getitem__(self, args):
         # Shortcut for projection with window functions
-        return self.projection(list(args))
+        return self.projection(tuple(args))
 
     def __getattr__(self, attr):
         if hasattr(self.table, attr):
@@ -107,7 +91,7 @@ class GroupedTableExpr:
         -------
         grouped : GroupedTableExpr
         """
-        exprs = util.promote_list(expr)
+        exprs = util.promote_tuple(expr)
         new_having = self._having + exprs
         return GroupedTableExpr(
             self.table, self.by,
@@ -127,7 +111,7 @@ class GroupedTableExpr:
         -------
         grouped : GroupedTableExpr
         """
-        exprs = util.promote_list(expr)
+        exprs = util.promote_tuple(expr)
         new_order = self._order_by + exprs
         return GroupedTableExpr(
             self.table, self.by,
@@ -197,32 +181,24 @@ class GroupedTableExpr:
 
         Returns
         -------
-        mutated : TableExpr
-        """
-        if exprs is None:
-            exprs = []
-        else:
-            exprs = util.promote_list(exprs)
+        TableExpr
 
-        kwd_names = list(kwds.keys())
-        kwd_values = list(kwds.values())
+        """
+        exprs = () if exprs is None else util.promote_tuple(exprs)
+        kwd_names = tuple(kwds.keys())
+        kwd_values = tuple(kwds.values())
         kwd_values = self.table._resolve(kwd_values)
 
-        for k, v in sorted(zip(kwd_names, kwd_values)):
-            exprs.append(v.name(k))
-
-        return self.projection([self.table] + exprs)
+        exprs += tuple(
+            v.name(k) for k, v in sorted(zip(kwd_names, kwd_values))
+        )
+        return self.projection((self.table,) + exprs)
 
     def projection(self, exprs):
-        """
-        Like mutate, but do not include existing table columns
-        """
+        """Like mutate, but do not include existing table columns."""
         w = self._get_window()
-        windowed_exprs = []
         exprs = self.table._resolve(exprs)
-        for expr in exprs:
-            expr = L.windowize_function(expr, w=w)
-            windowed_exprs.append(expr)
+        windowed_exprs = [L.windowize_function(expr, w=w) for expr in exprs]
         return self.table.projection(windowed_exprs)
 
     def _get_window(self):
