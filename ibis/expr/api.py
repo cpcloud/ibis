@@ -2713,27 +2713,29 @@ def cross_join(*tables, **kwargs):
                 Table: ref_3
           right:
             Table: ref_4
+
     """
     # TODO(phillipc): Implement prefix keyword argument
     op = ops.CrossJoin(*tables, **kwargs)
     return op.to_expr()
 
 
-def _table_count(self):
-    """
-    Returns the computed number of rows in the table expression
+def _table_count(self) -> ir.IntegerScalar:
+    """Compute the number of rows in the table expression.
 
     Returns
     -------
-    count : Int64Scalar
+    IntegerScalar
+
     """
     return ops.Count(self, None).to_expr().name('count')
 
 
 def _table_info(self, buf=None):
-    """
-    Similar to pandas DataFrame.info. Show column names, types, and null
-    counts. Output to stdout by default
+    """Similar to pandas DataFrame.info.
+
+    Show column names, types, and null counts. Output to stdout by default.
+
     """
     metrics = [self.count().name('nrows')]
     for col in self.columns:
@@ -2750,21 +2752,21 @@ def _table_info(self, buf=None):
     print(result, file=buf)
 
 
-def _table_set_column(table, name, expr):
-    """
-    Replace an existing column with a new expression
+def _table_set_column(table, name: str, expr: ir.ValueExpr) -> ir.TableExpr:
+    """Replace an existing column with a new expression.
 
     Parameters
     ----------
-    name : string
-      Column name to replace
-    expr : value expression
-      New data for column
+    name
+        Column name to replace
+    expr
+        New data for column
 
     Returns
     -------
-    set_table : TableExpr
-      New table expression
+    TableExpr
+        New table expression
+
     """
     expr = table._ensure_expr(expr)
 
