@@ -94,7 +94,7 @@ def to_graph(expr, node_attr=None, edge_attr=None):
 
             node = e.op()
             args = node.args
-            for arg, name in zip(args, node.signature.names()):
+            for arg, name in zip(args, node.argnames):
                 if isinstance(arg, ir.Expr):
                     u = arg, name
                     ukey = arg._key, name
