@@ -59,8 +59,7 @@ testfast:
 	    --doctest-modules --doctest-ignore-import-errors
 
 testparams:
-	@echo 'not (udf or impala or hdfs or postgresql or mysql or mapd or clickhouse)' \
-	    --doctest-modules --doctest-ignore-import-errors
+	@echo 'not (udf or impala or hdfs or postgresql or mysql or mapd or clickhouse)'
 
 docclean:
 	@$(DOCKER_RUN) ibis rm -rf /tmp/docs.ibis-project.org
