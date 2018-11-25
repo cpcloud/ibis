@@ -1,10 +1,15 @@
 import toolz
 import pandas as pd
 
+from pkg_resources import parse_version
+
+import attr
+
 import ibis.expr.schema as sch
 import ibis.expr.operations as ops
 
-from pkg_resources import parse_version
+from ibis.expr.operations import attrib, node
+
 from ibis.file.client import FileClient
 from ibis.pandas.api import PandasDialect
 from ibis.pandas.core import execute_node, pre_execute, execute
@@ -38,11 +43,9 @@ def connect(path):
     return CSVClient(path)
 
 
+@node
 class CSVTable(ops.DatabaseTable):
-
-    def __init__(self, name, schema, source, **kwargs):
-        super().__init__(name, schema, source)
-        self.read_csv_kwargs = kwargs
+    read_csv_kwargs = attrib(validator=attr.validators.instance_of(dict))
 
 
 class CSVClient(FileClient):
@@ -72,7 +75,7 @@ class CSVClient(FileClient):
 
         # infer sample's schema and define table
         schema = sch.infer(sample)
-        table = self.table_class(name, schema, self, **kwargs).to_expr()
+        table = self.table_class(name, schema, self, kwargs).to_expr()
 
         self.dictionary[name] = f
 
