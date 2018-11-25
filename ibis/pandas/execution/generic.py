@@ -357,16 +357,15 @@ def execute_table_column_df_or_df_groupby(op, data, **kwargs):
     return data[op.name]
 
 
-@execute_node.register(ops.Aggregation, pd.DataFrame)
-def execute_aggregation_dataframe(op, data, scope=None, **kwargs):
-    assert op.metrics, 'no metrics found during aggregation execution'
+@execute_node.register(ops.Aggregation, pd.DataFrame, tuple, tuple, tuple, tuple, tuple)
+def execute_aggregation_dataframe(op, data, metrics, by, having, predicates, sort_keys, scope=None, **kwargs):
+    assert metrics, 'no metrics found during aggregation execution'
 
-    if op.sort_keys:
+    if sort_keys:
         raise NotImplementedError(
             'sorting on aggregations not yet implemented'
         )
 
-    predicates = op.predicates
     if predicates:
         predicate = functools.reduce(
             operator.and_,
@@ -376,17 +375,17 @@ def execute_aggregation_dataframe(op, data, scope=None, **kwargs):
 
     columns = {}
 
-    if op.by:
+    if by:
         grouping_key_pairs = list(
-            zip(op.by, map(operator.methodcaller('op'), op.by))
+            zip(by, map(operator.methodcaller('op'), by))
         )
         grouping_keys = [
             by_op.name if isinstance(by_op, ops.TableColumn)
-            else execute(by, scope=scope, **kwargs).rename(by.get_name())
-            for by, by_op in grouping_key_pairs
+            else execute(by, scope=scope, **kwargs).rename(by_expr.get_name())
+            for by_expr, by_op in grouping_key_pairs
         ]
         columns.update(
-            (by_op.name, by.get_name()) for by, by_op in grouping_key_pairs
+            (by_op.name, by_expr.get_name()) for by_expr, by_op in grouping_key_pairs
             if hasattr(by_op, 'name')
         )
         source = data.groupby(grouping_keys)
@@ -402,12 +401,12 @@ def execute_aggregation_dataframe(op, data, scope=None, **kwargs):
 
     # group by always needs a reset to get the grouping key back as a column
     result = pd.concat(pieces, axis=1).reset_index()
-    result.columns = [columns.get(c, c) for c in result.columns]
+    result.columns = [columns.get(column, column) for column in result.columns]
 
-    if op.having:
+    if having:
         # .having(...) is only accessible on groupby, so this should never
         # raise
-        if not op.by:
+        if not by:
             raise ValueError(
                 'Filtering out aggregation values is not allowed without at '
                 'least one grouping key'
@@ -417,7 +416,7 @@ def execute_aggregation_dataframe(op, data, scope=None, **kwargs):
         predicate = functools.reduce(
             operator.and_,
             (execute(having, scope=new_scope, **kwargs)
-             for having in op.having)
+             for having in having)
         )
         assert len(predicate) == len(result), \
             'length of predicate does not match length of DataFrame'

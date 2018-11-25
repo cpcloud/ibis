@@ -21,8 +21,8 @@ def _compute_join_column(column_expr, **kwargs):
     return new_column, root_table
 
 
-@execute_node.register(ops.Join, pd.DataFrame, pd.DataFrame)
-def execute_materialized_join(op, left, right, **kwargs):
+@execute_node.register(ops.Join, pd.DataFrame, pd.DataFrame, tuple)
+def execute_materialized_join(op, left, right, predicates, **kwargs):
     op_type = type(op)
 
     try:
@@ -35,7 +35,7 @@ def execute_materialized_join(op, left, right, **kwargs):
 
     on = {left_op: [], right_op: []}
 
-    for predicate in map(operator.methodcaller('op'), op.predicates):
+    for predicate in map(operator.methodcaller('op'), predicates):
         if not isinstance(predicate, ops.Equals):
             raise TypeError(
                 'Only equality join predicates supported with pandas'
@@ -63,12 +63,12 @@ def execute_materialized_join(op, left, right, **kwargs):
 
 
 @execute_node.register(
-    ops.AsOfJoin, pd.DataFrame, pd.DataFrame, (pd.Timedelta, type(None))
+    ops.AsOfJoin, pd.DataFrame, pd.DataFrame, tuple, tuple, (pd.Timedelta, type(None))
 )
-def execute_asof_join(op, left, right, tolerance, **kwargs):
+def execute_asof_join(op, left, right, predicates, by, tolerance, **kwargs):
     overlapping_columns = frozenset(left.columns) & frozenset(right.columns)
-    left_on, right_on = _extract_predicate_names(op.predicates)
-    left_by, right_by = _extract_predicate_names(op.by)
+    left_on, right_on = _extract_predicate_names(predicates)
+    left_by, right_by = _extract_predicate_names(by)
     _validate_columns(
         overlapping_columns, left_on, right_on, left_by, right_by)
 
