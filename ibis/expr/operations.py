@@ -353,12 +353,10 @@ class TableArrayView(ValueOp):
             check_table_array_view_table_has_one_column,
         ]
     )
-    name = attrib(
-        validator=[
-            attr.validators.instance_of(str),
-            check_table_array_view_name_in_table_schema,
-        ]
-    )
+
+    @property
+    def name(self):
+        return self.table.columns[0]
 
     def _make_expr(self):
         name = self.name
