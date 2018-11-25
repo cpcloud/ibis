@@ -901,14 +901,14 @@ class RPad(ValueOp):
 @node
 class FindInSet(ValueOp):
     needle = attrib(converter=rlz.string)
-    values = attrib(rlz.list_of(rlz.string, min_length=1))
+    values = attrib(converter=rlz.list_of(rlz.string, min_length=1))
     output_type = rlz.shape_like('needle', dt.int64)
 
 
 @node
 class StringJoin(ValueOp):
     sep = attrib(converter=rlz.string)
-    arg = attrib(rlz.list_of(rlz.string, min_length=1))
+    arg = attrib(converter=rlz.list_of(rlz.string, min_length=1))
 
     def output_type(self):
         return rlz.shape_like(tuple(self.flat_args()), dt.string)
