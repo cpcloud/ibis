@@ -1,17 +1,3 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import sys
 import uuid
 import operator
@@ -832,9 +818,8 @@ def test_count_on_order_by(db):
     sort_key = ibis.desc(t.playerID)
     sorted_table = t.sort_by(sort_key)
     expr = sorted_table.count()
-    result = str(
-        expr.compile().compile(compile_kwargs={'literal_binds': True})
-    )
-    expected = ('SELECT count(\'*\') AS count \n'
-                'FROM base.batting AS t0')  # noqa: W291
+    compiled = expr.compile()
+    result = str(compiled.compile(compile_kwargs={'literal_binds': True}))
+    expected = ("SELECT count('*') AS count \n"
+                "FROM base.batting AS t0")  # noqa: W291
     assert result == expected
