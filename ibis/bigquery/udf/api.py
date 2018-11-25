@@ -6,7 +6,7 @@ import itertools
 import ibis.expr.rules as rlz
 import ibis.expr.datatypes as dt
 
-from ibis.expr.signature import Argument as Arg
+from ibis.expr.operations import attrib, node
 
 from ibis.bigquery.compiler import BigQueryUDFNode, compiles
 
@@ -37,7 +37,7 @@ def create_udf_node(name, fields):
     """
     definition = next(_udf_name_cache[name])
     external_name = '{}_{:d}'.format(name, definition)
-    return type(external_name, (BigQueryUDFNode,), fields)
+    return node(type(external_name, (BigQueryUDFNode,), fields))
 
 
 def udf(input_type, output_type, strict=True, libraries=None):
@@ -170,8 +170,8 @@ def udf(input_type, output_type, strict=True, libraries=None):
         parameter_names = signature.parameters.keys()
 
         udf_node_fields = collections.OrderedDict([
-            (name, Arg(rlz.value(type)))
-            for name, type in zip(parameter_names, input_type)
+            (name, attrib(converter=rlz.value(dtype)))
+            for name, dtype in zip(parameter_names, input_type)
         ] + [
             (
                 'output_type',
