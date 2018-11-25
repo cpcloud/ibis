@@ -1,8 +1,11 @@
+import functools
+import operator
 import os
 import itertools
+import warnings
 import webbrowser
 
-from typing import Iterable, Tuple
+from typing import Iterable, Sequence, Tuple
 
 import ibis
 import ibis.util as util
@@ -369,6 +372,36 @@ class AnalyticExpr(Expr):
         return 'analytic'
 
 
+def _resolve_predicates(table, predicates):
+    import ibis.expr.analysis as L
+    if isinstance(predicates, Expr):
+        preds = L.flatten_predicate(predicates)
+    else:
+        preds = predicates
+    pred_gen = map(functools.partial(bind_expr, table), util.to_tuple(preds))
+    resolved_predicates = tuple(
+        pred.to_filter()
+        if isinstance(pred, AnalyticExpr)
+        else pred
+        for pred in pred_gen
+    )
+    return resolved_predicates
+
+
+def clean_predicates(method):
+    @functools.wraps(method)
+    def wrapper(*args, **kwargs):
+        import ibis.expr.analysis as L
+        predicates = kwargs.pop('predicates', ())
+        if isinstance(predicates, Expr):
+            predicates = L.flatten_predicate(predicates)
+        else:
+            predicates = util.to_tuple(predicates)
+        kwargs['predicates'] = predicates
+        return method(*args, **kwargs)
+    return wrapper
+
+
 class TableExpr(Expr):
     @property
     def _factory(self):
@@ -533,9 +566,10 @@ class TableExpr(Expr):
         return self.op().has_schema()
 
     def group_by(self, by=None, **additional_grouping_expressions):
-        """
-        Create an intermediate grouped table expression, pending some group
-        operation to be applied with it.
+        """Create an intermediate grouped table expression.
+
+        This returns an object that is pending some group operation to be
+        applied with it.
 
         Examples
         --------
@@ -558,6 +592,669 @@ class TableExpr(Expr):
         return GroupedTableExpr(self, by, **additional_grouping_expressions)
 
     groupby = group_by
+
+    def distinct(self) -> 'TableExpr':
+        """Compute set of unique rows/tuples occurring in this table."""
+        import ibis.expr.operations as ops
+        return ops.Distinct(self).to_expr()
+
+    def limit(self, n: int, offset: int = 0) -> 'TableExpr':
+        """Select the first `n` rows of a table.
+
+        This operation is not deterministic unless the query contains an
+        ``ORDER BY``.
+
+        Parameters
+        ----------
+        n
+            Number of rows to include
+        offset
+            Number of rows to skip first
+
+        Returns
+        -------
+        TableExpr
+
+        """
+        import ibis.expr.operations as ops
+        op = ops.Limit(self, n, offset=offset)
+        return op.to_expr()
+
+    def head(self, n: int = 5) -> 'TableExpr':
+        """Select the first `n` rows of a table, with `n` defaulting to 5.
+
+        Parameters
+        ----------
+        n : int
+            Number of rows to include, defaults to 5
+
+        Returns
+        -------
+        TableExpr
+
+        See Also
+        --------
+        ibis.expr.types.TableExpr.limit
+
+        """
+        return self.limit(n)
+
+    def count(self) -> 'IntegerScalar':
+        """Compute the number of rows in the table expression.
+
+        Returns
+        -------
+        IntegerScalar
+
+        """
+        import ibis.expr.operations as ops
+        return ops.Count(self, None).to_expr().name('count')
+
+    def info(self, buf=None) -> None:
+        """Similar to pandas DataFrame.info.
+
+        Show column names, types, and null counts. Output to stdout by default.
+
+        """
+        metrics = [self.count().name('nrows')]
+        for col in self.columns:
+            metrics.append(self[col].count().name(col))
+        metrics = self.aggregate(metrics).execute().loc[0]
+        names = ['Column', '------'] + self.columns
+        types = ['Type', '----'] + [repr(x) for x in self.schema().types]
+        counts = ['Non-null #', '----------'] + [str(x) for x in metrics[1:]]
+        col_metrics = util.adjoin(2, names, types, counts)
+        result = 'Table rows: {}\n\n{}'.format(metrics[0], col_metrics)
+        print(result, file=buf)
+
+    def drop(self, fields: Sequence[str]) -> 'TableExpr':
+        if not fields:
+            return self
+
+        fields = set(fields)
+        to_project = []
+        for name in self.schema():
+            if name in fields:
+                fields.remove(name)
+            else:
+                to_project.append(name)
+
+        if fields > 0:
+            raise KeyError('Fields not in table: {}'.format(fields))
+        return self.projection(to_project)
+
+    def aggregate(
+        self, metrics=None, by=None, having=None, **kwds
+    ) -> 'TableExpr':
+        """Aggregate a table with a given set of reductions.
+
+        Grouping expressions (`by`) and post-aggregation filters (`having`) are
+        allowed.
+
+        Parameters
+        ----------
+        table : ir.TableExpr
+        metrics : Optional[Union[ir.ValueExpr, Sequence[ir.ValueExpr]]]
+        by : Optional[ir.ValueExpr]
+            Grouping expressions
+        having : Optional[Union[ir.BooleanScalar, Sequence[ir.BooleanScalar]]]
+            Post-aggregation filters
+
+        Returns
+        -------
+        ir.TableExpr
+
+        """
+        metrics = () if metrics is None else util.to_tuple(metrics)
+        metrics += tuple(
+            self._ensure_expr(v).name(k) for k, v in sorted(kwds.items())
+        )
+        table_op = self.op()
+        op = table_op.aggregate(self, metrics, by=by, having=having)
+        return op.to_expr()
+
+    def filter(self, predicates) -> 'TableExpr':
+        """Select rows from table based on boolean expressions.
+
+        Parameters
+        ----------
+        predicates : boolean array expressions, or list thereof
+
+        Returns
+        -------
+        TableExpr
+
+        """
+        import ibis.expr.analysis as L
+        resolved_predicates = _resolve_predicates(self, predicates)
+        return L.apply_filter(self, resolved_predicates)
+
+    def sort_by(self, sort_exprs):
+        """Sort table by the indicated column expressions and sort orders.
+
+        Parameters
+        ----------
+        sort_exprs : sorting expressions
+          Must be one of:
+            - Column name or expression
+            - Sort key, e.g. desc(col)
+            - (column name, True (ascending) / False (descending))
+
+        Examples
+        --------
+        >>> import ibis
+        >>> t = ibis.table([('a', 'int64'), ('b', 'string')])
+        >>> ab_sorted = t.sort_by([('a', True), ('b', False)])
+        >>> b_sorted = t.sort_by(('b', False))
+        >>> a_sorted = t.sort_by('a')  # defaults to ascending
+
+        Returns
+        -------
+        TableExpr
+
+        """
+        # XXX: We should not allow so much variation in input. How about use of
+        # asc, desc on strings, just column name, and column expression
+        if isinstance(sort_exprs, tuple):
+            sort_exprs = (sort_exprs,)
+        elif isinstance(sort_exprs, list):
+            sort_exprs = util.to_tuple(sort_exprs)
+        elif isinstance(sort_exprs, str):
+            sort_exprs = ((sort_exprs, True),)
+        result = self.op().sort_by(self, sort_exprs)
+        return result.to_expr()
+
+    def union(self, other: 'TableExpr', distinct: bool = False) -> 'TableExpr':
+        """Form the table set union of two table expressions.
+
+        `self` and `other` must have identical schemas.
+
+        Parameters
+        ----------
+        right : TableExpr
+        distinct : boolean, default False
+            Only union distinct rows not occurring in the calling table (this
+            can be very expensive, be careful)
+
+        Returns
+        -------
+        TableExpr
+
+        """
+        import ibis.expr.operations as ops
+        return ops.Union(self, other, distinct=distinct).to_expr()
+
+    def materialize(self) -> 'TableExpr':
+        """Force schema resolution for a joined table.
+
+        This will select all fields from all tables.
+
+        Returns
+        -------
+        TableExpr
+
+        """
+        if self._is_materialized():
+            return self
+
+        import ibis.expr.operations as ops
+        return ops.MaterializedJoin(self).to_expr()
+
+    def add_column(self, expr, name=None):
+        """
+        Add indicated column expression to table, producing a new table. Note:
+        this is a shortcut for performing a projection having the same effect.
+
+        Returns
+        -------
+        modified_table : TableExpr
+        """
+        warnings.warn('add_column is deprecated, use mutate(name=expr, ...)',
+                      DeprecationWarning)
+        if name is not None:
+            return self.mutate(**{name: expr})
+        else:
+            return self.mutate(expr)
+
+    def mutate(self, new_columns=None, **mutations):
+        """Convenience function to add columns to `self`.
+
+        Parameters
+        ----------
+        exprs : list, default None
+          List of named expressions to add as columns
+        mutations : keywords for new columns
+
+        Returns
+        -------
+        mutated : TableExpr
+
+        Examples
+        --------
+        Using keywords arguments to name the new columns
+
+        >>> import ibis
+        >>> table = ibis.table([
+        ...     ('foo', 'double'), ('bar', 'double')],
+        ...     name='t'
+        ... )
+        >>> expr = table.mutate(qux=table.foo + table.bar, baz=5)
+        >>> expr  # doctest: +NORMALIZE_WHITESPACE
+        ref_0
+        UnboundTable[table]
+          name: t
+          schema:
+            foo : float64
+            bar : float64
+        <BLANKLINE>
+        Selection[table]
+          table:
+            Table: ref_0
+          selections:
+            Table: ref_0
+            baz = Literal[int8]
+              5
+            qux = Add[float64*]
+              left:
+                foo = Column[float64*] 'foo' from table
+                  ref_0
+              right:
+                bar = Column[float64*] 'bar' from table
+                  ref_0
+
+        Using the :meth:`ibis.expr.types.Expr.name` method to name the new
+        columns
+
+        >>> new_columns = [ibis.literal(5).name('baz',),
+        ...                (table.foo + table.bar).name('qux')]
+        >>> expr2 = table.mutate(new_columns)
+        >>> expr.equals(expr2)
+        True
+
+        """
+        exprs = () if new_columns is None else util.to_tuple(new_columns)
+        exprs += tuple(
+            (v(self) if util.is_function(v) else as_value_expr(v)).name(k)
+            for k, v in sorted(mutations.items(), key=operator.itemgetter(0))
+        )
+
+        has_replacement = False
+        for expr in exprs:
+            if expr.get_name() in self:
+                has_replacement = True
+
+        if has_replacement:
+            by_name = {x.get_name(): x for x in exprs}
+            used = set()
+            proj_exprs = []
+            for c in self.columns:
+                if c in by_name:
+                    proj_exprs.append(by_name[c])
+                    used.add(c)
+                else:
+                    proj_exprs.append(c)
+
+            for x in exprs:
+                if x.get_name() not in used:
+                    proj_exprs.append(x)
+
+            return self.projection(tuple(proj_exprs))
+        else:
+            return self.projection((self,) + exprs)
+
+    def projection(self, exprs):
+        """
+        Compute new table expression with the indicated column expressions from
+        this table.
+
+        Parameters
+        ----------
+        exprs : column expression, or string, or list of column expressions and
+          strings. If strings passed, must be columns in the table already
+
+        Returns
+        -------
+        projection : TableExpr
+
+        Notes
+        -----
+        Passing an aggregate function to this method will broadcast the
+        aggregate's value over the number of rows in the table. See the
+        examples section for more details.
+
+        Examples
+        --------
+        Simple projection
+
+        >>> import ibis
+        >>> fields = [('a', 'int64'), ('b', 'double')]
+        >>> t = ibis.table(fields, name='t')
+        >>> proj = t.projection([t.a, (t.b + 1).name('b_plus_1')])
+        >>> proj  # doctest: +NORMALIZE_WHITESPACE
+        ref_0
+        UnboundTable[table]
+          name: t
+          schema:
+            a : int64
+            b : float64
+        <BLANKLINE>
+        Selection[table]
+          table:
+            Table: ref_0
+          selections:
+            a = Column[int64*] 'a' from table
+              ref_0
+            b_plus_1 = Add[float64*]
+              left:
+                b = Column[float64*] 'b' from table
+                  ref_0
+              right:
+                Literal[int8]
+                  1
+        >>> proj2 = t[t.a, (t.b + 1).name('b_plus_1')]
+        >>> proj.equals(proj2)
+        True
+
+        Aggregate projection
+
+        >>> agg_proj = t[t.a.sum().name('sum_a'), t.b.mean().name('mean_b')]
+        >>> agg_proj  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
+        ref_0
+        UnboundTable[table]
+          name: t
+          schema:
+            a : int64
+            b : float64
+        <BLANKLINE>
+        Selection[table]
+          table:
+            Table: ref_0
+          selections:
+            sum_a = WindowOp[int64*]
+              sum_a = Sum[int64]
+                a = Column[int64*] 'a' from table
+                  ref_0
+                where:
+                  None
+              <ibis.expr.window.Window object at 0x...>
+            mean_b = WindowOp[float64*]
+              mean_b = Mean[float64]
+                b = Column[float64*] 'b' from table
+                  ref_0
+                where:
+                  None
+              <ibis.expr.window.Window object at 0x...>
+
+        Note the ``<ibis.expr.window.Window>`` objects here, their existence
+        means that the result of the aggregation will be broadcast across the
+        number of rows in the input column. The purpose of this expression
+        rewrite is to make it easy to write column/scalar-aggregate operations
+        like
+
+        .. code-block:: python
+
+           t[(t.a - t.a.mean()).name('demeaned_a')]
+
+        """
+        import ibis.expr.analysis as L
+
+        if isinstance(exprs, (Expr, str)):
+            exprs = [exprs]
+
+        projector = L.Projector(self, tuple(exprs))
+        op = projector.get_result()
+        return op.to_expr()
+
+    def relabel(self, substitutions, replacements=None) -> 'TableExpr':
+        """Change table column names, otherwise leaving table unaltered.
+
+        Parameters
+        ----------
+        substitutions
+
+        Returns
+        -------
+        TableExpr
+
+        """
+        if replacements is not None:
+            raise NotImplementedError
+
+        observed = set()
+
+        exprs = []
+        for c in self.columns:
+            expr = self[c]
+            if c in substitutions:
+                expr = expr.name(substitutions[c])
+                observed.add(c)
+            exprs.append(expr)
+
+        for c in substitutions:
+            if c not in observed:
+                raise KeyError('{!r} is not an existing column'.format(c))
+        return self.projection(exprs)
+
+    def view(self):
+        """
+        Create a new table expression that is semantically equivalent to the
+        current one, but is considered a distinct relation for evaluation
+        purposes (e.g. in SQL).
+
+        For doing any self-referencing operations, like a self-join, you will
+        use this operation to create a reference to the current table
+        expression.
+
+        Returns
+        -------
+        expr : TableExpr
+        """
+        import ibis.expr.operations as ops
+        new_view = ops.SelfReference(self)
+        return new_view.to_expr()
+
+    def set_column(self, name: str, expr: 'ValueExpr') -> 'TableExpr':
+        """Replace an existing column with a new expression.
+
+        Parameters
+        ----------
+        name
+            Column name to replace
+        expr
+            New data for column
+
+        Returns
+        -------
+        TableExpr
+            New table expression
+
+        """
+        expr = self._ensure_expr(expr)
+
+        if expr._name != name:
+            expr = expr.name(name)
+
+        if name not in self:
+            raise KeyError('Column {!r} is not in the table'.format(name))
+
+        # TODO: This assumes that projection is required; may be
+        # backend-dependent
+        proj_exprs = [
+            expr if key == name else self[key] for key in self.columns
+        ]
+
+        return self.projection(proj_exprs)
+
+    @clean_predicates
+    def join(
+        self, other: 'TableExpr', predicates=(), how: str = 'inner'
+    ) -> 'TableExpr':
+        """Perform a relational join between two tables
+
+        The resulting object does not have a resolved schema.
+
+        Parameters
+        ----------
+        other : TableExpr
+            The other table to join
+        predicates : join expression(s)
+        how : string, default 'inner'
+          - 'inner': inner join
+          - 'left': left join
+          - 'outer': full outer join
+          - 'right': right outer join
+          - 'semi' or 'left_semi': left semi join
+          - 'anti': anti join
+
+        Returns
+        -------
+        joined : TableExpr
+            Note that the schema is not materialized yet
+        """
+
+        method = getattr(self, '{}_join'.format(how))
+
+        return method(other, predicates=predicates)
+
+    @clean_predicates
+    def inner_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.InnerJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def left_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.LeftJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def any_inner_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.LeftJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def any_left_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.AnyLeftJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def outer_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.OuterJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def semi_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.SemiJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def anti_join(self, other: 'TableExpr', predicates=()) -> 'TableExpr':
+        import ibis.expr.operations as ops
+        return ops.AntiJoin(self, other, predicates=predicates).to_expr()
+
+    @clean_predicates
+    def asof_join(
+        self, other: 'TableExpr', predicates=(), by=(), tolerance=None
+    ) -> 'TableExpr':
+        """Perform an asof join between two tables.
+
+        Similar to a left join except that the match is done on nearest key
+        rather than equal keys.
+
+        Optionally, match keys with 'by' before joining with predicates.
+
+        Parameters
+        ----------
+        other : TableExpr
+        predicates : join expression(s)
+        by : string
+            column to group by before joining
+        tolerance : interval
+            Amount of time to look behind when joining
+
+        Returns
+        -------
+        TableExpr
+            A TableExpr with an unmaterialized schema
+
+        """
+        import ibis.expr.operations as ops
+        return ops.AsOfJoin(self, other, predicates, by, tolerance).to_expr()
+
+    def cross_join(
+        self, other: 'TableExpr', *tables: 'TableExpr'
+    ) -> 'TableExpr':
+        """Perform a cross join amongst a list of tables.
+
+        Parameters
+        ----------
+        tables : ibis.expr.types.TableExpr
+
+        Returns
+        -------
+        joined : TableExpr
+
+        Examples
+        --------
+        >>> import ibis
+        >>> schemas = [(name, 'int64') for name in 'abcde']
+        >>> a, b, c, d, e = [
+        ...     ibis.table([(name, type)], name=name) for name, type in schemas
+        ... ]
+        >>> joined1 = ibis.cross_join(a, b, c, d, e)
+        >>> joined1  # doctest: +NORMALIZE_WHITESPACE
+        ref_0
+        UnboundTable[table]
+          name: a
+          schema:
+            a : int64
+        ref_1
+        UnboundTable[table]
+          name: b
+          schema:
+            b : int64
+        ref_2
+        UnboundTable[table]
+          name: c
+          schema:
+            c : int64
+        ref_3
+        UnboundTable[table]
+          name: d
+          schema:
+            d : int64
+        ref_4
+        UnboundTable[table]
+          name: e
+          schema:
+            e : int64
+        CrossJoin[table]
+          left:
+            Table: ref_0
+          right:
+            CrossJoin[table]
+              left:
+                CrossJoin[table]
+                  left:
+                    CrossJoin[table]
+                      left:
+                        Table: ref_1
+                      right:
+                        Table: ref_2
+                  right:
+                    Table: ref_3
+              right:
+                Table: ref_4
+
+        """
+        import ibis.expr.operations as ops
+        # TODO(phillipc): Implement prefix keyword argument
+        op = ops.CrossJoin(
+            self,
+            functools.reduce(
+                type(self).cross_join, itertools.chain([other], tables)
+            ),
+        )
+        return op.to_expr()
 
 
 # -----------------------------------------------------------------------------
