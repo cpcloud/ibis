@@ -36,8 +36,11 @@ def promote_tuple(val) -> Tuple:
     return (val,) if not isinstance(val, tuple) else val
 
 
-def to_tuple(val) -> Tuple:
-    return promote_tuple(tuple(val) if isinstance(val, list) else val)
+def list_to_tuple(val):
+    return tuple(val) if isinstance(val, list) else val
+
+
+to_tuple = toolz.compose(promote_tuple, list_to_tuple)
 
 
 def is_function(v):

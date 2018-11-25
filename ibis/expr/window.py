@@ -1,9 +1,5 @@
 import attr
 
-from toolz.curried import filter
-
-import toolz
-
 import ibis.expr.types as ir
 import ibis.expr.operations as ops
 import ibis.util as util
@@ -30,8 +26,8 @@ class Window:
 
     _group_by = attr.ib(converter=ops.tuple_argument_converter, factory=tuple)
     _order_by = attr.ib(converter=ops.tuple_argument_converter, factory=tuple)
-    preceding = attr.ib(default=None)
-    following = attr.ib(default=None)
+    preceding = attr.ib(converter=util.list_to_tuple, default=None)
+    following = attr.ib(converter=util.list_to_tuple, default=None)
     how = attr.ib(
         validator=attr.validators.in_({'rows', 'range'}), default='rows'
     )
