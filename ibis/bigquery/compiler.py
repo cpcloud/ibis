@@ -4,7 +4,6 @@ from functools import partial
 
 import regex as re
 
-
 import toolz
 
 from multipledispatch import Dispatcher
