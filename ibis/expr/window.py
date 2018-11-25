@@ -57,7 +57,6 @@ class Window:
         if (preceding_tuple and has_following) or (
             following_tuple and has_preceding
         ):
-            import pdb; pdb.set_trace()  # noqa
             raise com.IbisInputError(
                 'Can only specify one window side when you want an '
                 'off-center window'
@@ -84,8 +83,6 @@ class Window:
                     )
 
             if not isinstance(self.following, ir.Expr):
-                if isinstance(self.following, list):
-                    import pdb; pdb.set_trace()  # noqa
                 if has_following and self.following < 0:
                     raise com.IbisInputError(
                         "'following' must be positive, got {}".format(
