@@ -2263,7 +2263,7 @@ class Selection(TableNode, HasSchema):
     # Operator combination / fusion logic
 
     def aggregate(self, this, metrics, by=None, having=None):
-        if len(self.selections) > 0:
+        if self.selections:
             return Aggregation(this, metrics, by=by, having=having)
         else:
             helper = AggregateSelection(this, metrics, by, having)
@@ -2395,7 +2395,9 @@ class Aggregation(TableNode, HasSchema):
         )
 
         # order by only makes sense with group by in an aggregation
-        if self.sort_keys:
+        if not self.by:
+            object.__setattr__(self, 'sort_keys', ())
+        elif self.sort_keys:
             sort_keys = tuple(
                 to_sort_key(self.table, k)
                 for k in util.promote_tuple(self.sort_keys)
