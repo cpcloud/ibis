@@ -3,6 +3,8 @@ import functools
 import numbers
 import operator
 
+from pkg_resources import parse_version
+
 import sqlalchemy as sa
 import sqlalchemy.sql as sql
 
@@ -14,9 +16,12 @@ from sqlalchemy.dialects.sqlite.base import SQLiteDialect
 from sqlalchemy.dialects.postgresql.base import PGDialect as PostgreSQLDialect
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 
+import attr
+
 import pandas as pd
 
-from pkg_resources import parse_version
+from ibis.expr.operations import attrib, node
+
 from ibis.client import SQLClient, Query, Database
 from ibis.sql.compiler import Select, Union, TableSetFormatter, Dialect
 
@@ -844,16 +849,12 @@ class AlchemyDatabase(Database):
         return self.schema_class(name, self)
 
 
+@node
 class AlchemyTable(ops.DatabaseTable):
-
-    def __init__(self, table, source, schema=None):
-        schema = sch.infer(table, schema=schema)
-        super().__init__(table.name, schema, source)
-        self.sqla_table = table
+    sqla_table = attrib(validator=attr.validators.instance_of(sa.Table))
 
 
 class AlchemyExprTranslator(comp.ExprTranslator):
-
     _registry = _operation_registry
     _rewrites = comp.ExprTranslator._rewrites.copy()
     _type_map = _ibis_type_to_sqla
@@ -872,7 +873,6 @@ compiles = AlchemyExprTranslator.compiles
 
 
 class AlchemyQuery(Query):
-
     def _fetch(self, cursor):
         df = pd.DataFrame.from_records(cursor.proxy.fetchall(),
                                        columns=cursor.proxy.keys(),
@@ -1023,7 +1023,8 @@ class AlchemyClient(SQLClient):
         return sa.Table(name, self.meta, schema=schema, autoload=True)
 
     def _sqla_table_to_expr(self, table):
-        node = self.table_class(table, self)
+        schema = sch.infer(table)
+        node = self.table_class(table.name, schema, self, table)
         return self.table_expr_class(node)
 
     @property
