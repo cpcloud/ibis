@@ -1,5 +1,7 @@
-"""APIs for creating user-defined element-wise, reduction and analytic
-functions.
+"""APIs for creating user-defined functions.
+
+Functions can be element-wise, reduction or analytic functions.
+
 """
 
 from __future__ import absolute_import
@@ -21,8 +23,10 @@ import toolz
 from multipledispatch import Dispatcher
 
 import ibis.expr.datatypes as dt
-import ibis.expr.signature as sig
 import ibis.expr.operations as ops
+import ibis.expr.rules as rlz
+
+from ibis.expr.operations import attrib, node
 
 from ibis.pandas.core import scalar_types
 from ibis.pandas.dispatch import execute_node
@@ -298,14 +302,12 @@ class udf:
             funcsig = valid_function_signature(input_type, func)
 
             # generate a new custom node
-            UDFNode = type(
-                func.__name__,
-                (ops.ValueOp,),
-                {
-                    'signature': sig.TypeSignature.from_dtypes(input_type),
-                    'output_type': output_type.column_type
-                }
+            argspec = collections.OrderedDict(
+                (name, attrib(converter=rlz.value(dtype)))
+                for name, dtype in zip(funcsig.parameters.keys(), input_type)
             )
+            argspec['output_type'] = output_type.column_type
+            UDFNode = node(type(func.__name__, (ops.ValueOp,), argspec))
 
             # definitions
             # Define an execution rule for a simple elementwise Series
@@ -443,14 +445,13 @@ class udf:
         def wrapper(func):
             funcsig = valid_function_signature(input_type, func)
 
-            UDAFNode = type(
-                func.__name__,
-                (base_class,),
-                {
-                    'signature': sig.TypeSignature.from_dtypes(input_type),
-                    'output_type': output_type_method(output_type),
-                }
+            # generate a new custom node
+            argspec = collections.OrderedDict(
+                (name, attrib(converter=rlz.value(dtype)))
+                for name, dtype in zip(funcsig.parameters.keys(), input_type)
             )
+            argspec['output_type'] = output_type_method(output_type)
+            UDAFNode = node(type(func.__name__, (base_class,), argspec))
 
             # An execution rule for a simple aggregate node
             @execute_node.register(
