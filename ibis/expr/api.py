@@ -1071,10 +1071,12 @@ def distinct(arg):
 
 
 def topk(arg, k, by=None):
-    """
+    """Filter `arg` by the `k` most frequently occuring elements.
+
     Returns
     -------
-    topk : TopK filter expression
+    TopK
+
     """
     op = ops.TopK(arg, k, by=by)
     return op.to_expr()
