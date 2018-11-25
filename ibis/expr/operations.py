@@ -340,7 +340,9 @@ def check_table_array_view_table_has_one_column(self, attr, value):
 def check_table_array_view_name_in_table_schema(self, attr, value):
     schema = self.table.schema()
     if value not in schema:
-        raise ValueError('name {!r} is not in table schema:\n{}'.format(schema))
+        raise ValueError(
+            'name {!r} is not in table schema:\n{}'.format(schema)
+        )
 
 
 @node
