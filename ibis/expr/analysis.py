@@ -554,15 +554,15 @@ def _filter_selection(expr, predicates):
         # Potential fusion opportunity. The predicates may need to be
         # rewritten in terms of the child table. This prevents the broken
         # ref issue (described in more detail in #59)
-        simplified_predicates = [
+        simplified_predicates = tuple(
             sub_for(predicate, [(expr, op.table)])
             if not has_reduction(predicate) else predicate
             for predicate in predicates
-        ]
+        )
 
         if op.table._is_valid(simplified_predicates):
             result = ops.Selection(
-                op.table, [],
+                op.table, (),
                 predicates=op.predicates + simplified_predicates,
                 sort_keys=op.sort_keys)
             return result.to_expr()
@@ -570,14 +570,14 @@ def _filter_selection(expr, predicates):
     can_pushdown = _can_pushdown(op, predicates)
 
     if can_pushdown:
-        simplified_predicates = [substitute_parents(x) for x in predicates]
+        simplified_predicates = tuple(map(substitute_parents, predicates))
         fused_predicates = op.predicates + simplified_predicates
         result = ops.Selection(op.table,
                                selections=op.selections,
                                predicates=fused_predicates,
                                sort_keys=op.sort_keys)
     else:
-        result = ops.Selection(expr, selections=[], predicates=predicates)
+        result = ops.Selection(expr, selections=(), predicates=predicates)
 
     return result.to_expr()
 
@@ -609,7 +609,7 @@ class _PushdownValidate:
     def __init__(self, parent, predicate):
         self.parent = parent
         self.pred = predicate
-        self.validator = ExprValidator([self.parent.table])
+        self.validator = ExprValidator((self.parent.table,))
 
     def get_result(self):
         predicate = self.pred

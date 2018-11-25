@@ -1,10 +1,13 @@
 from __future__ import print_function
 
 import collections
+import copy
 import datetime
 import functools
 import operator
 import warnings
+
+from typing import Sequence, Union
 
 import toolz
 
@@ -1790,58 +1793,59 @@ def _string_join(self, strings):
     return ops.StringJoin(self, strings).to_expr()
 
 
-def _string_like(self, patterns):
-    """
-    Wildcard fuzzy matching function equivalent to the SQL LIKE directive. Use
-    % as a multiple-character wildcard or _ (underscore) as a single-character
-    wildcard.
+def _string_like(
+    self: ir.StringValue, patterns: Union[str, Sequence[str]]
+) -> ir.BooleanValue:
+    """Wildcard fuzzy matching function equivalent to the SQL LIKE directive.
 
-    Use re_search or rlike for regex-based matching.
+    Use ``%`` as a multiple-character wildcard or _ (underscore) as a
+    single-character wildcard.
+
+    Use ``re_search`` or ``rlike`` for regex-based matching.
 
     Parameters
     ----------
-    pattern : str or List[str]
+    pattern
         A pattern or list of patterns to match. If `pattern` is a list, then if
         **any** pattern matches the input then the corresponding row in the
         output is ``True``.
 
     Returns
     -------
-    matched : ir.BooleanColumn
+    ir.BooleanColumn
+
     """
     return functools.reduce(
         operator.or_,
         (
             ops.StringSQLLike(self, pattern).to_expr()
-            for pattern in util.promote_tuple(patterns)
+            for pattern in util.promote_tuple(util.to_tuple(patterns))
         )
     )
 
 
-def _string_ilike(self, patterns):
-    """
-    Wildcard fuzzy matching function equivalent to the SQL LIKE directive. Use
-    % as a multiple-character wildcard or _ (underscore) as a single-character
-    wildcard.
-
-    Use re_search or rlike for regex-based matching.
+def _string_ilike(
+    self: ir.StringValue, patterns: Union[str, Sequence[str]]
+) -> ir.BooleanValue:
+    """Wildcard fuzzy matching function equivalent to the SQL ILIKE directive.
 
     Parameters
     ----------
-    pattern : str or List[str]
+    pattern
         A pattern or list of patterns to match. If `pattern` is a list, then if
         **any** pattern matches the input then the corresponding row in the
         output is ``True``.
 
     Returns
     -------
-    matched : ir.BooleanColumn
+    ir.BooleanValue
+
     """
     return functools.reduce(
         operator.or_,
         (
             ops.StringSQLILike(self, pattern).to_expr()
-            for pattern in util.promote_tuple(patterns)
+            for pattern in util.promote_tuple(util.to_tuple(patterns))
         )
     )
 
@@ -2621,7 +2625,7 @@ def join(left, right, predicates=(), how='inner'):
     if isinstance(predicates, Expr):
         predicates = _L.flatten_predicate(predicates)
     else:
-        predicates = tuple(predicates)
+        predicates = util.promote_tuple(util.to_tuple(predicates))
 
     op = klass(left, right, predicates)
     return op.to_expr()
@@ -2828,7 +2832,10 @@ def _resolve_predicates(table, predicates):
         preds = _L.flatten_predicate(predicates)
     else:
         preds = predicates
-    pred_gen = (ir.bind_expr(table, x) for x in util.promote_tuple(preds))
+    pred_gen = map(
+        functools.partial(ir.bind_expr, table),
+        util.promote_tuple(util.to_tuple(preds))
+    )
     resolved_predicates = tuple(
         pred.to_filter()
         if isinstance(pred, ir.AnalyticExpr)
@@ -2839,31 +2846,34 @@ def _resolve_predicates(table, predicates):
 
 
 def aggregate(table, metrics=None, by=None, having=None, **kwds):
-    """
-    Aggregate a table with a given set of reductions, with grouping
-    expressions, and post-aggregation filters.
+    """Aggregate a table with a given set of reductions.
+
+    Grouping expressions (`by`) and post-aggregation filters (`having`) are
+    allowed.
 
     Parameters
     ----------
-    table : table expression
-    metrics : expression or expression list
-    by : optional, default None
-      Grouping expressions
-    having : optional, default None
-      Post-aggregation filters
+    table : ir.TableExpr
+    metrics : Optional[Union[ir.ValueExpr, Sequence[ir.ValueExpr]]]
+    by : Optional[ir.ValueExpr]
+        Grouping expressions
+    having : Optional[Union[ir.BooleanScalar, Sequence[ir.BooleanScalar]]]
+        Post-aggregation filters
 
     Returns
     -------
-    agg_expr : TableExpr
+    ir.TableExpr
+
     """
-    if metrics is None:
-        metrics = []
+    metrics = () if metrics is None else util.promote_tuple(
+        util.to_tuple(metrics)
+    )
+    metrics += tuple(
+        table._ensure_expr(v).name(k) for k, v in sorted(kwds.items())
+    )
 
-    for k, v in sorted(kwds.items()):
-        v = table._ensure_expr(v)
-        metrics.append(v.name(k))
-
-    op = table.op().aggregate(table, metrics, by=by, having=having)
+    table_op = table.op()
+    op = table_op.aggregate(table, metrics, by=by, having=having)
     return op.to_expr()
 
 
@@ -2934,11 +2944,22 @@ def _table_sort_by(table, sort_exprs):
     >>> import ibis
     >>> t = ibis.table([('a', 'int64'), ('b', 'string')])
     >>> ab_sorted = t.sort_by([('a', True), ('b', False)])
+    >>> b_sorted = t.sort_by(('b', False))
+    >>> a_sorted = t.sort_by('a')  # defaults to ascending
 
     Returns
     -------
-    sorted : TableExpr
+    TableExpr
+
     """
+    # XXX: We should not allow so much variation in input. How about use of
+    # asc, desc on strings, just column name, and column expression
+    if isinstance(sort_exprs, tuple):
+        sort_exprs = (sort_exprs,)
+    elif isinstance(sort_exprs, list):
+        sort_exprs = util.to_tuple(sort_exprs)
+    elif isinstance(sort_exprs, str):
+        sort_exprs = ((sort_exprs, True),)
     result = table.op().sort_by(table, sort_exprs)
     return result.to_expr()
 

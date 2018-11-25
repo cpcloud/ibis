@@ -370,7 +370,6 @@ class AnalyticExpr(Expr):
 
 
 class TableExpr(Expr):
-
     @property
     def _factory(self):
         def factory(arg):
@@ -382,7 +381,7 @@ class TableExpr(Expr):
 
     def _is_valid(self, exprs):
         try:
-            self._assert_valid(util.promote_tuple(exprs))
+            self._assert_valid(util.promote_tuple(util.to_tuple(exprs)))
         except com.RelationError:
             return False
         else:
@@ -460,9 +459,11 @@ class TableExpr(Expr):
             attrs = frozenset(attrs + self.schema().names)
         return sorted(attrs)
 
-    def _resolve(self, exprs: Iterable) -> Tuple[Expr]:
+    def _resolve(self, exprs: Iterable) -> Tuple[Expr, ...]:
         # Stash this helper method here for now
-        return tuple(map(self._ensure_expr, util.promote_tuple(exprs)))
+        return tuple(
+            map(self._ensure_expr, util.promote_tuple(util.to_tuple(exprs)))
+        )
 
     def _ensure_expr(self, expr):
         if isinstance(expr, str):

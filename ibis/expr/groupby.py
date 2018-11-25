@@ -10,7 +10,6 @@ import ibis.expr.types as ir
 import ibis.expr.window as _window
 import ibis.util as util
 
-import attr
 import toolz
 
 
@@ -43,7 +42,10 @@ def _get_group_by_key(table, value):
 
 
 class GroupedTableExpr:
-    """Helper intermediate construct."""
+
+    """
+    Helper intermediate construct
+    """
 
     def __init__(
         self, table, by, having=None, order_by=None, window=None, **expressions
@@ -53,8 +55,8 @@ class GroupedTableExpr:
             _get_group_by_key(table, v).name(k)
             for k, v in sorted(expressions.items(), key=toolz.first)
         )
-        self._order_by = util.to_tuple(order_by or ())
-        self._having = util.to_tuple(having or ())
+        self._order_by = order_by or ()
+        self._having = having or ()
         self._window = window
 
     def __getitem__(self, args):
@@ -184,7 +186,9 @@ class GroupedTableExpr:
         TableExpr
 
         """
-        exprs = () if exprs is None else util.promote_tuple(exprs)
+        exprs = () if exprs is None else util.promote_tuple(
+            util.to_tuple(exprs)
+        )
         kwd_names = tuple(kwds.keys())
         kwd_values = tuple(kwds.values())
         kwd_values = self.table._resolve(kwd_values)
