@@ -250,10 +250,10 @@ def range_window(preceding=None, following=None, group_by=None, order_by=None):
     win : ibis Window
     """
     return Window(
+        group_by,
+        order_by,
         preceding=preceding,
         following=following,
-        _group_by=group_by,
-        _order_by=order_by,
         how='range',
     )
 
@@ -277,7 +277,10 @@ def cumulative_window(group_by=None, order_by=None):
     win : ibis Window
     """
     return Window(
-        preceding=None, following=0, _group_by=group_by, _order_by=order_by
+        group_by,
+        order_by,
+        preceding=None,
+        following=0,
     )
 
 
@@ -300,7 +303,9 @@ def trailing_window(rows, group_by=None, order_by=None):
     win : ibis Window
     """
     return Window(
-        preceding=rows, following=0, _group_by=group_by, _order_by=order_by
+        group_by,
+        order_by,
+        preceding=rows, following=0,
     )
 
 
@@ -323,10 +328,10 @@ def trailing_range_window(preceding, order_by, group_by=None):
     win: ibis Window
     """
     return Window(
+        group_by,
+        order_by,
         preceding=preceding,
         following=0,
-        _group_by=group_by,
-        _order_by=order_by,
         how='range',
     )
 
