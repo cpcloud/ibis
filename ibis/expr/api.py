@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import collections
-import copy
 import datetime
 import functools
 import operator
@@ -2961,6 +2960,10 @@ def _table_sort_by(table, sort_exprs):
     return result.to_expr()
 
 
+def _table_to_column(self):
+    return ops.TableArrayView(self).to_expr()
+
+
 def _table_union(left, right, distinct=False):
     """
     Form the table set union of two table expressions having identical
@@ -3299,7 +3302,8 @@ _table_methods = dict(
     asof_join=asof_join,
     sort_by=_table_sort_by,
     union=_table_union,
-    view=_table_view
+    view=_table_view,
+    to_column=_table_to_column,
 )
 
 

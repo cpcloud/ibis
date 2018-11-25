@@ -332,6 +332,39 @@ class TableColumn(ValueOp):
         return klass(self, name=self.name)
 
 
+def check_table_array_view_table_has_one_column(self, attr, value):
+    if len(value.schema()) > 1:
+        raise ValueError('TableArrayView table must have exactly one column')
+
+
+def check_table_array_view_name_in_table_schema(self, attr, value):
+    schema = self.table.schema()
+    if value not in schema:
+        raise ValueError('name {!r} is not in table schema:\n{}'.format(schema))
+
+
+@node
+class TableArrayView(ValueOp):
+    table = attrib(
+        validator=[
+            attr.validators.instance_of(ir.TableExpr),
+            check_table_array_view_table_has_one_column,
+        ]
+    )
+    name = attrib(
+        validator=[
+            attr.validators.instance_of(str),
+            check_table_array_view_name_in_table_schema,
+        ]
+    )
+
+    def _make_expr(self):
+        name = self.name
+        ctype = self.table._get_type(name)
+        klass = ctype.column_type()
+        return klass(self, name=name)
+
+
 def find_all_base_tables(expr, memo=None):
     if memo is None:
         memo = {}
@@ -2667,15 +2700,17 @@ class SummaryFilter(ValueOp):
         return dt.boolean.column_type()
 
 
+def check_topk_k(self, attr, value):
+    if value < 0:
+        raise ValueError(
+            "'k' argument to topk must be >= 0, got {!r}".format(value)
+        )
+
+
 @node
 class TopK(ValueOp):
     arg = attrib(validator=attr.validators.instance_of(ir.ColumnExpr))
-    k = attrib(
-        validator=[
-            attr.validators.instance_of(int),
-            lambda self, _, value: value >= 0,
-        ]
-    )
+    k = attrib(validator=[attr.validators.instance_of(int), check_topk_k])
     by = attrib(default=None)
 
     def __attrs_post_init__(self):

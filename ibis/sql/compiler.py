@@ -305,7 +305,7 @@ class SelectBuilder:
         # at this level? Means we probably have the wrong design, but will have
         # to revisit when it becomes a problem.
         aggregation, _ = L.reduction_to_aggregation(expr, default_name='tmp')
-        return aggregation.to_array()
+        return aggregation.to_column()
 
     def _visit_filter_Any(self, expr):
         # Rewrite semi/anti-join predicates in way that can hook into SQL
@@ -755,15 +755,16 @@ class CorrelatedRefCheck:
 
     def is_subquery(self, node) -> bool:
         # XXX
-        if isinstance(
-            node, (transforms.ExistsSubquery, transforms.NotExistsSubquery)
-        ):
-            return True
-
-        if isinstance(node, ops.TableColumn):
-            return not self.is_root(node.table)
-
-        return False
+        return isinstance(
+            node,
+            (
+                ops.TableArrayView,
+                transforms.ExistsSubquery,
+                transforms.NotExistsSubquery
+            )
+        ) or (
+            isinstance(node, ops.TableColumn) and not self.is_root(node.table)
+        )
 
     def visit_table(self, expr, in_subquery=False, visit_cache=None,
                     visit_table_cache=None):

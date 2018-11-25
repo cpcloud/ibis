@@ -451,7 +451,7 @@ def _table_column(translator, expr):
     # If the column does not originate from the table set in the current SELECT
     # context, we should format as a subquery
     if translator.permit_subquery and ctx.is_foreign_expr(table):
-        proj_expr = table.projection([field_name]).to_array()
+        proj_expr = table.projection([field_name]).to_column()
         return _table_array_view(translator, proj_expr)
 
     # TODO(kszucs): table aliasing is partially supported
@@ -631,6 +631,7 @@ _operation_registry = {
     ops.SearchedCase: _searched_case,
 
     ops.TableColumn: _table_column,
+    ops.TableArrayView: _table_array_view,
 
     ops.DateAdd: binary_infix_op('+'),
     ops.DateSub: binary_infix_op('-'),

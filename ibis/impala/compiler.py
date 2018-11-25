@@ -783,7 +783,7 @@ def _table_column(translator, expr):
     # If the column does not originate from the table set in the current SELECT
     # context, we should format as a subquery
     if translator.permit_subquery and ctx.is_foreign_expr(table):
-        proj_expr = table.projection([field_name]).to_array()
+        proj_expr = table.projection([field_name]).to_column()
         return _table_array_view(translator, proj_expr)
 
     if ctx.need_aliases():
@@ -1208,6 +1208,7 @@ _operation_registry = {
     ops.SearchedCase: _searched_case,
 
     ops.TableColumn: _table_column,
+    ops.TableArrayView: _table_array_view,
 
     ops.DateAdd: _timestamp_op('date_add'),
     ops.DateSub: _timestamp_op('date_sub'),

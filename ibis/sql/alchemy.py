@@ -630,6 +630,7 @@ _operation_registry = {
     ops.Floor: unary(sa.func.floor),
     ops.Power: fixed_arity(sa.func.pow, 2),
     ops.FloorDivide: _floor_divide,
+    ops.TableArrayView: _table_array_view,
 }
 
 
