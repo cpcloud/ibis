@@ -186,9 +186,7 @@ class GroupedTableExpr:
         TableExpr
 
         """
-        exprs = () if exprs is None else util.promote_tuple(
-            util.to_tuple(exprs)
-        )
+        exprs = () if exprs is None else util.to_tuple(exprs)
         kwd_names = tuple(kwds.keys())
         kwd_values = tuple(kwds.values())
         kwd_values = self.table._resolve(kwd_values)

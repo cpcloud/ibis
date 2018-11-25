@@ -276,9 +276,7 @@ class TableNode(Node):
         return Aggregation(this, metrics, by=by, having=having)
 
     def sort_by(self, expr, sort_exprs):
-        return Selection(
-            expr, (), sort_keys=util.promote_tuple(util.to_tuple(sort_exprs))
-        )
+        return Selection(expr, (), sort_keys=util.to_tuple(sort_exprs))
 
     def is_ancestor(self, other):
         import ibis.expr.lineage as lin
@@ -2439,7 +2437,7 @@ class Aggregation(TableNode, HasSchema):
         )
 
     def sort_by(self, expr, sort_exprs):
-        sort_exprs = util.promote_tuple(util.to_tuple(sort_exprs))
+        sort_exprs = util.to_tuple(sort_exprs)
 
         resolved_keys = _maybe_convert_sort_keys(self.table, sort_exprs)
         if resolved_keys and self.table._is_valid(resolved_keys):

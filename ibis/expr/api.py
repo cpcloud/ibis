@@ -1819,7 +1819,7 @@ def _string_like(
         operator.or_,
         (
             ops.StringSQLLike(self, pattern).to_expr()
-            for pattern in util.promote_tuple(util.to_tuple(patterns))
+            for pattern in util.to_tuple(patterns)
         )
     )
 
@@ -1845,7 +1845,7 @@ def _string_ilike(
         operator.or_,
         (
             ops.StringSQLILike(self, pattern).to_expr()
-            for pattern in util.promote_tuple(util.to_tuple(patterns))
+            for pattern in util.to_tuple(patterns)
         )
     )
 
@@ -2625,7 +2625,7 @@ def join(left, right, predicates=(), how='inner'):
     if isinstance(predicates, Expr):
         predicates = _L.flatten_predicate(predicates)
     else:
-        predicates = util.promote_tuple(util.to_tuple(predicates))
+        predicates = util.to_tuple(predicates)
 
     op = klass(left, right, predicates)
     return op.to_expr()
@@ -2833,8 +2833,7 @@ def _resolve_predicates(table, predicates):
     else:
         preds = predicates
     pred_gen = map(
-        functools.partial(ir.bind_expr, table),
-        util.promote_tuple(util.to_tuple(preds))
+        functools.partial(ir.bind_expr, table), util.to_tuple(preds)
     )
     resolved_predicates = tuple(
         pred.to_filter()
@@ -2865,9 +2864,7 @@ def aggregate(table, metrics=None, by=None, having=None, **kwds):
     ir.TableExpr
 
     """
-    metrics = () if metrics is None else util.promote_tuple(
-        util.to_tuple(metrics)
-    )
+    metrics = () if metrics is None else util.to_tuple(metrics)
     metrics += tuple(
         table._ensure_expr(v).name(k) for k, v in sorted(kwds.items())
     )
