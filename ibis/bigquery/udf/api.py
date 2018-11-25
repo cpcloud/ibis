@@ -3,6 +3,10 @@ import functools
 import inspect
 import itertools
 
+from typing import Any, Mapping, Type
+
+import attr
+
 import ibis.expr.rules as rlz
 import ibis.expr.datatypes as dt
 
@@ -20,20 +24,23 @@ __all__ = 'udf',
 _udf_name_cache = collections.defaultdict(itertools.count)
 
 
-def create_udf_node(name, fields):
+def create_udf_node(
+    name: str, fields: Mapping[str, Any]
+) -> Type[BigQueryUDFNode]:
     """Create a new UDF node type.
 
     Parameters
     ----------
-    name : str
+    name
         Then name of the UDF node
-    fields : OrderedDict
+    fields
         Mapping of class member name to definition
 
     Returns
     -------
-    result : type
+    type
         A new BigQueryUDFNode subclass
+
     """
     definition = next(_udf_name_cache[name])
     external_name = '{}_{:d}'.format(name, definition)
@@ -179,7 +186,8 @@ def udf(input_type, output_type, strict=True, libraries=None):
                     self.args, dtype=output_type
                 )
             ),
-            ('__slots__', ('js',)),
+        ] + [
+            ('js', attrib(validator=attr.validators.instance_of(str)))
         ])
 
         udf_node = create_udf_node(f.__name__, udf_node_fields)
@@ -225,8 +233,7 @@ return {internal_name}({args});
 
         @functools.wraps(f)
         def wrapped(*args, **kwargs):
-            node = udf_node(*args, **kwargs)
-            object.__setattr__(node, 'js', js)
+            node = udf_node(*args, js=js, **kwargs)
             return node.to_expr()
 
         wrapped.__signature__ = signature

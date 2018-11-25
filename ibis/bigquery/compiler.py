@@ -30,7 +30,11 @@ from ibis.bigquery.datatypes import ibis_type_to_bigquery_type
 
 
 class BigQueryUDFNode(ops.ValueOp):
-    pass
+    @property
+    def argnames(self):
+        return tuple(
+            argname for argname in super().argnames if argname != 'js'
+        )
 
 
 class BigQuerySelectBuilder(comp.SelectBuilder):
