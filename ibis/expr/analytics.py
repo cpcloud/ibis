@@ -1,29 +1,17 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+import attr
 
+from typing import Optional
 
 import ibis.expr.rules as rlz
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
-from ibis.expr.signature import Argument as Arg
+from ibis.expr.operations import attrib, node
 
 
 class BucketLike(ops.ValueOp):
-
     @property
-    def nbuckets(self):
+    def nbuckets(self) -> Optional[int]:
         return None
 
     def output_type(self):
@@ -31,13 +19,22 @@ class BucketLike(ops.ValueOp):
         return dtype.column_type()
 
 
+@node
 class Bucket(BucketLike):
-    arg = Arg(rlz.noop)
-    buckets = Arg(rlz.noop)
-    closed = Arg(rlz.isin({'left', 'right'}), default='left')
-    close_extreme = Arg(bool, default=True)
-    include_under = Arg(bool, default=False)
-    include_over = Arg(bool, default=False)
+    arg = attrib()
+    buckets = attrib()
+    closed = attrib(
+        validator=attr.validators.in_({'left', 'right'}), default='left'
+    )
+    close_extreme = attrib(
+        validator=attr.validators.instance_of(bool), default=True
+    )
+    include_under = attrib(
+        validator=attr.validators.instance_of(bool), default=False
+    )
+    include_over = attrib(
+        validator=attr.validators.instance_of(bool), default=False
+    )
 
     def _validate(self):
         if not len(self.buckets):
@@ -50,17 +47,24 @@ class Bucket(BucketLike):
                 )
 
     @property
-    def nbuckets(self):
+    def nbuckets(self) -> Optional[int]:
         return len(self.buckets) - 1 + self.include_over + self.include_under
 
 
+@node
 class Histogram(BucketLike):
-    arg = Arg(rlz.noop)
-    nbins = Arg(rlz.noop, default=None)
-    binwidth = Arg(rlz.noop, default=None)
-    base = Arg(rlz.noop, default=None)
-    closed = Arg(rlz.isin({'left', 'right'}), default='left')
-    aux_hash = Arg(rlz.noop, default=None)
+    arg = attrib()
+    nbins = attrib(converter=attr.converters.optional(rlz.noop), default=None)
+    binwidth = attrib(
+        converter=attr.converters.optional(rlz.noop), default=None
+    )
+    base = attrib(converter=attr.converters.optional(rlz.noop), default=None)
+    closed = attrib(
+        validator=attr.validators.in_({'left', 'right'}), default='left'
+    )
+    aux_hash = attrib(
+        converter=attr.converters.optional(rlz.noop), default=None
+    )
 
     def _validate(self):
         if self.nbins is None:
@@ -74,21 +78,30 @@ class Histogram(BucketLike):
         return dt.category.column_type()
 
 
+@node
 class CategoryLabel(ops.ValueOp):
-    arg = Arg(rlz.category)
-    labels = Arg(rlz.noop)
-    nulls = Arg(rlz.noop, default=None)
+    arg = attrib(converter=rlz.category)
+    labels = attrib()
+    nulls = attrib(converter=attr.converters.optional(rlz.noop), default=None)
     output_type = rlz.shape_like('arg', dt.string)
 
     def _validate(self):
         cardinality = self.arg.type().cardinality
         if len(self.labels) != cardinality:
-            raise ValueError('Number of labels must match number of '
-                             'categories: {}'.format(cardinality))
+            raise ValueError(
+                'Number of labels must match number of '
+                'categories: {}'.format(cardinality)
+            )
 
 
-def bucket(arg, buckets, closed='left', close_extreme=True,
-           include_under=False, include_over=False):
+def bucket(
+    arg,
+    buckets,
+    closed='left',
+    close_extreme=True,
+    include_under=False,
+    include_over=False,
+):
     """
     Compute a discrete binning of a numeric array
 
@@ -107,13 +120,20 @@ def bucket(arg, buckets, closed='left', close_extreme=True,
     -------
     bucketed : coded value expression
     """
-    op = Bucket(arg, buckets, closed=closed, close_extreme=close_extreme,
-                include_under=include_under, include_over=include_over)
+    op = Bucket(
+        arg,
+        buckets,
+        closed=closed,
+        close_extreme=close_extreme,
+        include_under=include_under,
+        include_over=include_over,
+    )
     return op.to_expr()
 
 
-def histogram(arg, nbins=None, binwidth=None, base=None, closed='left',
-              aux_hash=None):
+def histogram(
+    arg, nbins=None, binwidth=None, base=None, closed='left', aux_hash=None
+):
     """
     Compute a histogram with fixed width bins
 
@@ -132,8 +152,9 @@ def histogram(arg, nbins=None, binwidth=None, base=None, closed='left',
     -------
     histogrammed : coded value expression
     """
-    op = Histogram(arg, nbins, binwidth, base, closed=closed,
-                   aux_hash=aux_hash)
+    op = Histogram(
+        arg, nbins, binwidth, base, closed=closed, aux_hash=aux_hash
+    )
     return op.to_expr()
 
 
