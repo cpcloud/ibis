@@ -71,7 +71,7 @@ def distinct_roots(*expressions):
 # * frozen=True to prevent external mutation
 # * cmp=False here to customize hashing
 # * repr=False because we have our own repr
-node = attr.s(slots=True, frozen=True, cmp=False, repr=False)
+node = attr.s(slots=True, frozen=True, cmp=False)
 
 
 @node
@@ -83,21 +83,21 @@ class Node:
         repr=False,
     )
 
-    @property
-    def args(self) -> Tuple[Any, ...]:
-        return tuple(
-            getattr(self, field.name)
-            for field in attr.fields(type(self))
-            if field.name != '_hash'
-        )
+    def __attrs_post_init__(self):
+        self._validate()
+
+    def _validate(self) -> None:
+        ...
 
     @property
     def argnames(self) -> Tuple[str, ...]:
         return tuple(
-            field.name
-            for field in attr.fields(type(self))
-            if field.name != '_hash'
+            field.name for field in self.signature if field.name != '_hash'
         )
+
+    @property
+    def args(self) -> Tuple[Any, ...]:
+        return tuple(getattr(self, arg) for arg in self.argnames)
 
     @property
     def signature(self):
@@ -276,7 +276,9 @@ class TableNode(Node):
         return Aggregation(this, metrics, by=by, having=having)
 
     def sort_by(self, expr, sort_exprs):
-        return Selection(expr, [], sort_keys=sort_exprs)
+        return Selection(
+            expr, (), sort_keys=util.promote_tuple(util.to_tuple(sort_exprs))
+        )
 
     def is_ancestor(self, other):
         import ibis.expr.lineage as lin
@@ -307,7 +309,7 @@ class TableColumn(ValueOp):
         table = self.table
         schema = table.schema()
         if isinstance(name, int):
-            self.name = schema.name_at_position(name)
+            object.__setattr__(self, 'name', schema.name_at_position(name))
         name = self.name
         if name not in schema:
             raise com.IbisTypeError(
@@ -360,6 +362,7 @@ class PhysicalTable(TableNode, HasSchema):
 class UnboundTable(PhysicalTable):
     schema = attrib(validator=attr.validators.instance_of(sch.Schema))
     name = attrib(
+        converter=attr.converters.default_if_none(factory=genname),
         validator=attr.validators.optional(attr.validators.instance_of(str)),
         factory=genname,
     )
@@ -896,7 +899,10 @@ class FuzzySearch(ValueOp, BooleanValueOp):
 class StringSQLLike(FuzzySearch):
     arg = attrib(converter=rlz.string)
     pattern = attrib(converter=rlz.string)
-    escape = attrib(validator=attr.validators.instance_of(str), default=None)
+    escape = attrib(
+        validator=attr.validators.optional(attr.validators.instance_of(str)),
+        default=None,
+    )
 
 
 @node
@@ -1008,7 +1014,10 @@ class Count(Reduction):
 class Arbitrary(Reduction):
     arg = attrib(converter=rlz.column(rlz.any))
     how = attrib(
-        converter=rlz.isin({'first', 'last', 'heavy'}), default='first'
+        converter=attr.converters.optional(
+            rlz.isin({'first', 'last', 'heavy'})
+        ),
+        default=attr.converters.default_if_none('first'),
     )
     where = attrib(
         converter=attr.converters.optional(rlz.boolean), default=None
@@ -1970,7 +1979,7 @@ class AsOfJoin(Join):
     left = attrib(validator=attr.validators.instance_of(ir.TableExpr))
     right = attrib(validator=attr.validators.instance_of(ir.TableExpr))
     predicates = attrib()
-    by = attrib(converter=attr.converters.optional(rlz.noop), default=None)
+    by = attrib(default=None)
     tolerance = attrib(
         converter=attr.converters.optional(rlz.interval), default=None
     )
@@ -1981,6 +1990,7 @@ class AsOfJoin(Join):
             'by',
             tuple(_clean_join_predicates(self.left, self.right, self.by)),
         )
+        super().__attrs_post_init__()
 
 
 @node
@@ -2059,7 +2069,9 @@ def to_sort_key(table, key):
 class SortKey(Node):
     expr = attrib(converter=rlz.column(rlz.any))
     ascending = attrib(
-        validator=attr.validators.instance_of(bool), default=True
+        converter=bool,
+        validator=attr.validators.instance_of(bool),
+        default=True,
     )
 
     def __repr__(self):
@@ -2147,6 +2159,7 @@ class Selection(TableNode, HasSchema):
             'predicates',
             tuple(toolz.concat(map(L.flatten_predicate, self.predicates))),
         )
+        super().__attrs_post_init__()
 
     def _validate(self):
         from ibis.expr.analysis import FilterValidator
@@ -2240,7 +2253,7 @@ class Selection(TableNode, HasSchema):
         return Selection(expr, (), sort_keys=sort_exprs)
 
 
-@node
+@attr.s(slots=True, frozen=True, repr=False, cache_hash=True)
 class AggregateSelection:
     # sort keys cannot be discarded because of order-dependent
     # aggregate functions like GROUP_CONCAT
@@ -2313,6 +2326,10 @@ def _maybe_convert_sort_keys(table, exprs):
         return None
 
 
+def tuple_argument_converter(arg):
+    return tuple(filter(lambda arg: arg is not None, util.to_tuple(arg)))
+
+
 @node
 class Aggregation(TableNode, HasSchema):
     """
@@ -2327,16 +2344,24 @@ class Aggregation(TableNode, HasSchema):
 
     table = attrib(validator=attr.validators.instance_of(ir.TableExpr))
     metrics = attrib(converter=util.to_tuple)
-    by = attrib(converter=util.to_tuple, factory=tuple)
-    having = attrib(converter=util.to_tuple, factory=tuple)
-    predicates = attrib(converter=util.to_tuple, factory=tuple)
-    sort_keys = attrib(converter=util.to_tuple, factory=tuple)
+    by = attrib(converter=tuple_argument_converter, factory=tuple)
+    having = attrib(converter=tuple_argument_converter, factory=tuple)
+    predicates = attrib(converter=tuple_argument_converter, factory=tuple)
+    sort_keys = attrib(converter=tuple_argument_converter, factory=tuple)
 
     def __attrs_post_init__(self) -> None:
         object.__setattr__(
             self, 'metrics', self._rewrite_exprs(self.table, self.metrics)
         )
         object.__setattr__(self, 'by', self.table._resolve(self.by))
+        object.__setattr__(
+            self, 'having', self._rewrite_exprs(self.table, self.having)
+        )
+        object.__setattr__(
+            self,
+            'predicates',
+            self._rewrite_exprs(self.table, self.predicates),
+        )
 
         # order by only makes sense with group by in an aggregation
         if self.sort_keys:
@@ -2344,7 +2369,10 @@ class Aggregation(TableNode, HasSchema):
                 to_sort_key(self.table, k)
                 for k in util.promote_tuple(self.sort_keys)
             )
-            object.__setattr__(self, 'sort_keys', sort_keys)
+            object.__setattr__(
+                self, 'sort_keys', self._rewrite_exprs(self.table, sort_keys)
+            )
+        super().__attrs_post_init__()
 
     def _validate(self):
         from ibis.expr.analysis import is_reduction
@@ -2354,14 +2382,16 @@ class Aggregation(TableNode, HasSchema):
         for expr in self.metrics:
             if not isinstance(expr, ir.ScalarExpr) or not is_reduction(expr):
                 raise TypeError(
-                    'Passed a non-aggregate expression: %s' % _safe_repr(expr)
+                    'Passed a non-aggregate expression: {}'.format(
+                        _safe_repr(expr)
+                    )
                 )
 
         for expr in self.having:
             if not isinstance(expr, ir.BooleanScalar):
                 raise com.ExpressionError(
-                    'Having clause must be boolean '
-                    'expression, was: {0!s}'.format(_safe_repr(expr))
+                    'Having clause must be boolean scalar '
+                    'expression, was: {}'.format(_safe_repr(expr))
                 )
 
         # All non-scalar refs originate from the input table
@@ -2369,7 +2399,7 @@ class Aggregation(TableNode, HasSchema):
         self.table._assert_valid(all_exprs)
 
         # Validate predicates
-        validator = FilterValidator([self.table])
+        validator = FilterValidator((self.table,))
         validator.validate_all(self.predicates)
 
         # Validate schema has no overlapping columns
@@ -2378,12 +2408,14 @@ class Aggregation(TableNode, HasSchema):
     def _rewrite_exprs(self, table, what):
         from ibis.expr.analysis import substitute_parents
 
-        all_exprs = tuple(toolz.concat(
-            tuple(expr.exprs())
-            if isinstance(expr, ir.ExprList)
-            else (ir.bind_expr(table, expr),)
-            for expr in util.promote_tuple(what)
-        ))
+        all_exprs = tuple(
+            toolz.concat(
+                tuple(expr.exprs())
+                if isinstance(expr, ir.ExprList)
+                else (ir.bind_expr(table, expr),)
+                for expr in util.promote_tuple(what)
+            )
+        )
 
         return tuple(
             substitute_parents(expr, past_projection=False)
@@ -2407,7 +2439,7 @@ class Aggregation(TableNode, HasSchema):
         )
 
     def sort_by(self, expr, sort_exprs):
-        sort_exprs = util.promote_tuple(sort_exprs)
+        sort_exprs = util.promote_tuple(util.to_tuple(sort_exprs))
 
         resolved_keys = _maybe_convert_sort_keys(self.table, sort_exprs)
         if resolved_keys and self.table._is_valid(resolved_keys):
@@ -2641,11 +2673,14 @@ class SummaryFilter(ValueOp):
 class TopK(ValueOp):
     arg = attrib(validator=attr.validators.instance_of(ir.ColumnExpr))
     k = attrib(
-        validator=[attr.validators.instance_of(int), lambda value: value >= 0]
+        validator=[
+            attr.validators.instance_of(int),
+            lambda self, _, value: value >= 0,
+        ]
     )
     by = attrib(default=None)
 
-    def __attrs_post_init__(self) -> None:
+    def __attrs_post_init__(self):
         if self.by is None:
             object.__setattr__(self, 'by', self.arg.count())
 
@@ -2669,7 +2704,7 @@ class TimestampNow(Constant):
 
 @node
 class E(Constant):
-    """The constant $\e$."""
+    r"""The constant $\e$."""
 
     def output_type(self):
         return functools.partial(ir.FloatingScalar, dtype=dt.float64)
@@ -2677,7 +2712,7 @@ class E(Constant):
 
 @node
 class Pi(Constant):
-    """The constant $\pi$."""
+    r"""The constant $\pi$."""
 
     def output_type(self):
         return functools.partial(ir.FloatingScalar, dtype=dt.float64)
@@ -3213,6 +3248,8 @@ class ScalarParameter(ValueOp):
     counter = attrib(
         validator=attr.validators.instance_of(int),
         factory=lambda: next(ScalarParameter._counter),
+        show=False,
+        repr=False,
     )
 
     def resolve_name(self):
