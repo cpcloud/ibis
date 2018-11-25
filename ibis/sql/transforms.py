@@ -1,51 +1,36 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 import ibis.expr.types as ir
-import ibis.expr.rules as rlz
 import ibis.expr.analysis as L
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
-from ibis.expr.signature import Argument as Arg
+
+from ibis.expr.operations import attrib, node
 
 
 class ExistsExpr(ir.AnalyticExpr):
-
     def type(self):
         return 'exists'
 
 
+@node
 class ExistsSubquery(ops.Node):
     """Helper class"""
-    foreign_table = Arg(rlz.noop)
-    predicates = Arg(rlz.noop)
+    foreign_table = attrib()
+    predicates = attrib()
 
     def output_type(self):
         return ExistsExpr
 
 
+@node
 class NotExistsSubquery(ops.Node):
-    foreign_table = Arg(rlz.noop)
-    predicates = Arg(rlz.noop)
+    foreign_table = attrib()
+    predicates = attrib()
 
     def output_type(self):
         return ExistsExpr
 
 
 class AnyToExistsTransform:
-
     """
     Some code duplication with the correlated ref check; should investigate
     better code reuse.
