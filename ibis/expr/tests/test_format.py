@@ -1,8 +1,9 @@
+import attr
+
 import ibis
 
 from ibis.expr.format import ExprFormatter
-from ibis.expr.operations import Node
-from ibis.expr.signature import Argument as Arg
+from ibis.expr.operations import Node, attrib, node
 from ibis.expr.types import Expr
 
 
@@ -231,9 +232,12 @@ def test_repring_does_not_show_with_option():
     class CustomExpr(Expr):
         pass
 
+    @node
     class CustomOp(Node):
-        first_arg = Arg(int, show=False)
-        second_arg = Arg(float)
+        first_arg = attrib(
+            validator=attr.validators.instance_of(int), show=lambda x: False
+        )
+        second_arg = attrib(validator=attr.validators.instance_of(float))
 
         def output_type(self):
             return CustomExpr

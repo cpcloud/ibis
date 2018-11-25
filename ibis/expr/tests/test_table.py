@@ -107,8 +107,9 @@ def test_projection_with_exprs(table):
     assert schema.types == [dt.double, dt.double, dt.string]
 
     # Test with unnamed expr
+    args = ['g', table['a'] - table['c']]
     with pytest.raises(ExpressionError):
-        table.projection(['g', table['a'] - table['c']])
+        table.projection(args)
 
 
 def test_projection_duplicate_names(table):
@@ -386,15 +387,12 @@ def test_sort_by(table):
 
     result2 = table.sort_by([('f', False)])
     result3 = table.sort_by([('f', 'descending')])
-    result4 = table.sort_by([('f', 0)])
 
     key2 = result2.op().sort_keys[0].op()
     key3 = result3.op().sort_keys[0].op()
-    key4 = result4.op().sort_keys[0].op()
 
     assert not key2.ascending
     assert not key3.ascending
-    assert not key4.ascending
     assert_equal(result2, result3)
 
 
@@ -404,7 +402,8 @@ def test_sort_by_desc_deferred_sort_key(table):
               .sort_by(ibis.desc('count')))
 
     tmp = table.group_by('g').size()
-    expected = tmp.sort_by((tmp['count'], False))
+    key = (tmp['count'], False)
+    expected = tmp.sort_by(key)
     expected2 = tmp.sort_by(ibis.desc(tmp['count']))
 
     assert_equal(result, expected)

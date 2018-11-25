@@ -6,7 +6,6 @@ from collections import OrderedDict
 from operator import methodcaller
 from datetime import date, datetime, time
 
-
 import pytest
 
 import numpy as np
@@ -25,7 +24,7 @@ import ibis.expr.analysis as L
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
-from ibis.expr.signature import Argument as Arg
+from ibis.expr.operations import attrib, node
 
 
 def test_null():
@@ -1118,7 +1117,8 @@ def test_scalar_parameter_repr():
     assert repr(value) == 'value = ScalarParameter[timestamp]'
 
     value_op = value.op()
-    assert repr(value_op) == "ScalarParameter(type=timestamp)"
+    expected = "ScalarParameter(dtype=Timestamp(timezone=None, nullable=True))"
+    assert repr(value_op) == expected
 
 
 @pytest.mark.parametrize(
@@ -1199,8 +1199,9 @@ def test_custom_type_binary_operations():
 
         __radd__ = __add__
 
+    @node
     class FooNode(ops.ValueOp):
-        value = Arg(rlz.integer)
+        value = attrib(converter=rlz.integer)
 
         def output_type(self):
             return functools.partial(Foo, dtype=dt.int64)
@@ -1222,14 +1223,15 @@ def test_empty_array_as_argument():
     class Foo(ir.Expr):
         pass
 
+    @node
     class FooNode(ops.ValueOp):
-        value = Arg(rlz.value(dt.Array(dt.int64)))
+        value = attrib(converter=rlz.value(dt.Array(dt.int64)))
 
         def output_type(self):
             return Foo
 
-    node = FooNode([])
-    value = node.value
+    foo_node = FooNode([])
+    value = foo_node.value
     expected = literal([]).cast(dt.Array(dt.int64))
 
     assert value.type().equals(dt.Array(dt.null))

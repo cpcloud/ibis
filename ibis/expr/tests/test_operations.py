@@ -1,4 +1,7 @@
+import attr
+
 import pytest
+
 import numpy as np
 
 import ibis
@@ -7,14 +10,16 @@ import ibis.expr.rules as rlz
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 
+from ibis.expr.operations import attrib, node
+
 from ibis.common import IbisTypeError
-from ibis.expr.signature import Argument as Arg
 
 
 def test_operation():
+    @node
     class Log(ops.Node):
-        arg = Arg(rlz.double())
-        base = Arg(rlz.double(), default=None)
+        arg = attrib(converter=rlz.double)
+        base = attrib(converter=attr.converters.optional(rlz.double), default=None)
 
     Log(1, base=2)
     Log(1, base=2)
@@ -78,18 +83,20 @@ def test_ops_smoke():
 
 
 def test_instance_of_operation():
+    @node
     class MyOperation(ops.Node):
-        arg = Arg(ir.IntegerValue)
+        arg = attrib(validator=attr.validators.instance_of(ir.IntegerValue))
 
     MyOperation(ir.literal(5))
 
-    with pytest.raises(IbisTypeError):
+    with pytest.raises(TypeError):
         MyOperation(ir.literal('string'))
 
 
 def test_array_input():
+    @node
     class MyOp(ops.ValueOp):
-        value = Arg(rlz.value(dt.Array(dt.double)))
+        value = attrib(converter=rlz.value(dt.Array(dt.double)))
         output_type = rlz.typeof('value')
 
     raw_value = [1.0, 2.0, 3.0]
