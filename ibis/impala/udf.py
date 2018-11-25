@@ -1,23 +1,10 @@
-# Copyright 2015 Cloudera Inc
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+import collections
 import re
 
 import ibis.util as util
 import ibis.common as com
 import ibis.expr.rules as rlz
 import ibis.expr.datatypes as dt
-import ibis.expr.signature as sig
 import ibis.expr.operations as ops
 import ibis.impala.compiler as comp
 
@@ -27,7 +14,6 @@ __all__ = ['add_operation', 'scalar_function', 'aggregate_function',
 
 
 class Function:
-
     def __init__(self, inputs, output, name):
         self.inputs = tuple(map(dt.dtype, inputs))
         self.output = dt.dtype(output)
@@ -90,7 +76,6 @@ class AggregateFunction(Function):
             return dt.dtype(self.output).scalar_type()
 
         input_type = _ibis_signature(self.inputs)
-
         return input_type, output_type
 
 
@@ -256,21 +241,20 @@ def aggregate_function(inputs, output, name=None):
 
 
 def _ibis_signature(inputs):
-    if isinstance(inputs, sig.TypeSignature):
-        return inputs
-
-    arguments = [('_{}'.format(i), sig.Argument(rlz.value(dtype)))
-                 for i, dtype in enumerate(inputs)]
-    return sig.TypeSignature(arguments)
+    return [('_{:d}'.format(i), ops.attrib(converter=rlz.value(dtype)))
+            for i, dtype in enumerate(zip(inputs))]
 
 
 def _create_operation_class(name, input_type, output_type):
-    func_dict = {
-        'signature': input_type,
-        'output_type': output_type,
-    }
-    klass = type(name, (ops.ValueOp,), func_dict)
-    return klass
+    return ops.node(
+        type(
+            name,
+            (ops.ValueOp,),
+            collections.OrderedDict(
+                input_type + [('output_type', output_type)]
+            )
+        )
+    )
 
 
 def add_operation(op, func_name, db):
