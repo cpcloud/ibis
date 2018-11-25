@@ -19,6 +19,7 @@ def connect(path):
     return HDFClient(path)
 
 
+@ops.node
 class HDFTable(ops.DatabaseTable):
     pass
 

@@ -341,13 +341,14 @@ sch.Schema.to_pandas = ibis_schema_to_pandas
 sch.Schema.apply_to = ibis_schema_apply_to
 
 
+@ops.node
 class PandasTable(ops.DatabaseTable):
     pass
 
 
 class PandasClient(client.Client):
-
     dialect = None  # defined in ibis.pandas.api
+    table_class = PandasTable
 
     def __init__(self, dictionary):
         self.dictionary = dictionary
@@ -355,7 +356,7 @@ class PandasClient(client.Client):
     def table(self, name, schema=None):
         df = self.dictionary[name]
         schema = sch.infer(df, schema=schema)
-        return PandasTable(name, schema, self).to_expr()
+        return self.table_class(name, schema, self).to_expr()
 
     def execute(self, query, params=None, limit='default', **kwargs):
         from ibis.pandas.core import execute_and_reset

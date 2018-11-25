@@ -205,6 +205,7 @@ class ClickhouseTable(ir.TableExpr, DatabaseEntity):
         return self._client.con.execute(query, data, **kwargs)
 
 
+@ops.node
 class ClickhouseDatabaseTable(ops.DatabaseTable):
     pass
 

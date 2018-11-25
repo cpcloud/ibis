@@ -361,6 +361,7 @@ _HS2_TTypeId_to_dtype = {
 }
 
 
+@ops.node
 class ImpalaDatabaseTable(ops.DatabaseTable):
     pass
 

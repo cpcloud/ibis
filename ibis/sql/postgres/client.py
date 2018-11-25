@@ -19,9 +19,12 @@ import sqlalchemy as sa
 
 import ibis.sql.alchemy as alch
 
+from ibis.expr.operations import node
+
 from ibis.sql.postgres.compiler import PostgreSQLDialect
 
 
+@node
 class PostgreSQLTable(alch.AlchemyTable):
     pass
 

@@ -59,6 +59,7 @@ def connect(dictionary):
     return ParquetClient(dictionary)
 
 
+@ops.node
 class ParquetTable(ops.DatabaseTable):
     pass
 

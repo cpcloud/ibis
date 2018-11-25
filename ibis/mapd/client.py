@@ -1,9 +1,11 @@
 from pkg_resources import parse_version
+
 from ibis.client import Database, Query, SQLClient, DatabaseEntity
 from ibis.mapd.compiler import MapDDialect, build_ast
 from ibis.mapd import ddl
 from ibis.sql.compiler import DDL, DML
 from ibis.util import log
+
 from pymapd.cursor import Cursor
 
 try:
@@ -17,6 +19,7 @@ import pymapd
 
 import ibis.common as com
 import ibis.expr.datatypes as dt
+import ibis.expr.operations as ops
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
 
@@ -288,13 +291,18 @@ class MapDTable(ir.TableExpr, DatabaseEntity):
         return results
 
 
-class MapDClient(SQLClient):
-    """
+@ops.node
+class MapDDatabaseTable(ops.DatabaseTable):
+    pass
 
-    """
+
+class MapDClient(SQLClient):
+    """A client for MapD databases."""
+
     database_class = Database
     query_class = MapDQuery
     dialect = MapDDialect
+    table_class = MapDDatabaseTable
     table_expr_class = MapDTable
 
     def __init__(self, uri=None, user=None, password=None, host=None,

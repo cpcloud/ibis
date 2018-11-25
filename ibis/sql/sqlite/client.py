@@ -6,13 +6,16 @@ import math
 
 import sqlalchemy as sa
 
+from ibis.expr.operations import node
 from ibis.client import Database
 from ibis.sql.sqlite.compiler import SQLiteDialect
 
+import ibis.expr.schema as sch
 import ibis.sql.alchemy as alch
 import ibis.common as com
 
 
+@node
 class SQLiteTable(alch.AlchemyTable):
     pass
 
@@ -390,7 +393,9 @@ class SQLiteClient(alch.AlchemyClient):
         table : TableExpr
         """
         alch_table = self._get_sqla_table(name, schema=database)
-        node = self.table_class(alch_table, self)
+        node = self.table_class(
+            alch_table.name, sch.infer(alch_table), self, alch_table
+        )
         return self.table_expr_class(node)
 
     def list_tables(self, like=None, database=None, schema=None):

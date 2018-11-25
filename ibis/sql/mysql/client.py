@@ -5,7 +5,9 @@ import contextlib
 import sqlalchemy as sa
 import sqlalchemy.dialects.mysql as mysql
 
+from ibis.expr.operations import node
 from ibis.sql.mysql.compiler import MySQLDialect
+
 import ibis.sql.alchemy as alch
 import ibis.expr.datatypes as dt
 
@@ -32,6 +34,7 @@ def mysql_blob(satype, nullable=True):
     return dt.Binary(nullable=nullable)
 
 
+@node
 class MySQLTable(alch.AlchemyTable):
     pass
 

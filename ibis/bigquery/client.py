@@ -249,6 +249,7 @@ def bq_param_date(param, value):
     return bq.ScalarQueryParameter(param.get_name(), 'DATE', value)
 
 
+@ops.node
 class BigQueryTable(ops.DatabaseTable):
     pass
 
