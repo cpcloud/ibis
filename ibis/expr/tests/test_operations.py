@@ -12,14 +12,14 @@ import ibis.expr.operations as ops
 
 from ibis.expr.operations import attrib, node
 
-from ibis.common import IbisTypeError
-
 
 def test_operation():
     @node
     class Log(ops.Node):
         arg = attrib(converter=rlz.double)
-        base = attrib(converter=attr.converters.optional(rlz.double), default=None)
+        base = attrib(
+            converter=attr.converters.optional(rlz.double), default=None
+        )
 
     Log(1, base=2)
     Log(1, base=2)
