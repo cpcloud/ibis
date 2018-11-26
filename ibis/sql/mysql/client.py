@@ -8,8 +8,9 @@ import sqlalchemy.dialects.mysql as mysql
 from ibis.expr.operations import node
 from ibis.sql.mysql.compiler import MySQLDialect
 
-import ibis.sql.alchemy as alch
+import ibis.expr.schema as sch
 import ibis.expr.datatypes as dt
+import ibis.sql.alchemy as alch
 
 
 # TODO(kszucs): unsigned integers
@@ -192,7 +193,12 @@ class MySQLClient(alch.AlchemyClient):
             )
         else:
             alch_table = self._get_sqla_table(name, schema=schema)
-            node = self.table_class(alch_table, self, self._schemas.get(name))
+            node = self.table_class(
+                alch_table.name,
+                sch.infer(alch_table, schema=self._schemas.get(name)),
+                self,
+                alch_table,
+            )
             return self.table_expr_class(node)
 
     def list_tables(self, like=None, database=None, schema=None):

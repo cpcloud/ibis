@@ -1,22 +1,9 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import getpass
 import psycopg2  # NOQA fail early if the driver is missing
 import contextlib
 import sqlalchemy as sa
 
+import ibis.expr.schema as sch
 import ibis.sql.alchemy as alch
 
 from ibis.expr.operations import node
@@ -181,7 +168,12 @@ class PostgreSQLClient(alch.AlchemyClient):
             )
         else:
             alch_table = self._get_sqla_table(name, schema=schema)
-            node = self.table_class(alch_table, self, self._schemas.get(name))
+            node = self.table_class(
+                alch_table.name,
+                sch.infer(alch_table, schema=self._schemas.get(name)),
+                self,
+                alch_table
+            )
             return self.table_expr_class(node)
 
     def list_tables(self, like=None, database=None, schema=None):
