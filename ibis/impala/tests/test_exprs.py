@@ -34,7 +34,6 @@ def approx_equal(a, b, eps):
 
 
 class ExprSQLTest:
-
     def _check_expr_cases(self, cases, named=False):
         for expr, expected in cases:
             repr(expr)
@@ -737,7 +736,7 @@ class TestInNotIn(unittest.TestCase, ExprSQLTest):
 
     def test_field_in_literals(self):
         values = ['foo', 'bar', 'baz']
-        values_formatted = tuple(set(values))
+        values_formatted = tuple(values)
         cases = [
             (self.table.g.isin(values),
              "`g` IN {}".format(values_formatted)),

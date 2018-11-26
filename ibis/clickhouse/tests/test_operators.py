@@ -134,7 +134,7 @@ def test_string_temporal_compare_between_datetimes(con, left, right):
 @pytest.mark.parametrize('container', [list, tuple, set])
 def test_field_in_literals(con, alltypes, translate, container):
     foobar = container(['foo', 'bar', 'baz'])
-    expected = tuple(set(foobar))
+    expected = tuple(foobar)
 
     expr = alltypes.string_col.isin(foobar)
     assert translate(expr) == "`string_col` IN {}".format(expected)

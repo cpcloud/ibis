@@ -54,7 +54,7 @@ def test_isin_notin_in_select(con, db, alltypes, translate):
     expected = """SELECT *
 FROM {}.`functional_alltypes`
 WHERE `string_col` IN {}"""
-    assert result == expected.format(db.name, tuple(set(values)))
+    assert result == expected.format(db.name, tuple(values))
 
     filtered = alltypes[alltypes.string_col.notin(values)]
     result = ibis.clickhouse.compile(filtered)
