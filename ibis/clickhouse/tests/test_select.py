@@ -61,7 +61,7 @@ WHERE `string_col` IN {}"""
     expected = """SELECT *
 FROM {}.`functional_alltypes`
 WHERE `string_col` NOT IN {}"""
-    assert result == expected.format(db.name, tuple(set(values)))
+    assert result == expected.format(db.name, tuple(values))
 
 
 def test_head(alltypes):

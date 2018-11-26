@@ -756,7 +756,7 @@ class TestInNotIn(unittest.TestCase, ExprSQLTest):
 
     def test_isin_notin_in_select(self):
         values = ['foo', 'bar']
-        values_formatted = tuple(set(values))
+        values_formatted = tuple(values)
 
         filtered = self.table[self.table.g.isin(values)]
         result = to_sql(filtered)
