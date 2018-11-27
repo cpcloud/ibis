@@ -226,7 +226,7 @@ def test_timestamp_with_timezone_parser_double_quote():
 
 def test_timestamp_with_timezone_parser_invalid_timezone():
     ts = dt.dtype("timestamp('US/Ea')")
-    assert str(ts) == "timestamp('US/Ea')"
+    assert str(ts) == "Timestamp(timezone='US/Ea', nullable=True)"
 
 
 @pytest.mark.parametrize('unit', [
@@ -261,7 +261,7 @@ def test_interval_unvalid_unit(unit):
     with pytest.raises(ValueError):
         dt.dtype(definition)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IbisTypeError):
         dt.Interval(dt.int32, unit)
 
 
@@ -280,7 +280,7 @@ def test_string_argument_parsing_failure_mode(case):
 
 def test_timestamp_with_invalid_timezone():
     ts = dt.Timestamp('Foo/Bar&234')
-    assert str(ts) == "timestamp('Foo/Bar&234')"
+    assert str(ts) == "Timestamp(timezone='Foo/Bar&234', nullable=True)"
 
 
 def test_timestamp_with_timezone_repr():
@@ -290,12 +290,12 @@ def test_timestamp_with_timezone_repr():
 
 def test_timestamp_with_timezone_str():
     ts = dt.Timestamp('UTC')
-    assert str(ts) == "timestamp('UTC')"
+    assert str(ts) == "Timestamp(timezone='UTC', nullable=True)"
 
 
 def test_time():
     ts = dt.time
-    assert str(ts) == "time"
+    assert str(ts) == 'Time(nullable=True)'
 
 
 def test_time_valid():
