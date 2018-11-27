@@ -275,11 +275,24 @@ def test_interval(literal):
     assert isinstance(literal, ir.IntervalScalar)
 
 
-@pytest.mark.parametrize(('expr', 'expected'), [
-    (api.interval(weeks=3), "Literal[interval<int8>(unit='W')]\n  3"),
-    (api.interval(months=3), "Literal[interval<int8>(unit='M')]\n  3"),
-    (api.interval(seconds=-10), "Literal[interval<int8>(unit='s')]\n  -10")
-])
+@pytest.mark.parametrize(
+    ('expr', 'expected'),
+    [
+        (
+            api.interval(weeks=3),
+            "Literal[Interval(unit='W', value_type=Int8(nullable=True))]\n  3"
+        ),
+        (
+            api.interval(months=3),
+            "Literal[Interval(unit='M', value_type=Int8(nullable=True))]\n  3"
+        ),
+        (
+            api.interval(seconds=-10),
+            "Literal[Interval(unit='s', value_type=Int8(nullable=True))]"
+            "\n  -10"
+        ),
+    ]
+)
 def test_interval_repr(expr, expected):
     assert repr(expr) == expected
 

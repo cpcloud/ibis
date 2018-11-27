@@ -508,7 +508,7 @@ def test_number_to_string_scalar():
 
 def test_casted_exprs_are_named(table):
     expr = table.f.cast('string')
-    assert expr.get_name() == 'cast(f, string)'
+    assert expr.get_name() == 'cast(f, String(nullable=True))'
 
     # it works! per GH #396
     expr.value_counts()
@@ -1114,7 +1114,9 @@ def test_scalar_parameter_set():
 
 def test_scalar_parameter_repr():
     value = ibis.param(dt.timestamp).name('value')
-    assert repr(value) == 'value = ScalarParameter[timestamp]'
+    assert repr(value) == (
+        'value = ScalarParameter[Timestamp(timezone=None, nullable=True)]'
+    )
 
     value_op = value.op()
     expected = "ScalarParameter(dtype=Timestamp(timezone=None, nullable=True))"

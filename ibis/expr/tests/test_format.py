@@ -23,7 +23,7 @@ def test_format_custom_expr():
 def test_format_table_column(table):
     # GH #507
     result = repr(table.f)
-    assert 'Column[float64*]' in result
+    assert 'Column[Float64(nullable=True)*]' in result
 
 
 def test_format_projection(table):
@@ -209,23 +209,25 @@ ref_0
 UnboundTable[table]
   name: t
   schema:
-    a : int64
+    a : Int64(nullable=True)
 
-NullIf[int64*]
-  a = Column[int64*] 'a' from table
+NullIf[Int64(nullable=True)*]
+  a = Column[Int64(nullable=True)*] 'a' from table
     ref_0
   null_if_expr:
-    Literal[int8]
+    Literal[Int8(nullable=True)]
       2"""
     assert result == expected
 
 
 def test_scalar_parameter_formatting():
     value = ibis.param('array<date>')
-    assert str(value) == 'ScalarParameter[array<date>]'
+    assert str(value) == (
+        'ScalarParameter[Array(value_type=Date(nullable=True), nullable=True)]'
+    )
 
     value = ibis.param('int64').name('my_param')
-    assert str(value) == 'my_param = ScalarParameter[int64]'
+    assert str(value) == 'my_param = ScalarParameter[Int64(nullable=True)]'
 
 
 def test_repring_does_not_show_with_option():
