@@ -380,7 +380,7 @@ class Category(DataType):
         return int64 if cardinality else infer(self.cardinality)
 
 
-def check_names(self, attr: str, names) -> None:
+def check_names(self, attr: str, names: Tuple) -> None:
     invalid_types = {
         name: type(name) for name in names if not isinstance(name, str)
     }
@@ -390,12 +390,12 @@ def check_names(self, attr: str, names) -> None:
         )
 
 
-def check_non_empty_sequence(self, attr: str, value) -> None:
-    if not value:
+def check_non_empty_sequence(self, attr: str, seq: Tuple) -> None:
+    if not seq:
         raise ValueError('Argument {!r} must be a non-empty sequence')
 
 
-def check_names_and_types(self, attr: str, types) -> None:
+def check_names_and_types(self, attr: str, types: Tuple) -> None:
     if len(self.names) != len(types):
         raise ValueError('names and types must have the same length')
 
@@ -403,17 +403,17 @@ def check_names_and_types(self, attr: str, types) -> None:
 @datatype
 class Struct(DataType):
     names = attr.ib(
-        converter=list,
+        converter=tuple,
         validator=[
-            attr.validators.instance_of(collections.Sequence),
+            attr.validators.instance_of(tuple),
             check_non_empty_sequence,
             check_names,
         ],
     )
     types = attr.ib(
-        converter=list,
+        converter=tuple,
         validator=[
-            attr.validators.instance_of(collections.Sequence),
+            attr.validators.instance_of(tuple),
             check_non_empty_sequence,
             check_names_and_types,
         ],
@@ -432,7 +432,7 @@ class Struct(DataType):
         nullable: bool = True,
     ) -> 'Struct':
         names, types = zip(*pairs)
-        return Struct(list(names), list(map(dtype, types)), nullable=nullable)
+        return Struct(names, map(dtype, types), nullable=nullable)
 
     @property
     def pairs(self) -> Mapping:

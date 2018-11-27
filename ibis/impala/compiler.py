@@ -105,19 +105,18 @@ class ImpalaTableSetFormatter(comp.TableSetFormatter):
 # ---------------------------------------------------------------------
 # Scalar and array expression formatting
 
-_sql_type_names = {
-    'int8': 'tinyint',
-    'int16': 'smallint',
-    'int32': 'int',
-    'int64': 'bigint',
-    'float': 'float',
-    'float32': 'float',
-    'double': 'double',
-    'float64': 'double',
-    'string': 'string',
-    'boolean': 'boolean',
-    'timestamp': 'timestamp',
-    'decimal': 'decimal',
+_sql_types = {
+    dt.Int8: 'tinyint',
+    dt.Int16: 'smallint',
+    dt.Int32: 'int',
+    dt.Int64: 'bigint',
+    dt.Float32: 'float',
+    dt.Double: 'double',
+    dt.Float64: 'double',
+    dt.String: 'string',
+    dt.Boolean: 'boolean',
+    dt.Timestamp: 'timestamp',
+    dt.Decimal: 'decimal',
 }
 
 
@@ -138,11 +137,11 @@ def _cast(translator, expr):
 def _type_to_sql_string(tval):
     if isinstance(tval, dt.Decimal):
         return 'decimal({}, {})'.format(tval.precision, tval.scale)
-    name = tval.name.lower()
+    datatype_type = type(tval)
     try:
-        return _sql_type_names[name]
+        return _sql_types[datatype_type]
     except KeyError:
-        raise com.UnsupportedBackendType(name)
+        raise com.UnsupportedBackendType(datatype_type)
 
 
 def _between(translator, expr):

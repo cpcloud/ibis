@@ -90,7 +90,7 @@ def trans_timestamp(t, context):
 
 @ibis_type_to_bigquery_type.register(dt.DataType, TypeTranslationContext)
 def trans_type(t, context):
-    return str(t).upper()
+    return type(t).__name__.upper()
 
 
 @ibis_type_to_bigquery_type.register(dt.Integer, UDFContext)

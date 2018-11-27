@@ -280,15 +280,15 @@ def test_interval(literal):
     [
         (
             api.interval(weeks=3),
-            "Literal[Interval(unit='W', value_type=Int8(nullable=True))]\n  3"
+            "Literal[Interval(unit='W', value_type=Int8(nullable=True), nullable=True)]\n  3"  # noqa: E501
         ),
         (
             api.interval(months=3),
-            "Literal[Interval(unit='M', value_type=Int8(nullable=True))]\n  3"
+            "Literal[Interval(unit='M', value_type=Int8(nullable=True), nullable=True)]\n  3"  # noqa: E501
         ),
         (
             api.interval(seconds=-10),
-            "Literal[Interval(unit='s', value_type=Int8(nullable=True))]"
+            "Literal[Interval(unit='s', value_type=Int8(nullable=True), nullable=True)]"  # noqa: E501
             "\n  -10"
         ),
     ]
