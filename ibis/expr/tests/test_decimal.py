@@ -105,12 +105,6 @@ def test_invalid_precision_scale_type(precision, scale):
         dt.Decimal(precision, scale)
 
 
-def test_decimal_str(lineitem):
-    col = lineitem.l_extendedprice
-    t = col.type()
-    assert str(t) == 'decimal({:d}, {:d})'.format(t.precision, t.scale)
-
-
 def test_decimal_repr(lineitem):
     col = lineitem.l_extendedprice
     t = col.type()
