@@ -3052,14 +3052,7 @@ class IntervalBinaryOp(BinaryOp):
             for arg in self.args
         ]
         expr = rlz.numeric_like(args, self.__class__.op)(self)
-        left_dtype = self.left.type()
-        dtype_type = type(left_dtype)
-        additional_args = {
-            attr: getattr(left_dtype, attr)
-            for attr in dtype_type.__slots__
-            if attr not in {'unit', 'value_type'}
-        }
-        dtype = dtype_type(left_dtype.unit, expr.type(), **additional_args)
+        dtype = attr.evolve(self.left.type(), value_type=expr.type())
         return rlz.shape_like(self.args, dtype=dtype)
 
 

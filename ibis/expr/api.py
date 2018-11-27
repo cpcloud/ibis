@@ -8,6 +8,7 @@ import warnings
 
 from typing import Sequence, Union
 
+import attr
 import toolz
 
 import dateutil.parser
@@ -2403,7 +2404,8 @@ _add_methods(ir.DateValue, _date_value_methods)
 def _to_unit(arg, target_unit):
     if arg._dtype.unit != target_unit:
         arg = util.convert_unit(arg, arg._dtype.unit, target_unit)
-        arg.type().unit = target_unit
+        dtype = attr.evolve(arg.type(), unit=target_unit)
+        return type(arg)(arg.op(), dtype=dtype)
     return arg
 
 
