@@ -358,7 +358,7 @@ class Interval(DataType):
     @property
     def resolution(self):
         """Unit's name"""
-        return self._units[self.unit]
+        return INTERVAL_UNITS[self.unit]
 
 
 @datatype
