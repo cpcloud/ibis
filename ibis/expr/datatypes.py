@@ -272,9 +272,24 @@ Double = Float64
 
 
 def check_precision(self, attr, precision):
+    if not precision:
+        raise ValueError('Decimal type {!r} cannot be 0'.format(attr))
     if precision < 0:
-        raise ValueError('Decimal type precision cannot be negative')
+        raise ValueError('Decimal type {!r} cannot be negative'.format(attr))
 
+
+def check_scale(self, attr, scale):
+    if scale < 0:
+        raise ValueError('Decimal type scale cannot be negative')
+
+    precision = self.precision
+    if precision < scale:
+        raise ValueError(
+            'Decimal type precision must be greater than or equal to '
+            'scale. Got precision={:d} and scale={:d}'.format(
+                precision, scale
+            )
+        )
 
 
 @datatype
@@ -297,25 +312,6 @@ class Decimal(DataType):
 
     scalar = ir.DecimalScalar
     column = ir.DecimalColumn
-
-    def __init__(
-        self, precision: int, scale: int, nullable: bool = True
-    ) -> None:
-        if not isinstance(precision, numbers.Integral):
-            raise TypeError('Decimal type precision must be an integer')
-        if not isinstance(scale, numbers.Integral):
-            raise TypeError('Decimal type scale must be an integer')
-        if not precision:
-            raise ValueError('Decimal type precision cannot be zero')
-        if scale < 0:
-            raise ValueError('Decimal type scale cannot be negative')
-        if precision < scale:
-            raise ValueError(
-                'Decimal type precision must be greater than or equal to '
-                'scale. Got precision={:d} and scale={:d}'.format(
-                    precision, scale
-                )
-            )
 
     @property
     def largest(self) -> 'Decimal':
@@ -470,8 +466,8 @@ class Set(Variadic):
 
 @datatype
 class Enum(DataType):
-    rep_type = attr.ib(converter=lambda value: dtype(x))
-    value_type = attr.ib(converter=lambda value: dtype(x))
+    rep_type = attr.ib(converter=lambda value: dtype(value))
+    value_type = attr.ib(converter=lambda value: dtype(value))
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
     )
@@ -482,8 +478,8 @@ class Enum(DataType):
 
 @datatype
 class Map(Variadic):
-    key_type = attr.ib(converter=lambda x: dtype(x))
-    value_type = attr.ib(converter=lambda x: dtype(x))
+    key_type = attr.ib(converter=lambda value: dtype(value))
+    value_type = attr.ib(converter=lambda value: dtype(value))
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
     )
