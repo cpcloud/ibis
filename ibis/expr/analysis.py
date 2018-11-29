@@ -205,19 +205,20 @@ def find_immediate_parent_tables(expr):
     UnboundTable[table]
       name: t
       schema:
-        a : int64
+        a : Int64(nullable=True)
     Selection[table]
       table:
         Table: ref_0
       selections:
         Table: ref_0
-        foo = Add[int64*]
+        foo = Add[Int64(nullable=True)*]
           left:
-            a = Column[int64*] 'a' from table
+            a = Column[Int64(nullable=True)*] 'a' from table
               ref_0
           right:
-            Literal[int8]
+            Literal[Int8(nullable=True)]
               1
+
     """
     def finder(expr):
         if isinstance(expr, ir.TableExpr):
@@ -958,26 +959,26 @@ def find_source_table(expr):
     UnboundTable[table]
       name: t
       schema:
-        a : float64
-        b : string
+        a : Float64(nullable=True)
+        b : String(nullable=True)
     Selection[table]
       table:
         Table: ref_0
       selections:
         Table: ref_0
-        c = Add[float64*]
+        c = Add[Float64(nullable=True)*]
           left:
-            a = Column[float64*] 'a' from table
+            a = Column[Float64(nullable=True)*] 'a' from table
               ref_0
           right:
-            Literal[float64]
+            Literal[Float64(nullable=True)]
               42.0
     >>> find_source_table(expr)
     UnboundTable[table]
       name: t
       schema:
-        a : float64
-        b : string
+        a : Float64(nullable=True)
+        b : String(nullable=True)
     >>> left = ibis.table([('a', 'int64'), ('b', 'string')])
     >>> right = ibis.table([('c', 'int64'), ('d', 'string')])
     >>> result = left.inner_join(right, left.a == right.c)
@@ -985,6 +986,7 @@ def find_source_table(expr):
     Traceback (most recent call last):
     ...
     NotImplementedError: More than one base table not implemented
+
     """
     def finder(expr):
         if isinstance(expr, ir.TableExpr):
@@ -1025,28 +1027,28 @@ def flatten_predicate(expr):
     UnboundTable[table]
       name: t
       schema:
-        a : int64
-        b : string
-    Equals[boolean*]
+        a : Int64(nullable=True)
+        b : String(nullable=True)
+    Equals[Boolean(nullable=True)*]
       left:
-        a = Column[int64*] 'a' from table
+        a = Column[Int64(nullable=True)*] 'a' from table
           ref_0
       right:
-        Literal[int64]
+        Literal[Int64(nullable=True)]
           1
     >>> predicates[1]  # doctest: +NORMALIZE_WHITESPACE
     ref_0
     UnboundTable[table]
       name: t
       schema:
-        a : int64
-        b : string
-    Equals[boolean*]
+        a : Int64(nullable=True)
+        b : String(nullable=True)
+    Equals[Boolean(nullable=True)*]
       left:
-        b = Column[string*] 'b' from table
+        b = Column[String(nullable=True)*] 'b' from table
           ref_0
       right:
-        Literal[string]
+        Literal[String(nullable=True)]
           foo
 
     """
@@ -1075,8 +1077,8 @@ def is_analytic(expr, exclude_windows=False):
     return _is_analytic(expr.op())
 
 
-def is_reduction(expr):
-    """Check whether an expression is a reduction or not
+def is_reduction(expr: ir.Expr) -> bool:
+    """Check whether an expression is a reduction or not.
 
     Aggregations yield typed scalar expressions, since the result of an
     aggregation is a single value. When creating an table expression
@@ -1096,11 +1098,9 @@ def is_reduction(expr):
 
     Parameters
     ----------
-    expr : ir.Expr
+    expr
+        An ibis expression.
 
-    Returns
-    -------
-    check output : bool
     """
     def has_reduction(op):
         if getattr(op, '_reduction', False):
