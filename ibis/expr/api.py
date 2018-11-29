@@ -6,7 +6,7 @@ import functools
 import operator
 import warnings
 
-from typing import Sequence, Union
+from typing import Optional, Sequence, Union
 
 import attr
 import toolz
@@ -16,6 +16,7 @@ import dateutil.parser
 import pandas as pd
 
 import ibis
+import ibis.client
 import ibis.util as util
 import ibis.common as com
 import ibis.expr.types as ir
@@ -141,22 +142,25 @@ def schema(pairs=None, names=None, types=None):
         return Schema(names, types)
 
 
-def table(schema, name=None):
-    """
-    Create an unbound Ibis table for creating expressions. Cannot be executed
-    without being bound to some physical table.
+def table(schema, name: Optional[str] = None) -> ir.TableExpr:
+    """Create an Ibis table that is not bound to a client.
 
-    Useful for testing
+    Cannot be executed without being bound to some physical table.
 
     Parameters
     ----------
-    schema : ibis Schema
-    name : string, default None
-      Name for table
+    schema : ibis.expr.schema.Schema
+    name : str, default None
+        Name for table
+
+    Notes
+    -----
+    Useful for testing
 
     Returns
     -------
-    table : TableExpr
+    TableExpr
+
     """
     if not isinstance(schema, Schema):
         if isinstance(schema, dict):
@@ -168,15 +172,13 @@ def table(schema, name=None):
     return node.to_expr()
 
 
-def desc(expr):
-    """
-    Create a sort key (when used in sort_by) by the passed array expression or
-    column name.
+def desc(key):
+    """Create a descending sort key from `key`.
 
     Parameters
     ----------
-    expr : array expression or string
-      Can be a column name in the table being sorted
+    expr : column expression or string
+        Can be a column name in the table being sorted
 
     Examples
     --------
@@ -184,24 +186,14 @@ def desc(expr):
     >>> t = ibis.table([('g', 'string')])
     >>> result = t.group_by('g').size('count').sort_by(ibis.desc('count'))
     """
-    if not isinstance(expr, Expr):
-        return ops.DeferredSortKey(expr, ascending=False)
+    if not isinstance(key, Expr):
+        return ops.DeferredSortKey(key, ascending=False)
     else:
-        return ops.SortKey(expr, ascending=False).to_expr()
+        return ops.SortKey(key, ascending=False).to_expr()
 
 
-def timestamp(value):
-    """
-    Returns a timestamp literal if value is likely coercible to a timestamp
-
-    Parameters
-    ----------
-    value : timestamp value as string
-
-    Returns
-    --------
-    result : TimestampScalar
-    """
+def timestamp(value: Union[int, str, datetime.datetime]) -> ir.TimestampScalar:
+    """Construct a timestamp literal if `value` is coercible to a timestamp."""
     if isinstance(value, str):
         try:
             value = pd.Timestamp(value)
@@ -216,35 +208,15 @@ def timestamp(value):
     return literal(value, type=dt.timestamp)
 
 
-def date(value):
-    """
-    Returns a date literal if value is likely coercible to a date
-
-    Parameters
-    ----------
-    value : date value as string
-
-    Returns
-    --------
-    result : TimeScalar
-    """
+def date(value: Union[datetime.date, str]) -> ir.DateScalar:
+    """Construct a date literal if `value` is coercible to a date."""
     if isinstance(value, str):
         value = to_date(value)
     return literal(value, type=dt.date)
 
 
-def time(value):
-    """
-    Returns a time literal if value is likely coercible to a time
-
-    Parameters
-    ----------
-    value : time value as string
-
-    Returns
-    --------
-    result : TimeScalar
-    """
+def time(value: Union[datetime.time, str]) -> ir.TimeScalar:
+    """Construct a time literal if `value` is coercible to a time."""
     if isinstance(value, str):
         value = to_time(value)
     return literal(value, type=dt.time)
@@ -253,8 +225,7 @@ def time(value):
 def interval(value=None, unit='s', years=None, quarters=None, months=None,
              weeks=None, days=None, hours=None, minutes=None, seconds=None,
              milliseconds=None, microseconds=None, nanoseconds=None):
-    """
-    Returns an interval literal
+    """Construct an interval literal.
 
     Parameters
     ----------
@@ -273,7 +244,7 @@ def interval(value=None, unit='s', years=None, quarters=None, months=None,
 
     Returns
     --------
-    result : IntervalScalar
+    IntervalScalar
     """
     if value is not None:
         if isinstance(value, datetime.timedelta):
@@ -338,7 +309,7 @@ nanosecond = _timedelta('nanosecond', 'ns')
 
 
 schema.__doc__ = """\
-Validate and return an Ibis Schema object
+Validate and return an Ibis Schema object.
 
 {0}
 
@@ -367,7 +338,8 @@ schema : Schema
 
 
 def case():
-    """
+    """Start a case expression.
+
     Similar to the .case method on array expressions, create a case builder
     that accepts self-contained boolean expressions (as opposed to expressions
     which are to be equality-compared with a fixed value expression)
@@ -393,32 +365,25 @@ def case():
     return ops.SearchedCaseBuilder()
 
 
-def now():
-    """
-    Compute the current timestamp
-
-    Returns
-    -------
-    now : Timestamp scalar
-    """
+def now() -> ir.TimestampScalar:
+    """Compute the timestamp of the current date and time."""
     return ops.TimestampNow().to_expr()
 
 
-def row_number():
-    """Analytic function for the current row number, starting at 0.
+def row_number() -> ir.IntegerColumn:
+    """Compute the current row number, starting at 0.
 
-    This function does not require an ORDER BY clause, however, without an
-    ORDER BY clause the order of the result is nondeterministic.
+    This function does not require an ``ORDER BY`` clause, however, without an
+    ``ORDER BY`` clause the order of the result is nondeterministic.
 
     Returns
     -------
-    row_number : IntArray
+    IntegerColumn
     """
     return ops.RowNumber().to_expr()
 
 
 e = ops.E().to_expr()
-
 pi = ops.Pi().to_expr()
 
 
@@ -438,18 +403,8 @@ def _unary_op(name, klass, doc=None):
     return f
 
 
-def negate(arg):
-    """
-    Negate a numeric expression
-
-    Parameters
-    ----------
-    arg : numeric value expression
-
-    Returns
-    -------
-    negated : type of caller
-    """
+def negate(arg: ir.NumericValue) -> ir.NumericValue:
+    """Negate a numeric expression."""
     op = arg.op()
     if hasattr(op, 'negate'):
         result = op.negate()
@@ -459,15 +414,12 @@ def negate(arg):
     return result.to_expr()
 
 
-def count(expr, where=None):
-    """
-    Compute cardinality / sequence size of expression. For array expressions,
-    the count is excluding nulls. For tables, it's the size of the entire
-    table.
+def count(expr, where=None) -> ir.IntegerScalar:
+    """Compute cardinality / sequence size of expression.
 
-    Returns
-    -------
-    counts : int64 type
+    For column expressions, the count is excluding nulls. For tables, it's the
+    size of the entire table.
+
     """
     op = expr.op()
     if isinstance(op, ops.DistinctColumn):
@@ -478,27 +430,17 @@ def count(expr, where=None):
     return result.name('count')
 
 
-def group_concat(arg, sep=',', where=None):
-    """
-    Concatenate values using the indicated separator (comma by default) to
-    produce a string
-
-    Parameters
-    ----------
-    arg : array expression
-    sep : string, default ','
-    where : bool, default None
-
-    Returns
-    -------
-    concatenated : string scalar
-    """
+def group_concat(
+    arg: ir.StringColumn,
+    sep: str = ',',
+    where: Optional[ir.BooleanValue] = None
+) -> ir.StringScalar:
+    """Concatenate values using the indicated separator to produce a string."""
     return ops.GroupConcat(arg, sep, where).to_expr()
 
 
-def arbitrary(arg, where=None, how='first'):
-    """
-    Selects the first / last non-null value in a column
+def arbitrary(arg, where=None, how='first') -> ir.ScalarExpr:
+    """Selects the first / last non-null value in a column.
 
     Parameters
     ----------
@@ -631,41 +573,30 @@ cast_expr : ValueExpr
 """.format(_data_type_docs)
 
 
-def typeof(arg):
-    """
-    Return the data type of the argument according to the current backend
-
-    Returns
-    -------
-    typeof_arg : string
-    """
+def typeof(arg: ir.ValueExpr) -> ir.StringValue:
+    """Return the data type of the argument."""
     return ops.TypeOf(arg).to_expr()
 
 
-def hash(arg, how='fnv'):
-    """
-    Compute an integer hash value for the indicated value expression.
+def hash(arg: ir.ValueExpr, how: str = 'fnv') -> ir.IntegerValue:
+    """Compute an integer hash value for the indicated value expression.
 
     Parameters
     ----------
-    arg : value expression
-    how : {'fnv'}, default 'fnv'
-      Hash algorithm to use
+    arg
+    how
+        Hash algorithm to use
 
-    Returns
-    -------
-    hash_value : int64 expression
     """
     return ops.Hash(arg, how).to_expr()
 
 
-def fillna(arg, fill_value):
-    """
-    Replace any null values with the indicated fill value
+def fillna(arg: ir.ValueExpr, fill_value: ir.ValueExpr) -> ir.ValueExpr:
+    """Replace any null values with the indicated fill value.
 
     Parameters
     ----------
-    fill_value : scalar / array value or expression
+    fill_value
 
     Examples
     --------
@@ -674,9 +605,6 @@ def fillna(arg, fill_value):
     >>> result = table.col.fillna(5)
     >>> result2 = table.col.fillna(table.other_col * 3)
 
-    Returns
-    -------
-    filled : type of caller
     """
     return ops.IfNull(arg, fill_value).to_expr()
 
@@ -700,6 +628,7 @@ def coalesce(*args):
     Returns
     -------
     coalesced : type of first provided argument
+
     """
     return ops.Coalesce(args).to_expr()
 
@@ -712,6 +641,7 @@ def greatest(*args):
     Returns
     -------
     greatest : type depending on arguments
+
     """
     return ops.Greatest(args).to_expr()
 
@@ -947,36 +877,36 @@ def _case(arg):
     UnboundTable[table]
       name: t
       schema:
-        string_col : string
+        string_col : String(nullable=True)
     <BLANKLINE>
-    SimpleCase[string*]
+    SimpleCase[String(nullable=True)*]
       base:
-        string_col = Column[string*] 'string_col' from table
+        string_col = Column[String(nullable=True)*] 'string_col' from table
           ref_0
       cases:
-        Literal[string]
+        Literal[String(nullable=True)]
           a
-        Literal[string]
+        Literal[String(nullable=True)]
           b
       results:
-        Literal[string]
+        Literal[String(nullable=True)]
           an a
-        Literal[string]
+        Literal[String(nullable=True)]
           a b
       default:
-        Literal[string]
+        Literal[String(nullable=True)]
           null or (not a and not b)
     """
     return ops.SimpleCaseBuilder(arg)
 
 
 def cases(arg, case_result_pairs, default=None):
-    """
-    Create a case expression in one shot.
+    """Create a case expression in one shot.
 
     Returns
     -------
     case_expr : SimpleCase
+
     """
     builder = arg.case()
     for case, result in case_result_pairs:
@@ -1045,8 +975,7 @@ def ntile(arg, buckets):
 
 
 def nth(arg, k):
-    """
-    Analytic operation computing nth value from start of sequence
+    """Analytic operation computing nth value from start of sequence.
 
     Parameters
     ----------
@@ -1057,15 +986,17 @@ def nth(arg, k):
     Returns
     -------
     nth : type of argument
+
     """
     return ops.NthValue(arg, k).to_expr()
 
 
 def distinct(arg):
-    """
-    Compute set of unique values occurring in this array. Can not be used
-    in conjunction with other array expressions from the same context
-    (because it's a cardinality-modifying pseudo-reduction).
+    """Compute set of unique values occurring in a column.
+
+    Can not be used in conjunction with other array expressions from the same
+    context (because it's a cardinality-modifying pseudo-reduction).
+
     """
     op = ops.DistinctColumn(arg)
     return op.to_expr()
@@ -1102,6 +1033,7 @@ def _generic_summary(arg, exact_nunique=False, prefix=None):
     Returns
     -------
     summary : (count, # nulls, nunique)
+
     """
     metrics = [
         arg.count(),
@@ -1131,6 +1063,7 @@ def _numeric_summary(arg, exact_nunique=False, prefix=None):
     Returns
     -------
     summary : (count, # nulls, min, max, sum, mean, nunique)
+
     """
     metrics = [
         arg.count(),
@@ -3314,7 +3247,9 @@ _table_methods = dict(
 _add_methods(ir.TableExpr, _table_methods)
 
 
-def prevent_rewrite(expr, client=None):
+def prevent_rewrite(
+    expr: ir.TableExpr, client: Optional[ibis.client.Client] = None
+) -> ir.TableExpr:
     """Prevent optimization from happening below `expr`.
 
     Parameters
@@ -3328,7 +3263,8 @@ def prevent_rewrite(expr, client=None):
 
     Returns
     -------
-    sql_query_result : ir.TableExpr
+    ir.TableExpr
+
     """
     if client is None:
         client, = ibis.client.find_backends(expr)
