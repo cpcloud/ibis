@@ -1,6 +1,8 @@
+import abc
 import builtins
 import collections
 import datetime
+import enum
 import functools
 import numbers
 import re
@@ -17,6 +19,7 @@ from typing import (
     Sequence,
     Set as Set_,
     Tuple,
+    Type,
     TypeVar,
     Union,
 )
@@ -35,7 +38,7 @@ datatype = attr.s(slots=True, frozen=True, cache_hash=True)
 
 
 @datatype
-class DataType:
+class DataType(abc.ABC):
     def equals(
         self, other: 'DataType', cache: Optional[Mapping[Any_, bool]] = None
     ) -> bool:
@@ -53,9 +56,15 @@ class DataType:
     def column_type(self):
         return functools.partial(self.column, dtype=self)
 
+    @property
+    @abc.abstractmethod
+    def nullable(self) -> bool:
+        ...
+
 
 @datatype
 class Any(DataType):
+    """A data type representing any value."""
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
     )
@@ -63,6 +72,7 @@ class Any(DataType):
 
 @datatype
 class Primitive(DataType):
+    """A data type for primitive values."""
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
     )
@@ -70,6 +80,7 @@ class Primitive(DataType):
 
 @datatype
 class Null(DataType):
+    """The null data type."""
     nullable = True
 
     scalar = ir.NullScalar
@@ -78,11 +89,13 @@ class Null(DataType):
 
 @datatype
 class Variadic(DataType):
-    pass
+    """A data type with variable length."""
 
 
 @datatype
 class Boolean(Primitive):
+    """A data type representing ``True`` and ``False``."""
+
     scalar = ir.BooleanScalar
     column = ir.BooleanColumn
 
@@ -92,6 +105,8 @@ Bounds = NamedTuple('Bounds', [('lower', int), ('upper', int)])
 
 @datatype
 class Integer(Primitive):
+    """An abstract integer data type."""
+
     scalar = ir.IntegerScalar
     column = ir.IntegerColumn
 
@@ -123,7 +138,7 @@ class String(Variadic):
 
 @datatype
 class Binary(Variadic):
-    """A type representing a blob of bytes.
+    """A type representing a sequence of bytes.
 
     Notes
     -----
@@ -144,18 +159,24 @@ class Binary(Variadic):
 
 @datatype
 class Date(Primitive):
+    """A date data type."""
+
     scalar = ir.DateScalar
     column = ir.DateColumn
 
 
 @datatype
 class Time(Primitive):
+    """A time data type."""
+
     scalar = ir.TimeScalar
     column = ir.TimeColumn
 
 
 @datatype
 class Timestamp(DataType):
+    """A timestamp data type."""
+
     timezone = attr.ib(
         validator=attr.validators.optional(attr.validators.instance_of(str)),
         default=None,
@@ -170,12 +191,14 @@ class Timestamp(DataType):
 
 @datatype
 class SignedInteger(Integer):
+    """A signed integer data type."""
+
     @property
-    def largest(self):
+    def largest(self) -> 'SignedInteger':
         return int64
 
     @property
-    def bounds(self):
+    def bounds(self) -> Bounds:
         exp = self._nbytes * 8 - 1
         upper = (1 << exp) - 1
         return Bounds(lower=~upper, upper=upper)
@@ -183,12 +206,14 @@ class SignedInteger(Integer):
 
 @datatype
 class UnsignedInteger(Integer):
+    """An unsigned integer data type."""
+
     @property
-    def largest(self):
+    def largest(self) -> 'UnsignedInteger':
         return uint64
 
     @property
-    def bounds(self):
+    def bounds(self) -> Bounds:
         exp = self._nbytes * 8 - 1
         upper = 1 << exp
         return Bounds(lower=0, upper=upper)
@@ -196,11 +221,13 @@ class UnsignedInteger(Integer):
 
 @datatype
 class Floating(Primitive):
+    """An abstract floating point data type."""
+
     scalar = ir.FloatingScalar
     column = ir.FloatingColumn
 
     @property
-    def largest(self):
+    def largest(self) -> 'Floating':
         return float64
 
     @property
@@ -213,56 +240,78 @@ class Floating(Primitive):
 
 @datatype
 class Int8(SignedInteger):
+    """An 8-bit signed integer type."""
+
     _nbytes = 1
 
 
 @datatype
 class Int16(SignedInteger):
+    """A 16-bit signed integer type."""
+
     _nbytes = 2
 
 
 @datatype
 class Int32(SignedInteger):
+    """A 32-bit signed integer type."""
+
     _nbytes = 4
 
 
 @datatype
 class Int64(SignedInteger):
+    """A 64-bit signed integer type."""
+
     _nbytes = 8
 
 
 @datatype
 class UInt8(UnsignedInteger):
+    """An 8-bit unsigned integer type."""
+
     _nbytes = 1
 
 
 @datatype
 class UInt16(UnsignedInteger):
+    """A 16-bit unsigned integer type."""
+
     _nbytes = 2
 
 
 @datatype
 class UInt32(UnsignedInteger):
+    """A 32-bit unsigned integer type."""
+
     _nbytes = 4
 
 
 @datatype
 class UInt64(UnsignedInteger):
+    """A 64-bit unsigned integer type."""
+
     _nbytes = 8
 
 
 @datatype
 class Float16(Floating):
+    """A 16-bit floating point type."""
+
     _nbytes = 2
 
 
 @datatype
 class Float32(Floating):
+    """A 32-bit floating point type."""
+
     _nbytes = 4
 
 
 @datatype
 class Float64(Floating):
+    """A 64-bit floating point type."""
+
     _nbytes = 8
 
 
@@ -271,14 +320,16 @@ Float = Float32
 Double = Float64
 
 
-def check_precision(self, attr, precision):
+def check_precision(self, attr: str, precision: int) -> None:
+    """Check that the value of `precision` is valid."""
     if not precision:
         raise ValueError('Decimal type {!r} cannot be 0'.format(attr))
     if precision < 0:
         raise ValueError('Decimal type {!r} cannot be negative'.format(attr))
 
 
-def check_scale(self, attr, scale):
+def check_scale(self, attr: str, scale: int) -> None:
+    """Check that the value of `scale` is valid."""
     if scale < 0:
         raise ValueError('Decimal type scale cannot be negative')
 
@@ -294,6 +345,8 @@ def check_scale(self, attr, scale):
 
 @datatype
 class Decimal(DataType):
+    """A fixed-point decimal number data type."""
+
     precision = attr.ib(
         validator=[
             attr.validators.instance_of(numbers.Integral),
@@ -336,6 +389,8 @@ INTERVAL_UNITS = dict(
 
 @datatype
 class Interval(DataType):
+    """A temporal interval data type."""
+
     unit = attr.ib(
         validator=attr.validators.in_(INTERVAL_UNITS), default='s'
     )
@@ -352,17 +407,19 @@ class Interval(DataType):
     column = ir.IntervalColumn
 
     @property
-    def bounds(self):
+    def bounds(self) -> Bounds:
         return self.value_type.bounds
 
     @property
-    def resolution(self):
-        """Unit's name"""
+    def resolution(self) -> str:
+        """Return the name of the unit."""
         return INTERVAL_UNITS[self.unit]
 
 
 @datatype
 class Category(DataType):
+    """A categorical data type."""
+
     cardinality = attr.ib(
         validator=attr.validators.optional(attr.validators.instance_of(int)),
         default=None,
@@ -377,10 +434,11 @@ class Category(DataType):
     def to_integer_type(self) -> Integer:
         # TODO: this should be removed I guess
         cardinality = self.cardinality
-        return int64 if cardinality else infer(self.cardinality)
+        return int64 if cardinality is not None else infer(self.cardinality)
 
 
 def check_names(self, attr: str, names: Tuple) -> None:
+    """Check that the names of a Struct data type's fields are strings."""
     invalid_types = {
         name: type(name) for name in names if not isinstance(name, str)
     }
@@ -390,12 +448,14 @@ def check_names(self, attr: str, names: Tuple) -> None:
         )
 
 
-def check_non_empty_sequence(self, attr: str, seq: Tuple) -> None:
+def check_non_empty_sequence(self, attr: str, seq: Sequence) -> None:
+    """Check that `seq` is not empty."""
     if not seq:
         raise ValueError('Argument {!r} must be a non-empty sequence')
 
 
-def check_names_and_types(self, attr: str, types: Tuple) -> None:
+def check_names_and_types(self, attr: str, types: Sequence[DataType]) -> None:
+    """Check that the names and types of Struct data type are equal length."""
     if len(self.names) != len(types):
         raise ValueError('names and types must have the same length')
 
@@ -421,29 +481,34 @@ class Struct(DataType):
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
     )
+    pairs = attr.ib(init=False)
+
+    def __attrs_post_init__(self) -> None:
+        object.__setattr__(
+            self, 'pairs', collections.OrderedDict(zip(self.names, self.types))
+        )
 
     scalar = ir.StructScalar
     column = ir.StructColumn
 
     @classmethod
     def from_tuples(
-        self,
+        cls: Type['Struct'],
         pairs: Sequence[Tuple[str, Union[str, DataType]]],
         nullable: bool = True,
     ) -> 'Struct':
+        """Construct a Struct data type from pairs."""
         names, types = zip(*pairs)
-        return Struct(names, map(dtype, types), nullable=nullable)
+        return cls(names, map(dtype, types), nullable=nullable)
 
-    @property
-    def pairs(self) -> Mapping:
-        return collections.OrderedDict(zip(self.names, self.types))
-
-    def __getitem__(self, key: str) -> DataType:
-        return self.pairs[key]
+    def __getitem__(self, field: str) -> DataType:
+        """Return the data type associated with `field`."""
+        return self.pairs[field]
 
 
 @datatype
 class Array(Variadic):
+    """An array data type."""
     value_type = attr.ib(converter=lambda value: dtype(value))
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
@@ -455,6 +520,7 @@ class Array(Variadic):
 
 @datatype
 class Set(Variadic):
+    """A set data type."""
     value_type = attr.ib(converter=lambda value: dtype(value))
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
@@ -466,10 +532,11 @@ class Set(Variadic):
 
 @datatype
 class Enum(DataType):
+    """An enum data type."""
     rep_type = attr.ib(converter=lambda value: dtype(value))
     value_type = attr.ib(converter=lambda value: dtype(value))
     nullable = attr.ib(
-        validator=attr.validators.instance_of(bool), default=True
+        validator=attr.validators.instance_of(bool), default=True,
     )
 
     scalar = ir.EnumScalar
@@ -478,6 +545,7 @@ class Enum(DataType):
 
 @datatype
 class Map(Variadic):
+    """A map data type."""
     key_type = attr.ib(converter=lambda value: dtype(value))
     value_type = attr.ib(converter=lambda value: dtype(value))
     nullable = attr.ib(
@@ -505,6 +573,7 @@ def from_ibis_dtype(value: DataType) -> DataType:
 
 @dtype.register(str)
 def from_string(value: str) -> DataType:
+    """Construct a :class:`~ibis.expr.datatypes.DataType` from a string."""
     try:
         return TypeParser(value).parse()
     except SyntaxError:
@@ -515,6 +584,7 @@ def from_string(value: str) -> DataType:
 
 @dtype.register(list)
 def from_list(values: List[Any_]) -> Array:
+    """Construct a :class:`~ibis.expr.datatypes.DataType` from a list."""
     if not values:
         return Array(null)
     return Array(highest_precedence(map(dtype, values)))
@@ -522,6 +592,7 @@ def from_list(values: List[Any_]) -> Array:
 
 @dtype.register(collections.Set)
 def from_set(values: Set_) -> Set:
+    """Construct a :class:`~ibis.expr.datatypes.DataType` from a set."""
     if not values:
         return Set(null)
     return Set(highest_precedence(map(dtype, values)))
@@ -584,45 +655,44 @@ _primitive_types = [
 ]  # type: List[Tuple[str, DataType]]
 
 
-class Tokens:
-    """Class to hold tokens for lexing."""
+class AutoNumber(enum.Enum):
+    """Auto numbering enum, from the Python 3.5 enum module documentation."""
 
-    __slots__ = ()
-
-    ANY = 0
-    NULL = 1
-    PRIMITIVE = 2
-    DECIMAL = 3
-    VARCHAR = 4
-    CHAR = 5
-    ARRAY = 6
-    MAP = 7
-    STRUCT = 8
-    INTEGER = 9
-    FIELD = 10
-    COMMA = 11
-    COLON = 12
-    LPAREN = 13
-    RPAREN = 14
-    LBRACKET = 15
-    RBRACKET = 16
-    STRARG = 17
-    TIMESTAMP = 18
-    TIME = 19
-    INTERVAL = 20
-    SET = 21
-
-    @staticmethod
-    def name(value):
-        return _token_names[value]
+    def __new__(cls):
+        value = len(cls.__members__) + 1
+        obj = object.__new__(cls)
+        obj._value_ = value
+        return obj
 
 
-_token_names = dict(
-    (getattr(Tokens, n), n) for n in dir(Tokens) if n.isalpha() and n.isupper()
-)
+class Tokens(AutoNumber):
+    """Enum to hold tokens for lexing."""
+
+    ANY = ()
+    NULL = ()
+    PRIMITIVE = ()
+    DECIMAL = ()
+    VARCHAR = ()
+    CHAR = ()
+    ARRAY = ()
+    MAP = ()
+    STRUCT = ()
+    INTEGER = ()
+    FIELD = ()
+    COMMA = ()
+    COLON = ()
+    LPAREN = ()
+    RPAREN = ()
+    LBRACKET = ()
+    RBRACKET = ()
+    STRARG = ()
+    TIMESTAMP = ()
+    TIME = ()
+    INTERVAL = ()
+    SET = ()
 
 
-Token = collections.namedtuple('Token', ('type', 'value'))
+Token = NamedTuple('Token', [('type', Tokens), ('value', Any_)])
 
 
 # Adapted from tokenize.String
@@ -781,20 +851,19 @@ class TypeParser:
     def _advance(self) -> None:
         self.tok, self.nexttok = self.nexttok, next(self.tokens, None)
 
-    def _accept(self, toktype: int) -> bool:
+    def _accept(self, toktype: Tokens) -> bool:
         if self.nexttok is not None and self.nexttok.type == toktype:
             self._advance()
-            assert (
-                self.tok is not None
-            ), 'self.tok should not be None when _accept succeeds'
+            assert self.tok is not None, \
+                'self.tok should not be None when _accept succeeds'
             return True
         return False
 
-    def _expect(self, toktype: int) -> None:
+    def _expect(self, toktype: Tokens) -> None:
         if not self._accept(toktype):
             raise SyntaxError(
                 'Expected {} after {!r} in {!r}'.format(
-                    Tokens.name(toktype),
+                    toktype,
                     getattr(self.tok, 'value', self.tok),
                     self.text,
                 )
@@ -1020,7 +1089,7 @@ def infer_struct(value: Mapping[str, Any_]) -> Struct:
     """Infer the :class:`~ibis.expr.datatypes.Struct` type of `value`."""
     if not value:
         raise TypeError('Empty struct type not supported')
-    return Struct(list(value.keys()), list(map(infer, value.values())))
+    return Struct(value.keys(), map(infer, value.values()))
 
 
 @infer.register(collections.abc.Mapping)
@@ -1076,6 +1145,11 @@ def infer_interval(value: datetime.timedelta) -> Interval:
 @infer.register(str)
 def infer_string(value: str) -> String:
     return string
+
+
+@infer.register(bytes)
+def infer_bytes(value: bytes) -> Binary:
+    return binary
 
 
 @infer.register(builtins.float)
