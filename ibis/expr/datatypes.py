@@ -481,7 +481,7 @@ class Struct(DataType):
     nullable = attr.ib(
         validator=attr.validators.instance_of(bool), default=True
     )
-    pairs = attr.ib(init=False)
+    pairs = attr.ib(init=False, hash=False)
 
     def __attrs_post_init__(self) -> None:
         object.__setattr__(
