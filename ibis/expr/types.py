@@ -4,6 +4,8 @@ import webbrowser
 
 from typing import Iterable, Tuple
 
+import attr
+
 import ibis
 import ibis.util as util
 import ibis.common as com
@@ -932,6 +934,7 @@ def param(type):
     return ops.ScalarParameter(dt.dtype(type)).to_expr()
 
 
+@attr.s(slots=True, frozen=True, cache_hash=True)
 class UnnamedMarker:
     pass
 
