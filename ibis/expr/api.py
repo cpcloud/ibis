@@ -2618,27 +2618,27 @@ def cross_join(*tables, **kwargs):
     UnboundTable[table]
       name: a
       schema:
-        a : int64
+        a : Int64(nullable=True)
     ref_1
     UnboundTable[table]
       name: b
       schema:
-        b : int64
+        b : Int64(nullable=True)
     ref_2
     UnboundTable[table]
       name: c
       schema:
-        c : int64
+        c : Int64(nullable=True)
     ref_3
     UnboundTable[table]
       name: d
       schema:
-        d : int64
+        d : Int64(nullable=True)
     ref_4
     UnboundTable[table]
       name: e
       schema:
-        e : int64
+        e : Int64(nullable=True)
     CrossJoin[table]
       left:
         Table: ref_0
@@ -2983,22 +2983,22 @@ def mutate(table, new_columns=None, **mutations):
     UnboundTable[table]
       name: t
       schema:
-        foo : float64
-        bar : float64
+        foo : Float64(nullable=True)
+        bar : Float64(nullable=True)
     <BLANKLINE>
     Selection[table]
       table:
         Table: ref_0
       selections:
         Table: ref_0
-        baz = Literal[int8]
+        baz = Literal[Int8(nullable=True)]
           5
-        qux = Add[float64*]
+        qux = Add[Float64(nullable=True)*]
           left:
-            foo = Column[float64*] 'foo' from table
+            foo = Column[Float64(nullable=True)*] 'foo' from table
               ref_0
           right:
-            bar = Column[float64*] 'bar' from table
+            bar = Column[Float64(nullable=True)*] 'bar' from table
               ref_0
 
     Using the :meth:`ibis.expr.types.Expr.name` method to name the new columns
@@ -3073,21 +3073,21 @@ def projection(table, exprs):
     UnboundTable[table]
       name: t
       schema:
-        a : int64
-        b : float64
+        a : Int64(nullable=True)
+        b : Float64(nullable=True)
     <BLANKLINE>
     Selection[table]
       table:
         Table: ref_0
       selections:
-        a = Column[int64*] 'a' from table
+        a = Column[Int64(nullable=True)*] 'a' from table
           ref_0
-        b_plus_1 = Add[float64*]
+        b_plus_1 = Add[Float64(nullable=True)*]
           left:
-            b = Column[float64*] 'b' from table
+            b = Column[Float64(nullable=True)*] 'b' from table
               ref_0
           right:
-            Literal[int8]
+            Literal[Int8(nullable=True)]
               1
     >>> proj2 = t[t.a, (t.b + 1).name('b_plus_1')]
     >>> proj.equals(proj2)
@@ -3101,23 +3101,23 @@ def projection(table, exprs):
     UnboundTable[table]
       name: t
       schema:
-        a : int64
-        b : float64
+        a : Int64(nullable=True)
+        b : Float64(nullable=True)
     <BLANKLINE>
     Selection[table]
       table:
         Table: ref_0
       selections:
-        sum_a = WindowOp[int64*]
-          sum_a = Sum[int64]
-            a = Column[int64*] 'a' from table
+        sum_a = WindowOp[Int64(nullable=True)*]
+          sum_a = Sum[Int64(nullable=True)]
+            a = Column[Int64(nullable=True)*] 'a' from table
               ref_0
             where:
               None
           <ibis.expr.window.Window object at 0x...>
-        mean_b = WindowOp[float64*]
-          mean_b = Mean[float64]
-            b = Column[float64*] 'b' from table
+        mean_b = WindowOp[Float64(nullable=True)*]
+          mean_b = Mean[Float64(nullable=True)]
+            b = Column[Float64(nullable=True)*] 'b' from table
               ref_0
             where:
               None

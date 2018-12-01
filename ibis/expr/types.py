@@ -138,19 +138,19 @@ class Expr:
         UnboundTable[table]
           name: t
           schema:
-            a : int64
-            b : string
-        a = Multiply[int64*]
+            a : Int64(nullable=True)
+            b : String(nullable=True)
+        a = Multiply[Int64(nullable=True)*]
           left:
-            a = Add[int64*]
+            a = Add[Int64(nullable=True)*]
               left:
-                a = Column[int64*] 'a' from table
+                a = Column[Int64(nullable=True)*] 'a' from table
                   ref_0
               right:
-                Literal[int8]
+                Literal[Int8(nullable=True)]
                   1
           right:
-            Literal[int8]
+            Literal[Int8(nullable=True)]
               2
         >>> result2 = g(f(t.a))  # equivalent to the above
         >>> result1.equals(result2)
@@ -837,14 +837,15 @@ def literal(value, type=None):
     >>> import ibis
     >>> x = ibis.literal(42)
     >>> x.type()
-    int8
+    Int8(nullable=True)
     >>> y = ibis.literal(42, type='double')
     >>> y.type()
-    float64
+    Float64(nullable=True)
     >>> ibis.literal('foobar', type='int64')  # doctest: +ELLIPSIS
     Traceback (most recent call last):
       ...
     TypeError: Value 'foobar' cannot be safely coerced to int64
+
     """
     import ibis.expr.datatypes as dt
     import ibis.expr.operations as ops

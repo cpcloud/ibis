@@ -142,9 +142,9 @@ class GroupedTableExpr:
         UnboundTable[table]
           name: t
           schema:
-            foo : string
-            bar : string
-            baz : float64
+            foo : String(nullable=True)
+            bar : String(nullable=True)
+            baz : Float64(nullable=True)
         >>> expr = (t.group_by('foo')
         ...          .order_by(ibis.desc('bar'))
         ...          .mutate(qux=lambda x: x.baz.lag(),
@@ -154,26 +154,26 @@ class GroupedTableExpr:
         UnboundTable[table]
           name: t
           schema:
-            foo : string
-            bar : string
-            baz : float64
+            foo : String(nullable=True)
+            bar : String(nullable=True)
+            baz : Float64(nullable=True)
         Selection[table]
           table:
             Table: ref_0
           selections:
             Table: ref_0
-            qux = WindowOp[float64*]
-              qux = Lag[float64*]
-                baz = Column[float64*] 'baz' from table
+            qux = WindowOp[Float64(nullable=True)*]
+              qux = Lag[Float64(nullable=True)*]
+                baz = Column[Float64(nullable=True)*] 'baz' from table
                   ref_0
                 offset:
                   None
                 default:
                   None
               <ibis.expr.window.Window object at 0x...>
-            qux2 = WindowOp[float64*]
-              qux2 = Lead[float64*]
-                baz = Column[float64*] 'baz' from table
+            qux2 = WindowOp[Float64(nullable=True)*]
+              qux2 = Lead[Float64(nullable=True)*]
+                baz = Column[Float64(nullable=True)*] 'baz' from table
                   ref_0
                 offset:
                   None
