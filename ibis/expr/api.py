@@ -66,12 +66,10 @@ __all__ = (
     'cross_join',
     'cumulative_window',
     'date',
-    'day',
     'desc',
     'Expr',
     'expr_list',
     'greatest',
-    'hour',
     'ifelse',
     'infer_dtype',
     'infer_schema',
@@ -79,12 +77,7 @@ __all__ = (
     'join',
     'least',
     'literal',
-    'microsecond',
-    'millisecond',
-    'minute',
-    'month',
     'NA',
-    'nanosecond',
     'negate',
     'now',
     'null',
@@ -95,17 +88,14 @@ __all__ = (
     'row_number',
     'schema',
     'Schema',
-    'second',
     'sequence',
     'table',
     'time',
     'timestamp',
     'trailing_range_window',
     'trailing_window',
-    'week',
     'where',
     'window',
-    'year',
 )
 
 
@@ -275,37 +265,7 @@ def interval(value=None, unit='s', years=None, quarters=None, months=None,
 
     value_type = literal(value).type()
     type = dt.Interval(unit, value_type)
-
     return literal(value, type=type).op().to_expr()
-
-
-@functools.wraps(interval)
-def timedelta(*args, **kwargs):
-    warnings.warn('ibis.timedelta is deprecated, use ibis.interval instead',
-                  DeprecationWarning)
-    return interval(*args, **kwargs)
-
-
-def _timedelta(name, unit):
-    def f(value=1):
-        msg = 'ibis.{0} is deprecated, use ibis.interval({0}s=n) instead'
-        warnings.warn(msg.format(name), DeprecationWarning)
-        return interval(value, unit=unit)
-    f.__name__ = name
-    return f
-
-
-year = _timedelta('year', 'Y')
-quarter = _timedelta('quarter', 'Q')
-month = _timedelta('month', 'M')
-week = _timedelta('week', 'W')
-day = _timedelta('day', 'D')
-hour = _timedelta('hour', 'h')
-minute = _timedelta('minute', 'm')
-second = _timedelta('second', 's')
-millisecond = _timedelta('millisecond', 'ms')
-microsecond = _timedelta('microsecond', 'us')
-nanosecond = _timedelta('nanosecond', 'ns')
 
 
 schema.__doc__ = """\
