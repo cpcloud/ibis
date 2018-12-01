@@ -98,21 +98,22 @@ def connect(
     PostgreSQLTable[table]
       name: functional_alltypes
       schema:
-        index : int64
-        Unnamed: 0 : int64
-        id : int32
-        bool_col : boolean
-        tinyint_col : int16
-        smallint_col : int16
-        int_col : int32
-        bigint_col : int64
-        float_col : float32
-        double_col : float64
-        date_string_col : string
-        string_col : string
-        timestamp_col : timestamp
-        year : int32
-        month : int32
+        index : Int64(nullable=True)
+        Unnamed: 0 : Int64(nullable=True)
+        id : Int32(nullable=True)
+        bool_col : Int8(nullable=True)
+        tinyint_col : Int8(nullable=True)
+        smallint_col : Int16(nullable=True)
+        int_col : Int32(nullable=True)
+        bigint_col : Int64(nullable=True)
+        float_col : Float32(nullable=True)
+        double_col : Float64(nullable=True)
+        date_string_col : String(nullable=True)
+        string_col : String(nullable=True)
+        timestamp_col : Timestamp(timezone=None, nullable=True)
+        year : Int32(nullable=True)
+        month : Int32(nullable=True)
+
     """
     return PostgreSQLClient(
         host=host,
