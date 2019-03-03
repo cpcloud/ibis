@@ -1,10 +1,9 @@
 .PHONY: all clean develop typecheck stop build start load restart init test testmost testfast testparams docclean doc
 
 SHELL := /bin/bash
-ENVKIND := docs
 MAKEFILE_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 COMPOSE_FILE := "$(MAKEFILE_DIR)/ci/docker-compose.yml"
-DOCKER := ENVKIND=$(ENVKIND) docker-compose -f $(COMPOSE_FILE)
+DOCKER := docker-compose -f $(COMPOSE_FILE)
 DOCKER_RUN := $(DOCKER) run --rm
 
 clean:
@@ -48,15 +47,15 @@ init: restart
 	@$(MAKE) load
 
 test:
-	@ENVKIND=$(ENVKIND) $(MAKEFILE_DIR)/ci/test.sh -n auto -m 'not udf' \
+	@$(MAKEFILE_DIR)/ci/test.sh -n auto -m 'not udf' \
 	    --doctest-modules --doctest-ignore-import-errors
 
 testmost:
-	@ENVKIND=$(ENVKIND) $(MAKEFILE_DIR)/ci/test.sh -n auto -m 'not (udf or impala or hdfs)' \
+	@$(MAKEFILE_DIR)/ci/test.sh -n auto -m 'not (udf or impala or hdfs)' \
 	    --doctest-modules --doctest-ignore-import-errors
 
 testfast:
-	@ENVKIND=$(ENVKIND) $(MAKEFILE_DIR)/ci/test.sh -n auto -m 'not (udf or impala or hdfs or bigquery)' \
+	@$(MAKEFILE_DIR)/ci/test.sh -n auto -m 'not (udf or impala or hdfs or bigquery)' \
 	    --doctest-modules --doctest-ignore-import-errors
 
 testparams:
