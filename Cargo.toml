@@ -1,0 +1,14 @@
+[package]
+authors = ["Phillip Cloud <cpcloud@gmail.com>"]
+name = "rwindow"
+version = "0.0.1"
+
+[dependencies]
+rayon = "*"
+numpy = "*"
+ndarray = "*"
+pyo3 = { features = ["extension-module"] }
+
+[lib]
+name = "rwindow"
+crate-type = ["cdylib"]

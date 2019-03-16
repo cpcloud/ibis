@@ -66,3 +66,4 @@ ibis_testing*
 .ipynb_checkpoints/
 .pytest_cache
 .mypy_cache
+target/

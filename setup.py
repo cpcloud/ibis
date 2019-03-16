@@ -3,6 +3,7 @@
 import pathlib
 
 from setuptools import setup, find_packages
+from setuptools_rust import RustExtension
 
 import versioneer
 
@@ -64,6 +65,16 @@ setup(
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
     install_requires=install_requires,
+    setup_requires=["setuptools-rust>=0.10.1", "wheel"],
+    rust_extensions=[
+        RustExtension(
+            "ibis.pandas.execution.rwindow",
+            "Cargo.toml",
+            debug=False,
+            native=True,
+            strip=2,
+        )
+    ],
     python_requires='>=3.5',
     extras_require={
         'all': all_requires,
