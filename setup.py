@@ -68,7 +68,7 @@ setup(
     setup_requires=["setuptools-rust>=0.10.1", "wheel"],
     rust_extensions=[
         RustExtension(
-            "ibis.pandas.execution.rwindow",
+            "ibis.pandas.execution.pandaswindow",
             "Cargo.toml",
             debug=False,
             native=True,

@@ -1,14 +1,14 @@
 [package]
 authors = ["Phillip Cloud <cpcloud@gmail.com>"]
-name = "rwindow"
+name = "pandaswindow"
 version = "0.0.1"
 
 [dependencies]
-rayon = "*"
+bit-set = "*"
 numpy = "*"
 ndarray = "*"
-pyo3 = { features = ["extension-module"] }
+pyo3 = { version = "*", features = ["extension-module"] }
 
 [lib]
-name = "rwindow"
+name = "pandaswindow"
 crate-type = ["cdylib"]
