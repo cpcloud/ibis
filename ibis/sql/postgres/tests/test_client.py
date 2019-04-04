@@ -164,3 +164,27 @@ def test_interval_films_schema(con):
 )
 def test_all_interval_types_schema(intervals, column, expected_dtype):
     assert intervals[column].type() == expected_dtype
+
+
+@pytest.mark.parametrize(
+    ("column", "expected_dtype"),
+    [
+        ("a", dt.Interval("Y")),
+        ("b", dt.Interval("M")),
+        ("c", dt.Interval("D")),
+        ("d", dt.Interval("h")),
+        ("e", dt.Interval("m")),
+        ("f", dt.Interval("s")),
+        ("g", dt.Interval("M")),
+        ("h", dt.Interval("h")),
+        ("i", dt.Interval("m")),
+        ("j", dt.Interval("s")),
+        ("k", dt.Interval("m")),
+        ("l", dt.Interval("s")),
+        ("m", dt.Interval("s")),
+    ],
+)
+def test_all_interval_types_execute(intervals, column, expected_dtype):
+    expr = intervals[column]
+    series = expr.execute()
+    assert series.dtype == np.dtype("object")

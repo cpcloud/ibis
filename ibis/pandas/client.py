@@ -279,7 +279,10 @@ def convert_datetime64_to_timestamp(in_dtype, out_dtype, column):
 
 @convert.register(np.dtype, dt.Interval, pd.Series)
 def convert_any_to_interval(_, out_dtype, column):
-    return column.values.astype(out_dtype.to_pandas())
+    values = column.values
+    if column.values.dtype == np.dtype("object"):
+        return values
+    return values.astype(out_dtype.to_pandas())
 
 
 @convert.register(np.dtype, dt.String, pd.Series)

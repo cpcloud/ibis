@@ -1,7 +1,13 @@
+"""Implementation details shared by all SQLAlchemy-based backends."""
+
 import contextlib
 import functools
 import numbers
 import operator
+
+import regex as re
+
+from dateutil.relativedelta import relativedelta
 
 import sqlalchemy as sa
 import sqlalchemy.sql as sql
@@ -208,12 +214,13 @@ def schema_from_table(table, schema=None):
     schema = schema if schema is not None else {}
     pairs = []
     for name, column in table.columns.items():
+        col_type = column.type
         if name in schema:
             dtype = dt.dtype(schema[name])
         else:
             dtype = dt.dtype(
                 getattr(table.bind, 'dialect', SQLAlchemyDialect()),
-                column.type,
+                col_type,
                 nullable=column.nullable,
             )
         pairs.append((name, dtype))
@@ -877,16 +884,17 @@ compiles = AlchemyExprTranslator.compiles
 
 class AlchemyQuery(Query):
     def _fetch(self, cursor):
+        proxy = cursor.proxy
+        records = proxy.fetchall()
+        columns = proxy.keys()
         df = pd.DataFrame.from_records(
-            cursor.proxy.fetchall(),
-            columns=cursor.proxy.keys(),
-            coerce_float=True,
+            records, columns=columns, coerce_float=True
         )
-        return self.schema().apply_to(df)
+        schema = self.schema()
+        return schema.apply_to(df)
 
 
 class AlchemyDialect(Dialect):
-
     translator = AlchemyExprTranslator
 
 
@@ -913,6 +921,62 @@ def invalidates_reflection_cache(f):
     return wrapped
 
 
+def cast_interval(value, cur):
+    if value is None:
+        return None
+
+    regex = re.compile(
+        r"(?P<value>-?\d+)\s+(?P<unit>year|mon|day)s?|"
+        r"(?P<sign>-)?(?P<hours>?\d\d):(?P<minutes>\d\d):(?P<seconds>\d\d)"
+        r"(?:\.(?P<microseconds>\d{6}))?",
+        flags=re.IGNORECASE,
+    )
+    kwarg_names = {"year": "years", "mon": "months"}
+    results = [match.groupdict() for match in regex.finditer(value)]
+    kwargs = {}
+
+    for result in results:
+        value = result.get('value')
+        unit = result.get('unit')
+        if value is not None:
+            assert unit is not None
+            kwargs[
+                kwarg_names.get(result['unit'], result['unit'] + 's')
+            ] = int(value)
+        else:
+            kwargs.update(
+                {
+                    k: int(v)
+                    for k, v in result.items()
+                    if k not in {'value', 'unit'} and v is not None
+                }
+            )
+            sign = results.get("sign", None)
+            if sign is not None:
+                sign = -1
+    res = relativedelta(**kwargs)
+    return res
+
+
+def register_interval_cast(con):
+    import psycopg2
+
+    res = con.execute(
+        """
+        SELECT pg_type.oid
+          FROM pg_type JOIN pg_namespace
+                 ON typnamespace = pg_namespace.oid
+         WHERE typname = %(typename)s
+           AND nspname = %(namespace)s""",
+        {'typename': 'interval', 'namespace': 'pg_catalog'},
+    )
+    interval_oid = res.fetchone()[0]
+    INTERVAL = psycopg2.extensions.new_type(
+        (interval_oid,), "INTERVAL", cast_interval
+    )
+    psycopg2.extensions.register_type(INTERVAL)
+
+
 class AlchemyClient(SQLClient):
 
     dialect = AlchemyDialect
@@ -925,6 +989,7 @@ class AlchemyClient(SQLClient):
         self._inspector = sa.inspect(con)
         self._reflection_cache_is_dirty = False
         self._schemas = {}
+        register_interval_cast(self.con)
 
     @property
     def inspector(self):
