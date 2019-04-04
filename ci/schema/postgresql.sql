@@ -139,3 +139,20 @@ CREATE TABLE IF NOT EXISTS intervals (
     l INTERVAL HOUR TO SECOND,
     m INTERVAL MINUTE TO SECOND
 );
+
+INSERT INTO intervals VALUES
+    (
+	'1 year',
+	'1 month',
+	'1 day',
+	'1 hour',
+	'-1 minute',
+	'1 second 30 milliseconds -10 microseconds',
+	'-1 year 3 months',
+	'1 day 4 hours',
+	'1 day 17 minutes',
+	'-1 day -2 hours 17 minutes 30 seconds',
+	'1 hour 2 minutes',
+	'1 hour 2 minutes -7 seconds 37 microseconds',
+	'1 minute 3 seconds 2 milliseconds 9 microseconds'
+    );
