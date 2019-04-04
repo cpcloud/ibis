@@ -106,3 +106,36 @@ INSERT INTO array_types VALUES
     (ARRAY[NULL, 1, NULL], ARRAY[NULL, 'a', NULL], ARRAY[]::DOUBLE PRECISION[], 'b', 4.0),
     (ARRAY[2, NULL, 3], ARRAY['b', NULL, 'c'], NULL, 'b', 5.0),
     (ARRAY[4, NULL, NULL, 5], ARRAY['d', NULL, NULL, 'e'], ARRAY[4.0, NULL, NULL, 5.0], 'c', 6.0);
+
+DROP TABLE IF EXISTS films CASCADE;
+
+CREATE TABLE IF NOT EXISTS films (
+    code CHAR(5) PRIMARY KEY,
+    title VARCHAR(40) NOT NULL,
+    did INTEGER NOT NULL,
+    date_prod DATE,
+    kind VARCHAR(10),
+    len INTERVAL HOUR TO MINUTE
+);
+
+INSERT INTO films VALUES
+    ('A', 'Avengers', 1, DATE '2018-01-01', 'Action', INTERVAL '2 hours 35 minutes'),
+    ('B', 'Ghostbusters', 2, DATE '2018-01-02', 'Ghost', INTERVAL '1 hour 30 minutes');
+
+DROP TABLE IF EXISTS intervals CASCADE;
+
+CREATE TABLE IF NOT EXISTS intervals (
+    a INTERVAL YEAR,
+    b INTERVAL MONTH,
+    c INTERVAL DAY,
+    d INTERVAL HOUR,
+    e INTERVAL MINUTE,
+    f INTERVAL SECOND,
+    g INTERVAL YEAR TO MONTH,
+    h INTERVAL DAY TO HOUR,
+    i INTERVAL DAY TO MINUTE,
+    j INTERVAL DAY TO SECOND,
+    k INTERVAL HOUR TO MINUTE,
+    l INTERVAL HOUR TO SECOND,
+    m INTERVAL MINUTE TO SECOND
+);
