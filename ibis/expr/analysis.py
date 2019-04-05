@@ -750,7 +750,7 @@ class Projector:
     def __init__(self, parent, proj_exprs):
         self.parent = parent
         self.input_exprs = proj_exprs
-        self.resolved_exprs = [parent._ensure_expr(e) for e in proj_exprs]
+        self.resolved_exprs = ir.bind_expr(parent, proj_exprs)
 
         node = self.parent.op()
 

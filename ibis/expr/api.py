@@ -3189,58 +3189,58 @@ def aggregate(table, metrics=None, by=None, having=None, **kwds):
 
 
 def _table_distinct(self):
-    """
-    Compute set of unique rows/tuples occurring in this table
-    """
+    """Compute the set of unique rows occurring in this table."""
     op = ops.Distinct(self)
     return op.to_expr()
 
 
 def _table_limit(table, n, offset=0):
-    """
-    Select the first n rows at beginning of table (may not be deterministic
-    depending on implementation and presence of a sorting).
+    """Select the first `n` rows of `table` beginning at `offset`.
+
+    The row ordering may not be deterministic depending on implementation and
+    presence of a sort.
 
     Parameters
     ----------
     n : int
-      Number of rows to include
-    offset : int, default 0
-      Number of rows to skip first
+        Number of rows to include
+    offset : int
+        Number of rows to skip first
 
     Returns
     -------
-    limited : TableExpr
+    TableExpr
+
     """
     op = ops.Limit(table, n, offset=offset)
     return op.to_expr()
 
 
 def _head(table, n=5):
-    """
-    Select the first n rows at beginning of a table (may not be deterministic
-    depending on implementation and presence of a sorting).
+    """Select the first `n` rows of `table`.
+
+    The row ordering may not be deterministic depending on implementation and
+    presence of a sort.
 
     Parameters
     ----------
     n : int
-      Number of rows to include, defaults to 5
+        Number of rows to include
 
     Returns
     -------
-    limited : TableExpr
+    TableExpr
 
     See Also
     --------
     ibis.expr.types.TableExpr.limit
+
     """
     return _table_limit(table, n=n)
 
 
 def _table_sort_by(table, sort_exprs):
-    """
-    Sort table by the indicated column expressions and sort orders
-    (ascending/descending)
+    """Sort table by the indicated column expressions and sort orders.
 
     Parameters
     ----------
@@ -3258,45 +3258,43 @@ def _table_sort_by(table, sort_exprs):
 
     Returns
     -------
-    sorted : TableExpr
+    TableExpr
+
     """
     result = table.op().sort_by(table, sort_exprs)
     return result.to_expr()
 
 
 def _table_union(left, right, distinct=False):
-    """
-    Form the table set union of two table expressions having identical
-    schemas.
+    """Form the set union of two relations having identical schemas.
 
     Parameters
     ----------
     right : TableExpr
-    distinct : boolean, default False
-        Only union distinct rows not occurring in the calling table (this
-        can be very expensive, be careful)
+    distinct : bool
+        Only union distinct rows not occurring in the calling table
+
+    Notes
+    -----
+    Setting the `distinct` argument to :data:`True` can be very expensive
 
     Returns
     -------
-    union : TableExpr
+    TableExpr
+
     """
     op = ops.Union(left, right, distinct=distinct)
     return op.to_expr()
 
 
 def _table_to_array(self):
-    """
-    Single column tables can be viewed as arrays.
-    """
+    """View a single column table as an array."""
     op = ops.TableArrayView(self)
     return op.to_expr()
 
 
 def _table_materialize(table):
-    """
-    Force schema resolution for a joined table, selecting all fields from
-    all tables.
-    """
+    """Force schema resolution for a joined table."""
     if table._is_materialized():
         return table
 
@@ -3312,22 +3310,22 @@ def _safe_get_name(expr):
 
 
 def mutate(table, exprs=None, **mutations):
-    """
-    Convenience function for table projections involving adding columns
+    """Add column expressions `exprs` and `mutations` to `table`.
 
     Parameters
     ----------
-    exprs : list, default None
-      List of named expressions to add as columns
-    mutations : keywords for new columns
+    exprs : List[ibis.expr.types.ColumnExpr]
+        List of named expressions to add as columns
+    mutations : ibis.expr.types.ColumnExpr
+        Mapping of name to :class:`ibis.expr.types.ColumnExpr`.
 
     Returns
     -------
-    mutated : TableExpr
+    TableExpr
 
     Examples
     --------
-    Using keywords arguments to name the new columns
+    Use keywords arguments to name the new columns
 
     >>> import ibis
     >>> table = ibis.table([('foo', 'double'), ('bar', 'double')], name='t')
@@ -3362,11 +3360,9 @@ def mutate(table, exprs=None, **mutations):
     >>> expr2 = table.mutate(new_columns)
     >>> expr.equals(expr2)
     True
+
     """
-    if exprs is None:
-        exprs = []
-    else:
-        exprs = util.promote_list(exprs)
+    exprs = [] if exprs is None else util.promote_list(exprs)
 
     for k, v in sorted(mutations.items(), key=operator.itemgetter(0)):
         if util.is_function(v):
@@ -3402,18 +3398,16 @@ def mutate(table, exprs=None, **mutations):
 
 
 def projection(table, exprs):
-    """
-    Compute new table expression with the indicated column expressions from
-    this table.
+    """Compute new table expression using column expressions `exprs`.
 
     Parameters
     ----------
-    exprs : column expression, or string, or list of column expressions and
-      strings. If strings passed, must be columns in the table already
+    exprs : Union[ir.ColumnExpr, str, Sequence[Union[ir.ColumnExpr, str]]]
+        Any strings must exist in `table`
 
     Returns
     -------
-    projection : TableExpr
+    TableExpr
 
     Notes
     -----
@@ -3492,6 +3486,7 @@ def projection(table, exprs):
     .. code-block:: python
 
        t[(t.a - t.a.mean()).name('demeaned_a')]
+
     """
     import ibis.expr.analysis as L
 

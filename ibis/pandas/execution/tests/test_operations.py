@@ -415,6 +415,30 @@ def test_distinct(t, df):
     tm.assert_series_equal(result, expected)
 
 
+def test_distinct_with_frame(t, df):
+    expr = t[
+        t.dup_strings.distinct().name('dup_strings'),
+        ibis.literal(1).name('one')
+    ]
+    result = expr.execute()
+    expected = df[['dup_strings']].drop_duplicates().assign(one=1)
+    tm.assert_frame_equal(result, expected)
+
+
+def test_multiple_distinct(t, df):
+    expr = t[
+        t.dup_strings.distinct().name('dup_strings'),
+        t.plain_int64.distinct().name('plain_int64'),
+        ibis.literal(1).name('one')
+    ]
+    result = expr.execute()
+    expected = df[['dup_strings', 'plain_int64']].drop_duplicates().assign(
+        one=1
+    )
+    import pdb; pdb.set_trace()  # noqa
+    tm.assert_frame_equal(result, expected)
+
+
 def test_count_distinct(t, df):
     expr = t.dup_strings.nunique()
     result = expr.execute()

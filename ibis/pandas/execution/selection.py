@@ -1,5 +1,4 @@
-"""Dispatching code for Selection operations.
-"""
+"""Dispatching code for Selection operations."""
 
 from __future__ import absolute_import
 
@@ -301,6 +300,7 @@ def execute_selection_dataframe(op, data, scope=None, **kwargs):
             for piece in data_pieces
         ]
         result = pd.concat(new_pieces, axis=1)
+        result = result.iloc[:min(map(len, new_pieces))]
 
     if predicates:
         predicates = _compute_predicates(
