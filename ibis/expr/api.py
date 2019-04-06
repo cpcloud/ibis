@@ -1,10 +1,10 @@
-from __future__ import print_function
-
 import collections
 import datetime
 import functools
 import numbers
 import operator
+
+from typing import Optional, Union
 
 import toolz
 
@@ -13,6 +13,7 @@ import dateutil.parser
 import pandas as pd
 
 import ibis
+import ibis.client
 import ibis.util as util
 import ibis.common as com
 import ibis.expr.types as ir
@@ -197,22 +198,21 @@ def schema(pairs=None, names=None, types=None):
         return Schema(names, types)
 
 
-def table(schema, name=None):
-    """
-    Create an unbound Ibis table for creating expressions. Cannot be executed
-    without being bound to some physical table.
+def table(schema, name: Optional[str] = None):
+    """Create an unbound Ibis table for creating expressions.
 
-    Useful for testing
+    Cannot be executed without being bound to some physical table.
 
     Parameters
     ----------
-    schema : ibis Schema
-    name : string, default None
-      Name for table
+    schema : ibis.expr.schema.Schema
+    name : str
+        Name for table
 
     Returns
     -------
-    table : TableExpr
+    TableExpr
+
     """
     if not isinstance(schema, Schema):
         if isinstance(schema, dict):
@@ -225,9 +225,7 @@ def table(schema, name=None):
 
 
 def desc(expr):
-    """
-    Create a sort key (when used in sort_by) by the passed array expression or
-    column name.
+    """Create a sort key by the passed array expression or column name.
 
     Parameters
     ----------
@@ -239,6 +237,7 @@ def desc(expr):
     >>> import ibis
     >>> t = ibis.table([('g', 'string')])
     >>> result = t.group_by('g').size('count').sort_by(ibis.desc('count'))
+
     """
     if not isinstance(expr, Expr):
         return ops.DeferredSortKey(expr, ascending=False)
@@ -246,19 +245,20 @@ def desc(expr):
         return ops.SortKey(expr, ascending=False).to_expr()
 
 
-def timestamp(value, timezone=None):
-    """
-    Returns a timestamp literal if value is likely coercible to a timestamp
+def timestamp(value, timezone: Optional[str] = None):
+    """Return a timestamp literal if value is likely coercible to a timestamp.
 
     Parameters
     ----------
-    value : timestamp value as string
-    timezone: timezone as string
-        defaults to None
+    value : str
+        A timestamp value.
+    timezone: str
+        A valid timezone.
 
     Returns
     --------
-    result : TimestampScalar
+    TimestampScalar
+
     """
     if isinstance(value, str):
         try:
@@ -276,34 +276,34 @@ def timestamp(value, timezone=None):
     return literal(value, type=dt.Timestamp(timezone=timezone))
 
 
-def date(value):
-    """
-    Returns a date literal if value is likely coercible to a date
+def date(value: Union[str, datetime.date]):
+    """Return a date literal if value is likely coercible to a date.
 
     Parameters
     ----------
-    value : date value as string
+    value : Union[str, datetime.date]
 
     Returns
-    --------
-    result : TimeScalar
+    -------
+    DateScalar
+
     """
     if isinstance(value, str):
         value = to_date(value)
     return literal(value, type=dt.date)
 
 
-def time(value):
-    """
-    Returns a time literal if value is likely coercible to a time
+def time(value: Union[str, datetime.time]):
+    """Return a time literal if value is likely coercible to a time.
 
     Parameters
     ----------
-    value : time value as string
+    value : Union[str, datetime.time]
 
     Returns
     --------
-    result : TimeScalar
+    TimeScalar
+
     """
     if isinstance(value, str):
         value = to_time(value)
@@ -311,7 +311,7 @@ def time(value):
 
 
 def interval(
-    value=None,
+    value: Optional[Union[int, datetime.timedelta]] = None,
     unit='s',
     years=None,
     quarters=None,
@@ -325,12 +325,11 @@ def interval(
     microseconds=None,
     nanoseconds=None,
 ):
-    """
-    Returns an interval literal
+    """Construct an interval literal.
 
     Parameters
     ----------
-    value : int or datetime.timedelta, default None
+    value : Optional[Union[int, datetime.timedelta]]
     years : int, default None
     quarters : int, default None
     months : int, default None
@@ -345,7 +344,8 @@ def interval(
 
     Returns
     --------
-    result : IntervalScalar
+    IntervalScalar
+
     """
     if value is not None:
         if isinstance(value, datetime.timedelta):
@@ -413,7 +413,7 @@ schema : Schema
 
 def case():
     """
-    Similar to the .case method on array expressions, create a case builder
+    Similar to the .case method on column expressions, create a case builder
     that accepts self-contained boolean expressions (as opposed to expressions
     which are to be equality-compared with a fixed value expression)
 
@@ -439,12 +439,12 @@ def case():
 
 
 def now():
-    """
-    Compute the current timestamp
+    """Compute the current timestamp.
 
     Returns
     -------
-    now : Timestamp scalar
+    TimestampScalar
+
     """
     return ops.TimestampNow().to_expr()
 
@@ -457,7 +457,8 @@ def row_number():
 
     Returns
     -------
-    row_number : IntArray
+    Int64Array
+
     """
     return ops.RowNumber().to_expr()
 
@@ -485,16 +486,16 @@ def _unary_op(name, klass, doc=None):
 
 
 def negate(arg):
-    """
-    Negate a numeric expression
+    """Negate a numeric expression.
 
     Parameters
     ----------
-    arg : numeric value expression
+    arg : NumericValue
 
     Returns
     -------
-    negated : type of caller
+    NumericValue
+
     """
     op = arg.op()
     if hasattr(op, 'negate'):
@@ -506,14 +507,15 @@ def negate(arg):
 
 
 def count(expr, where=None):
-    """
-    Compute cardinality / sequence size of expression. For array expressions,
-    the count is excluding nulls. For tables, it's the size of the entire
-    table.
+    """Compute the cardinality of `expr`.
+
+    For column expressions, the count is excluding nulls. For tables, it's the
+    number of rows in the table.
 
     Returns
     -------
-    counts : int64 type
+    Int64Scalar
+
     """
     op = expr.op()
     if isinstance(op, ops.DistinctColumn):
@@ -3500,8 +3502,7 @@ def projection(table, exprs):
 
 
 def _table_relabel(table, substitutions, replacements=None):
-    """
-    Change table column names, otherwise leaving table unaltered
+    """Change table column names.
 
     Parameters
     ----------
@@ -3509,7 +3510,8 @@ def _table_relabel(table, substitutions, replacements=None):
 
     Returns
     -------
-    relabeled : TableExpr
+    TableExpr
+
     """
     if replacements is not None:
         raise NotImplementedError
@@ -3543,7 +3545,8 @@ def _table_view(self):
 
     Returns
     -------
-    expr : TableExpr
+    TableExpr
+
     """
     new_view = ops.SelfReference(self)
     return new_view.to_expr()
@@ -3599,21 +3602,22 @@ _table_methods = dict(
 _add_methods(ir.TableExpr, _table_methods)
 
 
-def prevent_rewrite(expr, client=None):
+def prevent_rewrite(expr, client: Optional[ibis.client.SQLClient] = None):
     """Prevent optimization from happening below `expr`.
 
     Parameters
     ----------
     expr : ir.TableExpr
         Any table expression whose optimization you want to prevent
-    client : ibis.client.Client, optional, default None
+    client : ibis.client.SQLClient
         A client to use to create the SQLQueryResult operation. This is useful
         if you're compiling an expression that derives from an
         :class:`~ibis.expr.operations.UnboundTable` operation.
 
     Returns
     -------
-    sql_query_result : ir.TableExpr
+    ir.TableExpr
+
     """
     if client is None:
         client, = ibis.client.find_backends(expr)
