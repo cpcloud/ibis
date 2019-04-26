@@ -5,6 +5,7 @@ import datetime
 import functools
 import numbers
 import operator
+from typing import Sequence, Union
 
 import dateutil.parser
 import pandas as pd
@@ -3127,34 +3128,31 @@ def _regular_join_method(name, how, doc=None):
     return f
 
 
-def filter(table, predicates):
-    """
-    Select rows from table based on boolean expressions
+def filter(
+    table: ir.TableExpr,
+    predicates: Union[ir.BooleanValue, Sequence[ir.BooleanValue]],
+) -> ir.TableExpr:
+    """Select rows from table based on boolean expressions.
 
     Parameters
     ----------
-    predicates : boolean array expressions, or list thereof
+    predicates
 
     Returns
     -------
-    filtered_expr : TableExpr
+    TableExpr
+
     """
-    resolved_predicates = _resolve_predicates(table, predicates)
-    return _L.apply_filter(table, resolved_predicates)
-
-
-def _resolve_predicates(table, predicates):
     if isinstance(predicates, Expr):
         predicates = _L.flatten_predicate(predicates)
-    predicates = util.promote_list(predicates)
-    predicates = [ir.bind_expr(table, x) for x in predicates]
-    resolved_predicates = []
-    for pred in predicates:
-        if isinstance(pred, ir.AnalyticExpr):
-            pred = pred.to_filter()
-        resolved_predicates.append(pred)
-
-    return resolved_predicates
+    predicates = map(
+        functools.partial(ir.bind_expr, table), util.promote_list(predicates)
+    )
+    resolved_predicates = [
+        pred.to_filter() if isinstance(pred, ir.AnalyticExpr) else pred
+        for pred in predicates
+    ]
+    return ops.Selection(table, predicates=resolved_predicates).to_expr()
 
 
 def aggregate(table, metrics=None, by=None, having=None, **kwds):

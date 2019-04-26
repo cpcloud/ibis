@@ -1,8 +1,10 @@
+import abc
 import collections
 import functools
 import itertools
 import operator
 from contextlib import suppress
+from typing import Sequence, Type
 
 import toolz
 
@@ -12,7 +14,7 @@ import ibis.expr.rules as rlz
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
 from ibis import util
-from ibis.expr.schema import HasSchema, Schema
+from ibis.expr.schema import Schema
 from ibis.expr.signature import Annotable
 from ibis.expr.signature import Argument as Arg
 
@@ -60,7 +62,8 @@ class Node(Annotable):
     def inputs(self):
         return tuple(self.args)
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         # The contents of this node at referentially distinct and may not be
         # analyzed deeper
         return False
@@ -181,10 +184,10 @@ def genname():
 
 
 class TableNode(Node):
-    def get_type(self, name):
+    def get_type(self, name: str) -> dt.DataType:
         return self.schema[name]
 
-    def output_type(self):
+    def output_type(self) -> Type[ir.TableExpr]:
         return ir.TableExpr
 
     def aggregate(self, this, metrics, by=None, having=None):
@@ -193,7 +196,7 @@ class TableNode(Node):
     def sort_by(self, expr, sort_exprs):
         return Selection(expr, [], sort_keys=sort_exprs)
 
-    def is_ancestor(self, other):
+    def is_ancestor(self, other) -> bool:
         import ibis.expr.lineage as lin
 
         if isinstance(other, ir.Expr):
@@ -204,10 +207,27 @@ class TableNode(Node):
 
         fn = lambda e: (lin.proceed, e.op())  # noqa: E731
         expr = self.to_expr()
-        for child in lin.traverse(fn, expr):
-            if child.equals(other):
-                return True
-        return False
+        return any(child.equals(other) for child in lin.traverse(fn, expr))
+
+    def __repr__(self) -> str:
+        return "{}({})".format(type(self).__name__, repr(self.schema))
+
+    @property
+    def has_schema(self) -> bool:
+        return True
+
+    def equals(self, other: "TableNode", cache=None) -> bool:
+        return type(self) is type(other) and self.schema.equals(
+            other.schema, cache=cache
+        )
+
+    def root_tables(self) -> Sequence["TableNode"]:
+        return [self]
+
+    @property
+    @abc.abstractmethod
+    def schema(self) -> Schema:
+        ...
 
 
 class TableColumn(ValueOp):
@@ -217,32 +237,32 @@ class TableColumn(ValueOp):
     table = Arg(ir.TableExpr)
 
     def __init__(self, name, table):
-        schema = table.schema()
+        schema = table.schema
         if isinstance(name, int):
             name = schema.name_at_position(name)
         super().__init__(name, table)
 
-    def _validate(self):
-        if self.name not in self.table.schema():
+    def _validate(self) -> None:
+        if self.name not in self.table.schema:
             raise com.IbisTypeError(
                 "'{}' is not a field in {}".format(
                     self.name, self.table.columns
                 )
             )
 
-    def parent(self):
+    def parent(self) -> ir.TableExpr:
         return self.table
 
-    def resolve_name(self):
+    def resolve_name(self) -> str:
         return self.name
 
-    def has_resolved_name(self):
+    def has_resolved_name(self) -> bool:
         return True
 
-    def root_tables(self):
+    def root_tables(self) -> Sequence[TableNode]:
         return self.table._root_tables()
 
-    def _make_expr(self):
+    def _make_expr(self) -> ir.Expr:
         dtype = self.table._get_type(self.name)
         klass = dtype.column_type()
         return klass(self, name=self.name)
@@ -254,7 +274,7 @@ def find_all_base_tables(expr, memo=None):
 
     node = expr.op()
 
-    if isinstance(expr, ir.TableExpr) and node.blocks():
+    if isinstance(expr, ir.TableExpr) and node.blocks:
         if expr not in memo:
             memo[node] = expr
         return memo
@@ -266,8 +286,9 @@ def find_all_base_tables(expr, memo=None):
     return memo
 
 
-class PhysicalTable(TableNode, HasSchema):
-    def blocks(self):
+class PhysicalTable(TableNode):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
@@ -285,14 +306,15 @@ class DatabaseTable(PhysicalTable):
         return type(self)(new_name, self.args[1], self.source)
 
 
-class SQLQueryResult(TableNode, HasSchema):
+class SQLQueryResult(TableNode):
     """A table sourced from the result set of a select query"""
 
     query = Arg(rlz.noop)
     schema = Arg(sch.Schema)
     source = Arg(rlz.client)
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
@@ -307,7 +329,7 @@ class TableArrayView(ValueOp):
     name = Arg(str)
 
     def __init__(self, table):
-        schema = table.schema()
+        schema = table.schema
         if len(schema) > 1:
             raise com.ExpressionError('Table can only have a single column')
 
@@ -1215,9 +1237,8 @@ class NthValue(AnalyticOp):
 # Distinct stuff
 
 
-class Distinct(TableNode, HasSchema):
-    """
-    Distinct is a table-level unique-ing operation.
+class Distinct(TableNode):
+    """Distinct is a table-level unique-ing operation.
 
     In SQL, you might have:
 
@@ -1236,9 +1257,10 @@ class Distinct(TableNode, HasSchema):
 
     @property
     def schema(self):
-        return self.table.schema()
+        return self.table.schema
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
@@ -1614,8 +1636,8 @@ class Join(TableNode):
         if not right._is_materialized():
             right = right.materialize()
 
-        sleft = left.schema()
-        sright = right.schema()
+        sleft = left.schema
+        sright = right.schema
 
         overlap = set(sleft.names) & set(sright.names)
         if overlap:
@@ -1662,15 +1684,15 @@ class AnyLeftJoin(Join):
 
 class LeftSemiJoin(Join):
     def _get_schema(self):
-        return self.left.schema()
+        return self.left.schema
 
 
 class LeftAntiJoin(Join):
     def _get_schema(self):
-        return self.left.schema()
+        return self.left.schema
 
 
-class MaterializedJoin(TableNode, HasSchema):
+class MaterializedJoin(TableNode):
     join = Arg(ir.TableExpr)
 
     def _validate(self):
@@ -1685,7 +1707,8 @@ class MaterializedJoin(TableNode, HasSchema):
     def root_tables(self):
         return self.join._root_tables()
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
@@ -1723,22 +1746,23 @@ class AsOfJoin(Join):
         self.tolerance = tolerance
 
 
-class Union(TableNode, HasSchema):
+class Union(TableNode):
     left = Arg(rlz.noop)
     right = Arg(rlz.noop)
     distinct = Arg(rlz.validator(bool), default=False)
 
     def _validate(self):
-        if not self.left.schema().equals(self.right.schema()):
+        if not self.left.schema.equals(self.right.schema):
             raise com.RelationError(
                 'Table schemas must be equal ' 'to form union'
             )
 
     @property
     def schema(self):
-        return self.left.schema()
+        return self.left.schema
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
@@ -1747,12 +1771,13 @@ class Limit(TableNode):
     n = Arg(rlz.validator(int))
     offset = Arg(rlz.validator(int))
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
     @property
     def schema(self):
-        return self.table.schema()
+        return self.table.schema
 
     def has_schema(self):
         return self.table.op().has_schema()
@@ -1833,12 +1858,12 @@ class DeferredSortKey:
         return SortKey(what, ascending=self.ascending).to_expr()
 
 
-class SelfReference(TableNode, HasSchema):
+class SelfReference(TableNode):
     table = Arg(ir.TableExpr)
 
     @property
     def schema(self):
-        return self.table.schema()
+        return self.table.schema
 
     def root_tables(self):
         # The dependencies of this operation are not walked, which makes the
@@ -1846,11 +1871,12 @@ class SelfReference(TableNode, HasSchema):
         # expressions, so things like self-joins are possible
         return [self]
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
-class Selection(TableNode, HasSchema):
+class Selection(TableNode):
     table = Arg(ir.TableExpr)
     selections = Arg(rlz.noop, default=None)
     predicates = Arg(rlz.noop, default=None)
@@ -1917,7 +1943,7 @@ class Selection(TableNode, HasSchema):
     def schema(self):
         # Resolve schema and initialize
         if not self.selections:
-            return self.table.schema()
+            return self.table.schema
 
         types = []
         names = []
@@ -1927,13 +1953,14 @@ class Selection(TableNode, HasSchema):
                 names.append(projection.get_name())
                 types.append(projection.type())
             elif isinstance(projection, ir.TableExpr):
-                schema = projection.schema()
+                schema = projection.schema
                 names.extend(schema.names)
                 types.extend(schema.types)
 
         return Schema(names, types)
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return bool(self.selections)
 
     def substitute_table(self, table_expr):
@@ -1976,7 +2003,7 @@ class Selection(TableNode, HasSchema):
 
     def sort_by(self, expr, sort_exprs):
         sort_exprs = util.promote_list(sort_exprs)
-        if not self.blocks():
+        if not self.blocks:
             resolved_keys = _maybe_convert_sort_keys(self.table, sort_exprs)
             if resolved_keys and self.table._is_valid(resolved_keys):
                 return Selection(
@@ -2001,7 +2028,7 @@ class AggregateSelection:
         self.having = having
 
     def get_result(self):
-        if self.op.blocks():
+        if self.op.blocks:
             return self._plain_subquery()
         else:
             return self._attempt_pushdown()
@@ -2058,8 +2085,7 @@ def _maybe_convert_sort_keys(table, exprs):
         return None
 
 
-class Aggregation(TableNode, HasSchema):
-
+class Aggregation(TableNode):
     """
     metrics : per-group scalar aggregates
     by : group expressions
@@ -2086,7 +2112,7 @@ class Aggregation(TableNode, HasSchema):
         sort_keys=None,
     ):
         # For tables, like joins, that are not materialized
-        metrics = self._rewrite_exprs(table, metrics)
+        metrics = self.bind_table(table, metrics)
 
         by = [] if by is None else by
         by = table._resolve(by)
@@ -2100,10 +2126,10 @@ class Aggregation(TableNode, HasSchema):
             to_sort_key(table, k) for k in util.promote_list(sort_keys)
         ]
 
-        by = self._rewrite_exprs(table, by)
-        having = self._rewrite_exprs(table, having)
-        predicates = self._rewrite_exprs(table, predicates)
-        sort_keys = self._rewrite_exprs(table, sort_keys)
+        by = self.bind_table(table, by)
+        having = self.bind_table(table, having)
+        predicates = self.bind_table(table, predicates)
+        sort_keys = self.bind_table(table, sort_keys)
 
         super().__init__(
             table=table,
@@ -2143,24 +2169,16 @@ class Aggregation(TableNode, HasSchema):
         # Validate schema has no overlapping columns
         assert self.schema
 
-    def _rewrite_exprs(self, table, what):
-        from ibis.expr.analysis import substitute_parents
-
+    def bind_table(self, table, what):
         what = util.promote_list(what)
-
-        all_exprs = []
         for expr in what:
             if isinstance(expr, ir.ExprList):
-                all_exprs.extend(expr.exprs())
+                yield from expr.exprs()
             else:
-                bound_expr = ir.bind_expr(table, expr)
-                all_exprs.append(bound_expr)
+                yield ir.bind_expr(table, expr)
 
-        return [
-            substitute_parents(x, past_projection=False) for x in all_exprs
-        ]
-
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
     def substitute_table(self, table_expr):
@@ -2170,15 +2188,10 @@ class Aggregation(TableNode, HasSchema):
 
     @property
     def schema(self):
-        names = []
-        types = []
-
-        # All exprs must be named
-        for e in self.by + self.metrics:
-            names.append(e.get_name())
-            types.append(e.type())
-
-        return Schema(names, types)
+        return Schema.from_tuples(
+            (expr.get_name(), expr.type())
+            for expr in itertools.chain(self.by, self.metrics)
+        )
 
     def sort_by(self, expr, sort_exprs):
         sort_exprs = util.promote_list(sort_exprs)
@@ -2418,7 +2431,8 @@ class TopK(ValueOp):
     def output_type(self):
         return ir.TopKExpr
 
-    def blocks(self):
+    @property
+    def blocks(self) -> bool:
         return True
 
 
@@ -2437,9 +2451,7 @@ class E(Constant):
 
 
 class Pi(Constant):
-    """
-    The constant pi
-    """
+    """The constant pi."""
 
     def output_type(self):
         return functools.partial(ir.FloatingScalar, dtype=dt.float64)

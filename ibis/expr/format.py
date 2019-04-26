@@ -1,3 +1,6 @@
+from collections import Counter
+from typing import Any, Callable, MutableMapping, Optional, Set
+
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 import ibis.util as util
@@ -6,50 +9,41 @@ import ibis.util as util
 class FormatMemo:
     # A little sanity hack to simplify the below
 
-    def __init__(self):
-        from collections import defaultdict
+    def __init__(self) -> None:
+        self.formatted: MutableMapping[ops.Node, str] = {}
+        self.aliases: MutableMapping[ops.Node, str] = {}
+        self.counts: MutableMapping[ops.Node, int] = Counter()
+        self.subexprs: MutableMapping[ops.Node, str] = {}
+        self.visit_memo: Set[ops.Node] = set()
 
-        self.formatted = {}
-        self.aliases = {}
-        self.ops = {}
-        self.counts = defaultdict(int)
-        self._repr_memo = {}
-        self.subexprs = {}
-        self.visit_memo = set()
+    def __contains__(self, obj: ir.Expr) -> bool:
+        return obj.op() in self.formatted
 
-    def __contains__(self, obj):
-        return self._key(obj) in self.formatted
-
-    def _key(self, expr):
-        memo = self._repr_memo
-        try:
-            result = memo[expr]
-        except KeyError:
-            result = memo[expr] = self._format(expr)
-        return result
-
-    def _format(self, expr):
+    def _format(self, expr: ir.Expr) -> str:
         return expr.op()._repr(memo=self)
 
-    def observe(self, expr, formatter=None):
+    def observe(
+        self,
+        expr: ir.Expr,
+        formatter: Optional[Callable[[ir.Expr], str]] = None,
+    ) -> None:
         if formatter is None:
             formatter = self._format
-        key = self._key(expr)
+        key = expr.op()
         if key not in self.formatted:
             self.aliases[key] = 'ref_{:d}'.format(len(self.formatted))
             self.formatted[key] = formatter(expr)
-            self.ops[key] = expr.op()
 
         self.counts[key] += 1
 
-    def count(self, expr):
-        return self.counts[self._key(expr)]
+    def count(self, expr: ir.Expr) -> int:
+        return self.counts[expr.op()]
 
-    def get_alias(self, expr):
-        return self.aliases[self._key(expr)]
+    def get_alias(self, expr: ir.Expr) -> str:
+        return self.aliases[expr.op()]
 
-    def get_formatted(self, expr):
-        return self.formatted[self._key(expr)]
+    def get_formatted(self, expr: ir.Expr) -> str:
+        return self.formatted[expr.op()]
 
 
 class ExprFormatter:
@@ -62,22 +56,25 @@ class ExprFormatter:
     """
 
     def __init__(
-        self, expr, indent_size=2, base_level=0, memo=None, memoize=True
-    ):
+        self,
+        expr: ir.Expr,
+        indent_size: int = 2,
+        base_level: int = 0,
+        memo: Optional[FormatMemo] = None,
+        memoize: bool = True,
+    ) -> None:
         self.expr = expr
         self.indent_size = indent_size
         self.base_level = base_level
-
         self.memoize = memoize
 
         # For tracking "extracted" objects, like tables, that we don't want to
         # print out more than once, and simply alias in the expression tree
         if memo is None:
             memo = FormatMemo()
-
         self.memo = memo
 
-    def get_result(self):
+    def get_result(self) -> str:
         what = self.expr.op()
 
         if self.memoize:
@@ -107,29 +104,27 @@ class ExprFormatter:
             text = '{} = {}'.format(self.expr.get_name(), text)
 
         if self.memoize:
-            alias_to_text = [
+            alias_to_text = sorted(
                 (
                     self.memo.aliases[x],
                     self.memo.formatted[x],
                     self.memo.ops[x],
                 )
                 for x in self.memo.formatted
-            ]
-            alias_to_text.sort()
+            )
 
             # A hack to suppress printing out of a ref that is the result of
             # the top level expression
             refs = [
-                x + '\n' + y
+                "{x}\n{y}".format(x=x, y=y)
                 for x, y, op in alias_to_text
                 if not op.equals(what)
             ]
 
             text = '\n\n'.join(refs + [text])
-
         return self._indent(text, self.base_level)
 
-    def _memoize_tables(self):
+    def _memoize_tables(self) -> None:
         table_memo_ops = (ops.Aggregation, ops.Selection, ops.SelfReference)
         expr = self.expr
         if expr.op() in self.memo.visit_memo:
@@ -160,10 +155,10 @@ class ExprFormatter:
                     memo.observe(e, self._format_table)
                 memo.visit_memo.add(op)
 
-    def _indent(self, text, indents=1):
+    def _indent(self, text: str, indents: int = 1) -> str:
         return util.indent(text, self.indent_size * indents)
 
-    def _format_table(self, expr):
+    def _format_table(self, expr: ir.Expr):
         table = expr.op()
         # format the schema
         rows = ['name: {0!s}\nschema:'.format(table.name)]
@@ -178,7 +173,7 @@ class ExprFormatter:
         opline = '%s[%s]' % (opname, type_display)
         return '{0}\n{1}'.format(opline, self._indent('\n'.join(rows)))
 
-    def _format_column(self, expr):
+    def _format_column(self, expr: ir.Expr) -> str:
         # HACK: if column is pulled from a Filter of another table, this parent
         # will not be found in the memo
         col = expr.op()
@@ -195,7 +190,7 @@ class ExprFormatter:
             type_display, col.name, table_formatted
         )
 
-    def _format_node(self, expr):
+    def _format_node(self, expr: Any) -> str:
         op = expr.op()
         formatted_args = []
 
@@ -213,8 +208,7 @@ class ExprFormatter:
         arg_names = getattr(op, 'display_argnames', op.argnames)
 
         if not arg_names:
-            for arg in op.flat_args():
-                visit(arg)
+            util.consume(map(visit, op.flat_args()))
         else:
             signature = op.signature
             arg_name_pairs = (
@@ -246,10 +240,10 @@ class ExprFormatter:
 
         opname = type(op).__name__
         type_display = self._get_type_display(expr)
-        opline = '{}[{}]'.format(opname, type_display)
-        return '\n'.join([opline] + formatted_args)
+        opline = "{}[{}]".format(opname, type_display)
+        return "\n".join([opline] + formatted_args)
 
-    def _format_subexpr(self, expr):
+    def _format_subexpr(self, expr: ir.Expr) -> str:
         subexprs = self.memo.subexprs
         key = expr.op()
         try:
@@ -259,7 +253,7 @@ class ExprFormatter:
             result = subexprs[key] = self._indent(formatter.get_result(), 1)
         return result
 
-    def _get_type_display(self, expr=None):
+    def _get_type_display(self, expr: Optional[ir.Expr] = None) -> str:
         if expr is None:
             expr = self.expr
         return expr._type_display()

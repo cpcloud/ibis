@@ -1,3 +1,4 @@
+import abc
 import collections
 
 from multipledispatch import Dispatcher
@@ -126,33 +127,13 @@ class Schema:
         return self.names[i]
 
 
-class HasSchema:
-
-    """
-    Base class representing a structured dataset with a well-defined
-    schema.
+class HasSchema(abc.ABC):
+    """Base class representing a structured dataset with a well-defined schema.
 
     Base implementation is for tables that do not reference a particular
     concrete dataset or database table.
+
     """
-
-    def __repr__(self):
-        return '{}({})'.format(type(self).__name__, repr(self.schema))
-
-    def has_schema(self):
-        return True
-
-    def equals(self, other, cache=None):
-        return type(self) == type(other) and self.schema.equals(
-            other.schema, cache=cache
-        )
-
-    def root_tables(self):
-        return [self]
-
-    @property
-    def schema(self):
-        raise NotImplementedError
 
 
 schema = Dispatcher('schema')

@@ -1,6 +1,8 @@
+import abc
 import itertools
 import os
 import webbrowser
+from typing import Optional
 
 import ibis
 import ibis.common as com
@@ -13,14 +15,14 @@ import ibis.util as util
 class Expr:
     """Base expression class"""
 
-    def _type_display(self):
+    def _type_display(self) -> str:
         return type(self).__name__
 
-    def __init__(self, arg):
+    def __init__(self, arg) -> None:
         # TODO: all inputs must inherit from a common table API
         self._arg = arg
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not config.options.interactive:
             return self._repr()
 
@@ -36,17 +38,17 @@ class Expr:
         else:
             return repr(result)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._key)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         raise ValueError(
             "The truth value of an Ibis expression is not " "defined"
         )
 
     __nonzero__ = __bool__
 
-    def _repr(self, memo=None):
+    def _repr(self, memo=None) -> str:
         from ibis.expr.format import ExprFormatter
 
         return ExprFormatter(self, memo=memo).get_result()
@@ -377,6 +379,10 @@ class AnalyticExpr(Expr):
     def type(self):
         return 'analytic'
 
+    @abc.abstractmethod
+    def to_filter(self) -> "TableExpr":
+        ...
+
 
 class TableExpr(Expr):
     @property
@@ -427,7 +433,7 @@ class TableExpr(Expr):
         what = bind_expr(self, what)
 
         if isinstance(what, AnalyticExpr):
-            what = what._table_getitem()
+            what = what.to_filter()
 
         if isinstance(what, (list, tuple, TableExpr)):
             # Projection case
@@ -920,18 +926,12 @@ class TopKExpr(AnalyticExpr):
     def type(self):
         return 'topk'
 
-    def _table_getitem(self):
-        return self.to_filter()
-
-    def to_filter(self):
-        # TODO: move to api.py
-        import ibis.expr.operations as ops
-
-        return ops.SummaryFilter(self).to_expr()
-
     def to_aggregation(
-        self, metric_name=None, parent_table=None, backup_metric_name=None
-    ):
+        self,
+        metric_name: Optional[str] = None,
+        parent_table: Optional[TableExpr] = None,
+        backup_metric_name: Optional[str] = None,
+    ) -> TableExpr:
         """
         Convert the TopK operation to a table aggregation
         """
@@ -962,6 +962,12 @@ class TopKExpr(AnalyticExpr):
             )
 
         return agg.sort_by([(by.get_name(), False)]).limit(op.k)
+
+    def to_filter(self) -> TableExpr:
+        # TODO: move to api.py
+        import ibis.expr.operations as ops
+
+        return ops.SummaryFilter(self).to_expr()
 
 
 class SortExpr(Expr):
