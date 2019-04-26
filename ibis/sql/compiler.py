@@ -591,7 +591,7 @@ def _all_distinct_roots(subtables):
 
 def _blocking_base(expr):
     node = expr.op()
-    if node.blocks() or isinstance(node, ops.Join):
+    if node.blocks or isinstance(node, ops.Join):
         return expr
     else:
         for arg in expr.op().flat_args():

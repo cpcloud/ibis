@@ -68,7 +68,7 @@ class Substitutor:
         try:
             return mapping[node]
         except KeyError:
-            if node.blocks():
+            if node.blocks:
                 return expr
 
             new_args = list(node.args)
@@ -226,7 +226,7 @@ def find_immediate_parent_tables(expr):
 
 def _base_table(table_node):
     # Find the aggregate or projection root. Not proud of this
-    if table_node.blocks():
+    if table_node.blocks:
         return table_node
     else:
         return _base_table(table_node.table.op())
@@ -390,7 +390,7 @@ def fully_originate_from(exprs, parents):
 
         if isinstance(expr, ir.TableExpr):
             return lin.proceed, expr.op()
-        return lin.halt if op.blocks() else lin.proceed, None
+        return not op.blocks, None
 
     # unique table dependencies of exprs and parents
     exprs_deps = set(lin.traverse(finder, exprs))

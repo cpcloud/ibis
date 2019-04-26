@@ -1,17 +1,4 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+import toolz
 
 import ibis.expr.analysis as L
 import ibis.expr.datatypes as dt
@@ -99,7 +86,7 @@ class AnyToExistsTransform:
                     # Foreign ref
                     self.foreign_table = expr
         else:
-            if not node.blocks():
+            if not node.blocks:
                 for arg in node.flat_args():
                     if isinstance(arg, ir.Expr):
                         self._visit(arg)
@@ -112,12 +99,13 @@ class AnyToExistsTransform:
 
 def _find_blocking_table(expr):
     node = expr.op()
-
-    if node.blocks():
+    if node.blocks:
         return expr
-
-    for arg in node.flat_args():
-        if isinstance(arg, ir.Expr):
-            result = _find_blocking_table(arg)
-            if result is not None:
-                return result
+    try:
+        return toolz.first(
+            _find_blocking_table(arg)
+            for arg in node.flat_args()
+            if isinstance(arg, ir.Expr)
+        )
+    except StopIteration:
+        return None
