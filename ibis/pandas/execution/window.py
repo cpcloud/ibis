@@ -335,7 +335,7 @@ def execute_series_lead_lag_timedelta(
 
 @execute_node.register(ops.FirstValue, pd.Series)
 def execute_series_first_value(op, data, **kwargs):
-    return data.values[0]
+    return data.iloc[0]
 
 
 @execute_node.register(ops.FirstValue, SeriesGroupBy)
@@ -345,12 +345,22 @@ def execute_series_group_by_first_value(op, data, aggcontext=None, **kwargs):
 
 @execute_node.register(ops.LastValue, pd.Series)
 def execute_series_last_value(op, data, **kwargs):
-    return data.values[-1]
+    return data.iloc[-1]
 
 
 @execute_node.register(ops.LastValue, SeriesGroupBy)
 def execute_series_group_by_last_value(op, data, aggcontext=None, **kwargs):
     return aggcontext.agg(data, 'last')
+
+
+@execute_node.register(ops.NthValue, pd.Series, int)
+def execute_series_nth_value(op, data, i, **kwargs):
+    return data.iloc[i]
+
+
+@execute_node.register(ops.NthValue, SeriesGroupBy, int)
+def execute_series_group_by_nth_value(op, data, i, aggcontext=None, **kwargs):
+    return aggcontext.agg(data, 'nth', i)
 
 
 @execute_node.register(ops.MinRank, (pd.Series, SeriesGroupBy))

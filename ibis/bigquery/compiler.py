@@ -420,17 +420,75 @@ compiles = BigQueryExprTranslator.compiles
 rewrites = BigQueryExprTranslator.rewrites
 
 
-@compiles(ops.DayOfWeekIndex)
-def bigquery_day_of_week_index(t, e):
-    arg = e.op().args[0]
-    arg_formatted = t.translate(arg)
-    return 'MOD(EXTRACT(DAYOFWEEK FROM {}) + 5, 7)'.format(arg_formatted)
+class BigQueryTableSetFormatter(ImpalaTableSetFormatter):
+    def _quote_identifier(self, name):
+        if re.match(r'^[A-Za-z][A-Za-z_0-9]*$', name):
+            return name
+        return '`{}`'.format(name)
+
+
+class BigQuerySelect(ImpalaSelect):
+    translator = BigQueryExprTranslator
+
+    @property
+    def table_set_formatter(self):
+        return BigQueryTableSetFormatter
+
+
+@rewrites(ops.IdenticalTo)
+def identical_to(expr):
+    left, right = expr.op().args
+    return (left.isnull() & right.isnull()) | (left == right)
+
+
+@rewrites(ops.Log2)
+def log2(expr):
+    arg, = expr.op().args
+    return arg.log(2)
+
+
+@rewrites(ops.Sum)
+def bq_sum(expr):
+    op = expr.op()
+    arg, where = op.args
+    if isinstance(arg, ir.BooleanColumn):
+        return arg.cast(dt.int64).sum(where=where)
+    else:
+        return expr
+
+
+@rewrites(ops.Mean)
+def bq_mean(expr):
+    op = expr.op()
+    arg, where = op.args
+    if isinstance(arg, ir.BooleanColumn):
+        return arg.cast(dt.int64).mean(where=where)
+    else:
+        return expr
 
 
 @rewrites(ops.DayOfWeekName)
 def bigquery_day_of_week_name(e):
     arg = e.op().args[0]
     return arg.strftime('%A')
+
+
+@rewrites(ops.Any)
+@rewrites(ops.All)
+@rewrites(ops.NotAny)
+@rewrites(ops.NotAll)
+def _any_all_no_op(expr):
+    return expr
+
+
+UNIT_FUNCS = {'s': 'SECONDS', 'ms': 'MILLIS', 'us': 'MICROS'}
+
+
+@compiles(ops.DayOfWeekIndex)
+def bigquery_day_of_week_index(t, e):
+    arg = e.op().args[0]
+    arg_formatted = t.translate(arg)
+    return 'MOD(EXTRACT(DAYOFWEEK FROM {}) + 5, 7)'.format(arg_formatted)
 
 
 @compiles(ops.Divide)
@@ -470,57 +528,6 @@ def compiles_string_to_timestamp(translator, expr):
     return 'PARSE_TIMESTAMP({}, {})'.format(fmt_string, arg_formatted)
 
 
-class BigQueryTableSetFormatter(ImpalaTableSetFormatter):
-    def _quote_identifier(self, name):
-        if re.match(r'^[A-Za-z][A-Za-z_0-9]*$', name):
-            return name
-        return '`{}`'.format(name)
-
-
-class BigQuerySelect(ImpalaSelect):
-
-    translator = BigQueryExprTranslator
-
-    @property
-    def table_set_formatter(self):
-        return BigQueryTableSetFormatter
-
-
-@rewrites(ops.IdenticalTo)
-def identical_to(expr):
-    left, right = expr.op().args
-    return (left.isnull() & right.isnull()) | (left == right)
-
-
-@rewrites(ops.Log2)
-def log2(expr):
-    arg, = expr.op().args
-    return arg.log(2)
-
-
-@rewrites(ops.Sum)
-def bq_sum(expr):
-    arg = expr.op().args[0]
-    where = expr.op().args[1]
-    if isinstance(arg, ir.BooleanColumn):
-        return arg.cast('int64').sum(where=where)
-    else:
-        return expr
-
-
-@rewrites(ops.Mean)
-def bq_mean(expr):
-    arg = expr.op().args[0]
-    where = expr.op().args[1]
-    if isinstance(arg, ir.BooleanColumn):
-        return arg.cast('int64').mean(where=where)
-    else:
-        return expr
-
-
-UNIT_FUNCS = {'s': 'SECONDS', 'ms': 'MILLIS', 'us': 'MICROS'}
-
-
 @compiles(ops.TimestampFromUNIX)
 def compiles_timestamp_from_unix(t, e):
     value, unit = e.op().args
@@ -548,19 +555,9 @@ def compiles_approx(translator, expr):
     )
 
 
-@rewrites(ops.Any)
-@rewrites(ops.All)
-@rewrites(ops.NotAny)
-@rewrites(ops.NotAll)
-def _any_all_no_op(expr):
-    return expr
-
-
 @compiles(ops.Any)
 def bigquery_compile_any(translator, expr):
-    return "LOGICAL_OR({})".format(
-        *map(translator.translate, expr.op().args)
-    )
+    return "LOGICAL_OR({})".format(*map(translator.translate, expr.op().args))
 
 
 @compiles(ops.NotAny)
@@ -572,9 +569,7 @@ def bigquery_compile_notany(translator, expr):
 
 @compiles(ops.All)
 def bigquery_compile_all(translator, expr):
-    return "LOGICAL_AND({})".format(
-        *map(translator.translate, expr.op().args)
-    )
+    return "LOGICAL_AND({})".format(*map(translator.translate, expr.op().args))
 
 
 @compiles(ops.NotAll)
@@ -582,6 +577,17 @@ def bigquery_compile_notall(translator, expr):
     return "LOGICAL_OR(NOT ({}))".format(
         *map(translator.translate, expr.op().args)
     )
+
+
+@compiles(ops.NthValue)
+def bigquery_nth_value(translator, expr):
+    op = expr.op()
+    arg, rank = op.args
+
+    arg_formatted = translator.translate(arg)
+    if not isinstance(rank.op(), ops.Literal):
+        raise com.IbisTypeError("Argument 2 to `nth` must be a literal value.")
+    return 'NTH_VALUE({}, {})'.format(arg_formatted, rank.op().value + 1)
 
 
 class BigQueryDialect(impala_compiler.ImpalaDialect):

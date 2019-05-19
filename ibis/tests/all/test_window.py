@@ -1,10 +1,20 @@
+import numpy as np
+import pandas as pd
 import pytest
 from pytest import param
 
 import ibis
 import ibis.common as com
 import ibis.tests.util as tu
-from ibis.tests.backends import Csv, Impala, MapD, Pandas, Parquet
+from ibis.tests.backends import (
+    BigQuery,
+    Csv,
+    Impala,
+    MapD,
+    Pandas,
+    Parquet,
+    PostgreSQL,
+)
 
 
 @pytest.mark.parametrize(
@@ -59,6 +69,23 @@ from ibis.tests.backends import Csv, Impala, MapD, Pandas, Parquet
             lambda t, win: t.float_col.last().over(win),
             lambda t: t.float_col.transform('last'),
             id='last',
+        ),
+        param(
+            lambda t, win: t.float_col.nth(2).over(win),
+            lambda t: t.float_col.apply(
+                pd.Series(
+                    np.hstack(
+                        [
+                            np.repeat(np.nan, 2),
+                            np.repeat(t.float_col.iloc[2], len(t) - 2),
+                        ]
+                    ),
+                    index=t.float_col.index,
+                    name='float_col',
+                )
+            ),
+            id='nth',
+            marks=pytest.mark.xpass_backends([BigQuery, PostgreSQL]),
         ),
         param(
             lambda t, win: ibis.row_number().over(win),
