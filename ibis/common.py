@@ -33,6 +33,10 @@ class RelationError(ExpressionError):
     pass
 
 
+class UnmaterializedJoinError(RelationError):
+    pass
+
+
 class TranslationError(IbisError):
     pass
 

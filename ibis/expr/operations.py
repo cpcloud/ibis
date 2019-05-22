@@ -1625,8 +1625,17 @@ class Join(TableNode):
 
         return sleft.append(sright)
 
+    @property
+    def schema(self):
+        return self._get_schema()
+
     def has_schema(self):
-        return False
+        try:
+            return not set(self.left.schema().names).intersection(
+                self.right.schema().names
+            )
+        except com.UnmaterializedJoinError:
+            return False
 
     def root_tables(self):
         if util.all_of([self.left.op(), self.right.op()], (Join, Selection)):

@@ -535,20 +535,23 @@ class TableExpr(Expr):
         return self.schema().names
 
     def schema(self):
-        """
-        Get the schema for this table (if one is known)
+        """Get the schema for this table.
 
         Returns
         -------
-        schema : Schema
+        Schema
+
         """
         if not self._is_materialized():
-            raise com.IbisError('Table operation is not yet materialized')
+            raise com.UnmaterializedJoinError(
+                'Table operation is not yet materialized'
+            )
         return self.op().schema
 
     def _is_materialized(self):
         # The operation produces a known schema
-        return self.op().has_schema()
+        op = self.op()
+        return op.has_schema()
 
     def group_by(self, by=None, **additional_grouping_expressions):
         """
