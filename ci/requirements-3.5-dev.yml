@@ -25,6 +25,7 @@ dependencies:
   - pre_commit
   - psycopg2
   - pyarrow<0.12
+  - pydata-google-auth
   - pymapd>=0.8.3,<0.11.0
   - pymysql
   - pytables>=3.0.0
@@ -46,5 +47,4 @@ dependencies:
   - xorg-libxpm
   - xorg-libxrender
   - pip:
-    - pydata-google-auth
     - seed-isort-config
