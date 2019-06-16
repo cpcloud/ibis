@@ -5,7 +5,6 @@ import functools
 import itertools
 import numbers
 import re
-import sys
 import typing
 from typing import Any as GenericAny
 from typing import (
@@ -24,21 +23,12 @@ import pandas as pd
 import toolz
 from multipledispatch import Dispatcher
 
-import ibis.common.exceptions as com
-import ibis.expr.types as ir
-from ibis import util
-
-IS_SHAPELY_AVAILABLE = False
-try:
-    if sys.version_info >= (3, 6):
-        import shapely.geometry
-        IS_SHAPELY_AVAILABLE = True
-except ImportError:
-    ...
+from ..common import exceptions as exc
+from .. import util
+from . import types as ir
 
 
 class DataType:
-
     __slots__ = ('nullable',)
 
     def __init__(self, nullable: bool = True) -> None:
@@ -500,12 +490,12 @@ class Struct(DataType):
 
     @classmethod
     def from_tuples(
-        cls,
+        self,
         pairs: Sequence[Tuple[str, Union[str, DataType]]],
         nullable: bool = True,
     ) -> 'Struct':
         names, types = zip(*pairs)
-        return cls(list(names), list(map(dtype, types)), nullable=nullable)
+        return Struct(list(names), list(map(dtype, types)), nullable=nullable)
 
     @property
     def pairs(self) -> Mapping:
@@ -657,20 +647,6 @@ class GeoSpatial(DataType):
             geo_op += ';' + str(self.srid)
         return geo_op
 
-    def _literal_value_hash_key(self, value):
-        if IS_SHAPELY_AVAILABLE:
-            geo_shapes = (
-                shapely.geometry.Point,
-                shapely.geometry.LineString,
-                shapely.geometry.Polygon,
-                shapely.geometry.MultiLineString,
-                shapely.geometry.MultiPoint,
-                shapely.geometry.MultiPolygon
-            )
-            if isinstance(value, geo_shapes):
-                return self, value.wkt
-        return self, value
-
 
 class Geometry(GeoSpatial):
     """Geometry is used to cast from geography types."""
@@ -734,24 +710,6 @@ class Polygon(GeoSpatial):
     __slots__ = ()
 
 
-class MultiLineString(GeoSpatial):
-    """A set of one or more line strings."""
-
-    scalar = ir.MultiLineStringScalar
-    column = ir.MultiLineStringColumn
-
-    __slots__ = ()
-
-
-class MultiPoint(GeoSpatial):
-    """A set of one or more points."""
-
-    scalar = ir.MultiPointScalar
-    column = ir.MultiPointColumn
-
-    __slots__ = ()
-
-
 class MultiPolygon(GeoSpatial):
     """A set of one or more polygons."""
 
@@ -794,8 +752,6 @@ geography = GeoSpatial()
 point = Point()
 linestring = LineString()
 polygon = Polygon()
-multilinestring = MultiLineString()
-multipoint = MultiPoint()
 multipolygon = MultiPolygon()
 
 
@@ -859,10 +815,8 @@ class Tokens:
     POINT = 24
     LINESTRING = 25
     POLYGON = 26
-    MULTILINESTRING = 27
-    MULTIPOINT = 28
-    MULTIPOLYGON = 29
-    SEMICOLON = 30
+    MULTIPOLYGON = 27
+    SEMICOLON = 28
 
     @staticmethod
     def name(value):
@@ -971,8 +925,6 @@ _TYPE_RULES = collections.OrderedDict(
                 'point',
                 'linestring',
                 'polygon',
-                'multilinestring',
-                'multipoint',
                 'multipolygon',
             ),
             (
@@ -981,8 +933,6 @@ _TYPE_RULES = collections.OrderedDict(
                 Tokens.POINT,
                 Tokens.LINESTRING,
                 Tokens.POLYGON,
-                Tokens.MULTILINESTRING,
-                Tokens.MULTIPOINT,
                 Tokens.MULTIPOLYGON,
             ),
         )
@@ -1176,15 +1126,6 @@ class TypeParser:
                 | "polygon" ":" geotype
                 | "polygon" ";" srid ":" geotype
 
-        multilinestring : "multilinestring"
-                   | "multilinestring" ";" srid
-                   | "multilinestring" ":" geotype
-                   | "multilinestring" ";" srid ":" geotype
-
-        multipoint : "multipoint"
-                   | "multipoint" ";" srid
-                   | "multipoint" ":" geotype
-                   | "multipoint" ";" srid ":" geotype
 
         multipolygon : "multipolygon"
                      | "multipolygon" ";" srid
@@ -1362,40 +1303,6 @@ class TypeParser:
 
             return Polygon(geotype=geotype, srid=srid)
 
-        elif self._accept(Tokens.MULTILINESTRING):
-            geotype = None
-            srid = None
-
-            if self._accept(Tokens.SEMICOLON):
-                self._expect(Tokens.INTEGER)
-                assert self.tok is not None
-                srid = self.tok.value
-
-            if self._accept(Tokens.COLON):
-                if self._accept(Tokens.GEOGRAPHY):
-                    geotype = 'geography'
-                elif self._accept(Tokens.GEOMETRY):
-                    geotype = 'geometry'
-
-            return MultiLineString(geotype=geotype, srid=srid)
-
-        elif self._accept(Tokens.MULTIPOINT):
-            geotype = None
-            srid = None
-
-            if self._accept(Tokens.SEMICOLON):
-                self._expect(Tokens.INTEGER)
-                assert self.tok is not None
-                srid = self.tok.value
-
-            if self._accept(Tokens.COLON):
-                if self._accept(Tokens.GEOGRAPHY):
-                    geotype = 'geography'
-                elif self._accept(Tokens.GEOMETRY):
-                    geotype = 'geometry'
-
-            return MultiPoint(geotype=geotype, srid=srid)
-
         elif self._accept(Tokens.MULTIPOLYGON):
             geotype = None
             srid = None
@@ -1424,7 +1331,7 @@ validate_type = dtype
 
 @dtype.register(object)
 def default(value, **kwargs) -> DataType:
-    raise com.IbisTypeError('Value {!r} is not a valid datatype'.format(value))
+    raise exc.IbisTypeError('Value {!r} is not a valid datatype'.format(value))
 
 
 @dtype.register(DataType)
@@ -1437,7 +1344,7 @@ def from_string(value: str) -> DataType:
     try:
         return TypeParser(value).parse()
     except SyntaxError:
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             '{!r} cannot be parsed as a datatype'.format(value)
         )
 
@@ -1465,7 +1372,7 @@ def higher_precedence(left: DataType, right: DataType) -> DataType:
     elif castable(right, left, upcast=True):
         return left
 
-    raise com.IbisTypeError(
+    raise exc.IbisTypeError(
         'Cannot compute precedence for {} and {} types'.format(left, right)
     )
 
@@ -1478,7 +1385,7 @@ def highest_precedence(dtypes: Iterator[DataType]) -> DataType:
 @infer.register(object)
 def infer_dtype_default(value: GenericAny) -> DataType:
     """Default implementation of :func:`~ibis.expr.datatypes.infer`."""
-    raise com.InputTypeError(value)
+    raise exc.IbisInputTypeError(value)
 
 
 @infer.register(collections.OrderedDict)
@@ -1569,40 +1476,6 @@ def infer_boolean(value: bool) -> Boolean:
 @infer.register((type(None), Null))
 def infer_null(value: Optional[Null]) -> Null:
     return null
-
-
-if IS_SHAPELY_AVAILABLE:
-    @infer.register(shapely.geometry.Point)
-    def infer_shapely_point(value: shapely.geometry.Point) -> Point:
-        return point
-
-    @infer.register(shapely.geometry.LineString)
-    def infer_shapely_linestring(
-        value: shapely.geometry.LineString
-    ) -> LineString:
-        return linestring
-
-    @infer.register(shapely.geometry.Polygon)
-    def infer_shapely_polygon(value: shapely.geometry.Polygon) -> Polygon:
-        return polygon
-
-    @infer.register(shapely.geometry.MultiLineString)
-    def infer_shapely_multilinestring(
-        value: shapely.geometry.MultiLineString
-    ) -> MultiLineString:
-        return multilinestring
-
-    @infer.register(shapely.geometry.MultiPoint)
-    def infer_shapely_multipoint(
-        value: shapely.geometry.MultiPoint
-    ) -> MultiPoint:
-        return multipoint
-
-    @infer.register(shapely.geometry.MultiPolygon)
-    def infer_shapely_multipolygon(
-        value: shapely.geometry.MultiPolygon
-    ) -> MultiPolygon:
-        return multipolygon
 
 
 castable = Dispatcher('castable')
@@ -1720,14 +1593,9 @@ def can_cast_variadic(
 
 # geo spatial data type
 # cast between same type, used to cast from/to geometry and geography
-GEO_TYPES = (
-    Point, LineString, Polygon, MultiLineString, MultiPoint, MultiPolygon
-)
-
-
-@castable.register(Array, GEO_TYPES)
-@castable.register(GEO_TYPES, Geometry)
-@castable.register(GEO_TYPES, Geography)
+@castable.register(Array, (Point, LineString, Polygon, MultiPolygon))
+@castable.register((Point, LineString, Polygon, MultiPolygon), Geometry)
+@castable.register((Point, LineString, Polygon, MultiPolygon), Geography)
 def can_cast_geospatial(source, target, **kwargs):
     return True
 
@@ -1747,7 +1615,7 @@ def cast(
     source, result_target = dtype(source), dtype(target)
 
     if not castable(source, result_target, **kwargs):
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Datatype {} cannot be implicitly '
             'casted to {}'.format(source, result_target)
         )

@@ -17,7 +17,7 @@ import pandas as pd
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 from ibis.expr.window import _determine_how, rows_with_max_lookback
 from ibis.tests.util import assert_equal
 
@@ -64,55 +64,17 @@ def test_combine_windows(alltypes):
     with pytest.raises(ibis.common.exceptions.IbisInputError):
         w1.combine(w6)
 
-
-def test_combine_windows_with_zero_offset():
-    w1 = ibis.window(preceding=0, following=5)
-    w2 = ibis.window(preceding=7, following=10)
-    w3 = w1.combine(w2)
-    expected = ibis.window(preceding=7, following=5)
-    assert_equal(w3, expected)
-
-    w4 = ibis.window(preceding=3, following=0)
-    w5 = w4.combine(w2)
-    expected = ibis.window(preceding=3, following=10)
-    assert_equal(w5, expected)
-
-
-def test_combine_window_with_interval_offset(alltypes):
-    t = alltypes
-    w1 = ibis.trailing_range_window(
-        preceding=ibis.interval(days=3), order_by=t.e
-    )
-    w2 = ibis.trailing_range_window(
-        preceding=ibis.interval(days=4), order_by=t.f
-    )
-    w3 = w1.combine(w2)
-    expected = ibis.trailing_range_window(
-        preceding=ibis.interval(days=3), order_by=[t.e, t.f]
-    )
-    assert_equal(w3, expected)
-
-    w4 = ibis.range_window(following=ibis.interval(days=5), order_by=t.e)
-    w5 = ibis.range_window(following=ibis.interval(days=7), order_by=t.f)
-    expected = ibis.range_window(
-        following=ibis.interval(days=5), order_by=[t.e, t.f]
-    )
-    w6 = w4.combine(w5)
-    assert_equal(w6, expected)
-
-
-def test_combine_window_with_max_lookback():
-    w1 = ibis.trailing_window(
+    w7 = ibis.trailing_window(
         rows_with_max_lookback(3, ibis.interval(days=5))
     )
-    w2 = ibis.trailing_window(
+    w8 = ibis.trailing_window(
         rows_with_max_lookback(5, ibis.interval(days=7))
     )
-    w3 = w1.combine(w2)
+    w9 = w7.combine(w8)
     expected = ibis.trailing_window(
         rows_with_max_lookback(3, ibis.interval(days=5))
     )
-    assert_equal(w3, expected)
+    assert_equal(w9, expected)
 
 
 def test_replace_window(alltypes):
@@ -269,15 +231,15 @@ def test_max_rows_with_lookback_validate(alltypes):
     t.f.lag().over(window)
 
     window = ibis.trailing_window(mlb)
-    with pytest.raises(com.IbisInputError):
+    with pytest.raises(exc.IbisInputError):
         t.f.lag().over(window)
 
     window = ibis.trailing_window(mlb, order_by=t.a)
-    with pytest.raises(com.IbisInputError):
+    with pytest.raises(exc.IbisInputError):
         t.f.lag().over(window)
 
     window = ibis.trailing_window(mlb, order_by=[t.i, t.a])
-    with pytest.raises(com.IbisInputError):
+    with pytest.raises(exc.IbisInputError):
         t.f.lag().over(window)
 
 

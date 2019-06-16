@@ -8,11 +8,11 @@ import pandas as pd
 import toolz
 from pandas.core.groupby import SeriesGroupBy
 
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
-import ibis.expr.window as win
-import ibis.pandas.aggcontext as agg_ctx
-from ibis.pandas.core import (
+from ...common import exceptions as exc
+from ...expr import operations as ops
+from ...expr import window as win
+from .. import aggcontext as agg_ctx
+from ..core import (
     date_types,
     execute,
     integer_types,
@@ -20,8 +20,8 @@ from ibis.pandas.core import (
     timedelta_types,
     timestamp_types,
 )
-from ibis.pandas.dispatch import execute_node, pre_execute
-from ibis.pandas.execution import util
+from ..dispatch import execute_node, pre_execute
+from ..execution import util
 
 
 def _post_process_empty(scalar, parent, order_by, group_by):
@@ -98,7 +98,7 @@ def execute_window_op(
         and following != 0
         and not isinstance(operand_op, ops.ShiftBase)
     ):
-        raise com.OperationNotDefinedError(
+        raise exc.OperationNotDefinedError(
             'Window functions affected by following with order_by are not '
             'implemented'
         )
@@ -107,9 +107,7 @@ def execute_window_op(
     grouping_keys = [
         key_op.name
         if isinstance(key_op, ops.TableColumn)
-        else execute(
-            key, scope=scope, clients=clients, aggcontext=aggcontext, **kwargs
-        )
+        else execute(key, aggcontext=aggcontext, **kwargs)
         for key, key_op in zip(
             group_by, map(operator.methodcaller('op'), group_by)
         )
@@ -170,11 +168,9 @@ def execute_window_op(
         # XXX(phillipc): What a horror show
         preceding = window.preceding
         if preceding is not None:
-            max_lookback = window.max_lookback
             assert not isinstance(operand.op(), ops.CumulativeOp)
             aggcontext = agg_ctx.Moving(
                 preceding,
-                max_lookback,
                 parent=source,
                 group_by=grouping_keys,
                 order_by=ordering_keys,

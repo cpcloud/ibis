@@ -3,10 +3,10 @@ from functools import wraps as copydoc
 import kudu
 import pandas as pd
 
-import ibis.expr.datatypes as dt
-from ibis.common.exceptions import IbisError
-from ibis.expr.api import schema
-from ibis.impala import ddl
+from ..expr import datatypes as dt
+from ..expr.api import schema
+from . import ddl
+from .pandas_interop import write_temp_dataframe
 
 _kudu_type_to_ibis_typeclass = {
     'int8': dt.Int8,
@@ -19,6 +19,10 @@ _kudu_type_to_ibis_typeclass = {
     'string': dt.String,
     'timestamp': dt.Timestamp,
 }
+
+
+class KuduConnectionError(Exception):
+    pass
 
 
 class KuduImpalaInterface:
@@ -70,7 +74,7 @@ class KuduImpalaInterface:
 
     def _check_connected(self):
         if not self.is_connected:
-            raise IbisError(
+            raise KuduConnectionError(
                 'Please first connect to a Kudu cluster '
                 'with client.kudu.connect'
             )
@@ -133,11 +137,7 @@ class KuduImpalaInterface:
                 )
 
             if isinstance(obj, pd.DataFrame):
-                from ibis.impala.pandas_interop import write_temp_dataframe
-
-                writer, to_insert = write_temp_dataframe(
-                    self.impala_client, obj
-                )
+                to_insert = write_temp_dataframe(self.impala_client, obj)
             else:
                 to_insert = obj
             # XXX: exposing a lot of internals
@@ -259,7 +259,7 @@ class CreateTableKudu(ddl.CreateTable):
         )
 
     _table_props_base = {
-        'storage_handler': 'com.cloudera.kudu.hive.KuduStorageHandler'
+        'storage_handler': 'exc.cloudera.kudu.hive.KuduStorageHandler'
     }
 
     def _get_table_properties(self):

@@ -3,8 +3,8 @@ import itertools
 
 from toolz import compose, identity
 
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
+from . import operations as ops
+from . import types as ir
 
 
 def find_nodes(expr, node_types):

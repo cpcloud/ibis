@@ -2,7 +2,7 @@ import pytest
 from pytest import param
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 from ibis.tests.backends import Csv, OmniSciDB, Pandas, Parquet
 
 
@@ -65,7 +65,7 @@ from ibis.tests.backends import Csv, OmniSciDB, Pandas, Parquet
             id='row_number',
             marks=pytest.mark.xfail_backends(
                 (Pandas, Csv, Parquet),
-                raises=(IndexError, com.UnboundExpressionError),
+                raises=(IndexError, exc.UnboundExpressionError),
             ),
         ),
         param(

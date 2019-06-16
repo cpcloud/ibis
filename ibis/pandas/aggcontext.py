@@ -222,25 +222,20 @@ import warnings
 import pandas as pd
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
 import ibis.util
+
+from ..common import exceptions as exc
+from ..expr import datatypes as dt
 
 
 class AggregationContext(abc.ABC):
-    __slots__ = 'parent', 'group_by', 'order_by', 'dtype', 'max_lookback'
+    __slots__ = 'parent', 'group_by', 'order_by', 'dtype'
 
-    def __init__(self,
-                 parent=None,
-                 group_by=None,
-                 order_by=None,
-                 dtype=None,
-                 max_lookback=None):
+    def __init__(self, parent=None, group_by=None, order_by=None, dtype=None):
         self.parent = parent
         self.group_by = group_by
         self.order_by = order_by
         self.dtype = dtype
-        self.max_lookback = max_lookback
 
     @abc.abstractmethod
     def agg(self, grouped_data, function, *args, **kwargs):
@@ -274,9 +269,7 @@ class Summarize(AggregationContext):
                 'Object {} is not callable or a string'.format(function)
             )
 
-        return grouped_data.agg(
-            make_applied_function(function, args, kwargs)
-        )
+        return grouped_data.agg(make_applied_function(function, args, kwargs))
 
 
 class Transform(AggregationContext):
@@ -288,7 +281,7 @@ class Transform(AggregationContext):
 
 @functools.singledispatch
 def compute_window_spec(dtype, obj):
-    raise com.IbisTypeError(
+    raise exc.IbisTypeError(
         "Unknown dtype type {} and object {} for compute_window_spec".format(
             dtype, obj
         )
@@ -320,7 +313,6 @@ class Window(AggregationContext):
             group_by=kwargs.pop('group_by', None),
             order_by=kwargs.pop('order_by', None),
             dtype=kwargs.pop('dtype'),
-            max_lookback=kwargs.pop('max_lookback', None),
         )
         self.construct_window = operator.methodcaller(kind, *args, **kwargs)
 
@@ -331,7 +323,7 @@ class Window(AggregationContext):
         order_by = self.order_by
 
         # if we don't have a grouping key, just call into pandas
-        if not group_by and not order_by:
+        if not group_by:
             # the result of calling .rolling(...) in pandas
             windowed = self.construct_window(grouped_data)
 
@@ -367,18 +359,9 @@ class Window(AggregationContext):
                 assert isinstance(function, str)
                 method = operator.methodcaller(function, *args, **kwargs)
 
-            max_lookback = self.max_lookback
-            if max_lookback is not None:
-                agg_method = method
-
-                def sliced_agg(s):
-                    return agg_method(s.iloc[-max_lookback:])
-                method = operator.methodcaller('apply', sliced_agg, raw=False)
-
         # get the DataFrame from which the operand originated (passed in when
         # constructing this context object in execute_node(ops.WindowOp))
-        parent = self.parent
-        frame = getattr(parent, 'obj', parent)
+        frame = self.parent.obj
         obj = getattr(grouped_data, 'obj', grouped_data)
 
         name = obj.name
@@ -393,12 +376,8 @@ class Window(AggregationContext):
         columns = group_by + order_by + [name]
         indexed_by_ordering = frame.loc[:, columns].set_index(order_by)
 
-        # regroup if needed
-        if group_by:
-            grouped_frame = indexed_by_ordering.groupby(group_by)
-        else:
-            grouped_frame = indexed_by_ordering
-        grouped = grouped_frame[name]
+        # regroup
+        grouped = indexed_by_ordering.groupby(group_by)[name]
 
         # perform the per-group rolling operation
         windowed = self.construct_window(grouped)
@@ -429,7 +408,7 @@ class Cumulative(Window):
 class Moving(Window):
     __slots__ = ()
 
-    def __init__(self, preceding, max_lookback, *args, **kwargs):
+    def __init__(self, preceding, *args, **kwargs):
         from ibis.pandas.core import timedelta_types
 
         ibis_dtype = getattr(preceding, 'type', lambda: None)()
@@ -441,9 +420,9 @@ class Moving(Window):
             )
             else 'both'
         )
-        super().__init__('rolling', preceding, *args,
-                         max_lookback=max_lookback, closed=closed,
-                         min_periods=1, **kwargs)
+        super().__init__(
+            'rolling', preceding, *args, closed=closed, min_periods=1, **kwargs
+        )
 
     def short_circuit_method(self, grouped_data, function):
         raise AttributeError('No short circuit method for rolling operations')

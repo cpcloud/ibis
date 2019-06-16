@@ -6,16 +6,16 @@ import pandas as pd
 from clickhouse_driver.client import Client as _DriverClient
 from pkg_resources import parse_version
 
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-from ibis.clickhouse.compiler import ClickhouseDialect, build_ast
-from ibis.client import Database, DatabaseEntity, Query, SQLClient
-from ibis.config import options
-from ibis.sql.compiler import DDL
-from ibis.util import log
+from ..client import Database, DatabaseEntity, Query, SQLClient
+from ..common import exceptions as exc
+from ..config import options
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import schema as sch
+from ..expr import types as ir
+from ..sql.compiler import DDL
+from ..util import log
+from .compiler import ClickhouseDialect, build_ast
 
 fully_qualified_re = re.compile(r"(.*)\.(?:`(.*)`|(.*))")
 base_typename_re = re.compile(r"(\w+)")
@@ -51,7 +51,7 @@ class ClickhouseDataType:
         m = base_typename_re.match(typename)
         base_typename = m.groups()[0]
         if base_typename not in _clickhouse_dtypes:
-            raise com.UnsupportedBackendType(typename)
+            raise exc.UnsupportedBackendType(typename)
         self.typename = base_typename
         self.nullable = nullable
 
@@ -147,7 +147,7 @@ class ClickhouseTable(ir.TableExpr, DatabaseEntity):
     def _match_name(self):
         m = fully_qualified_re.match(self._qualified_name)
         if not m:
-            raise com.IbisError(
+            raise exc.InvalidArgumentError(
                 'Cannot determine database name from {0}'.format(
                     self._qualified_name
                 )

@@ -1,10 +1,9 @@
 from io import StringIO
 
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
-import ibis.sql.compiler as comp
-import ibis.util as util
-
+from .. import util
+from ..common import exceptions as exc
+from ..expr import operations as ops
+from ..sql import compiler as comp
 from .identifiers import quote_identifier
 from .operations import _name_expr, _operation_registry
 
@@ -133,13 +132,13 @@ class ClickhouseTableSetFormatter(comp.TableSetFormatter):
         for pred in predicates:
             op = pred.op()
             if not isinstance(op, ops.Equals):
-                raise com.TranslationError(
+                raise exc.TranslationError(
                     'Non-equality join predicates are ' 'not supported'
                 )
 
             left_on, right_on = op.args
             if left_on.get_name() != right_on.get_name():
-                raise com.TranslationError(
+                raise exc.TranslationError(
                     'Joining on different column names ' 'is not supported'
                 )
 

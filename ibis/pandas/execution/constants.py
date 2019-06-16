@@ -7,8 +7,9 @@ import numpy as np
 import pandas as pd
 
 import ibis
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
+
+from ...expr import datatypes as dt
+from ...expr import operations as ops
 
 JOIN_TYPES = {
     ops.LeftJoin: 'left',

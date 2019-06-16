@@ -6,22 +6,16 @@ import regex as re
 import toolz
 from multipledispatch import Dispatcher
 
-import ibis
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.lineage as lin
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.sql.compiler as comp
-from ibis.bigquery.datatypes import ibis_type_to_bigquery_type
-from ibis.impala import compiler as impala_compiler
-from ibis.impala.compiler import (
-    ImpalaSelect,
-    ImpalaTableSetFormatter,
-    _reduction,
-    fixed_arity,
-    unary,
-)
+from .. import NA
+from ..common import exceptions as exc
+from ..expr import datatypes as dt
+from ..expr import lineage as lin
+from ..expr import operations as ops
+from ..expr import types as ir
+from ..impala import compiler as impala_compiler
+from ..impala.compiler import _reduction, fixed_arity, unary
+from ..sql import compiler as comp
+from .datatypes import ibis_type_to_bigquery_type
 
 
 class BigQueryUDFNode(ops.ValueOp):
@@ -262,10 +256,10 @@ def _arbitrary(translator, expr):
     arg, how, where = expr.op().args
 
     if where is not None:
-        arg = where.ifelse(arg, ibis.NA)
+        arg = where.ifelse(arg, NA)
 
     if how not in (None, 'first'):
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             '{!r} value not supported for arbitrary in BigQuery'.format(how)
         )
 
@@ -298,7 +292,7 @@ def _truncate(kind, units):
         trans_arg = translator.translate(arg)
         valid_unit = units.get(unit)
         if valid_unit is None:
-            raise com.UnsupportedOperationError(
+            raise exc.UnsupportedOperationError(
                 'BigQuery does not support truncating {} values to unit '
                 '{!r}'.format(arg.type(), unit)
             )
@@ -314,7 +308,7 @@ def _timestamp_op(func, units):
 
         unit = offset.type().unit
         if unit not in units:
-            raise com.UnsupportedOperationError(
+            raise exc.UnsupportedOperationError(
                 'BigQuery does not allow binary operation '
                 '{} with INTERVAL offset {}'.format(func, unit)
             )
@@ -470,14 +464,14 @@ def compiles_string_to_timestamp(translator, expr):
     return 'PARSE_TIMESTAMP({}, {})'.format(fmt_string, arg_formatted)
 
 
-class BigQueryTableSetFormatter(ImpalaTableSetFormatter):
+class BigQueryTableSetFormatter(impala_compiler.ImpalaTableSetFormatter):
     def _quote_identifier(self, name):
         if re.match(r'^[A-Za-z][A-Za-z_0-9]*$', name):
             return name
         return '`{}`'.format(name)
 
 
-class BigQuerySelect(ImpalaSelect):
+class BigQuerySelect(impala_compiler.ImpalaSelect):
 
     translator = BigQueryExprTranslator
 
@@ -541,7 +535,7 @@ def compiles_approx(translator, expr):
     where = expr.where
 
     if where is not None:
-        arg = where.ifelse(arg, ibis.NA)
+        arg = where.ifelse(arg, NA)
 
     return 'APPROX_QUANTILES({}, 2)[OFFSET(1)]'.format(
         translator.translate(arg)
@@ -558,9 +552,7 @@ def bigquery_any_all_no_op(expr):
 
 @compiles(ops.Any)
 def bigquery_compile_any(translator, expr):
-    return "LOGICAL_OR({})".format(
-        *map(translator.translate, expr.op().args)
-    )
+    return "LOGICAL_OR({})".format(*map(translator.translate, expr.op().args))
 
 
 @compiles(ops.NotAny)
@@ -572,9 +564,7 @@ def bigquery_compile_notany(translator, expr):
 
 @compiles(ops.All)
 def bigquery_compile_all(translator, expr):
-    return "LOGICAL_AND({})".format(
-        *map(translator.translate, expr.op().args)
-    )
+    return "LOGICAL_AND({})".format(*map(translator.translate, expr.op().args))
 
 
 @compiles(ops.NotAll)

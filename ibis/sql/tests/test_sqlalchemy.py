@@ -1,17 +1,3 @@
-# Copyright 2015 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import operator
 import unittest
 
@@ -24,9 +10,9 @@ import ibis
 import ibis.expr.datatypes as dt
 import ibis.sql.alchemy as alch  # noqa: E402
 from ibis.expr.tests.mocks import MockAlchemyConnection
-from ibis.sql.tests.test_compiler import ExprTestCases  # noqa: E402
 from ibis.tests.util import assert_equal
 
+test_compiler = pytest.importorskip('ibis.sql.tests.test_compiler')
 sa = pytest.importorskip('sqlalchemy')
 
 
@@ -42,7 +28,7 @@ def _table_wrapper(name, tname=None):
     return f
 
 
-class TestSQLAlchemySelect(unittest.TestCase, ExprTestCases):
+class TestSQLAlchemySelect(unittest.TestCase, test_compiler.ExprTestCases):
     def setUp(self):
         self.con = MockAlchemyConnection()
         self.alltypes = self.con.table('functional_alltypes')
@@ -209,7 +195,7 @@ class TestSQLAlchemySelect(unittest.TestCase, ExprTestCases):
             ),
             (
                 region.outer_join(nation, ipred),
-                rt.outerjoin(nt, spred, full=True)
+                rt.outerjoin(nt, spred, full=True),
             ),
         ]
         for ibis_joined, joined_sqla in fully_mat_joins:
@@ -259,10 +245,7 @@ class TestSQLAlchemySelect(unittest.TestCase, ExprTestCases):
         nation = self.con.table('tpch_nation')
 
         predicate = region.r_regionkey == nation.n_regionkey
-        joined = region.outer_join(
-            nation,
-            predicate
-        )
+        joined = region.outer_join(nation, predicate)
         joined_sql_str = str(joined.compile())
         assert 'full' in joined_sql_str.lower()
         assert 'left' not in joined_sql_str.lower()

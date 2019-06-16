@@ -15,16 +15,11 @@ import pandas as pd
 import toolz
 from pandas.core.groupby import SeriesGroupBy
 
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.signature as sig
-from ibis.pandas.core import (
-    date_types,
-    time_types,
-    timedelta_types,
-    timestamp_types,
-)
-from ibis.pandas.dispatch import execute_node
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import signature as sig
+from .core import date_types, time_types, timedelta_types, timestamp_types
+from .dispatch import execute_node
 
 
 @functools.singledispatch

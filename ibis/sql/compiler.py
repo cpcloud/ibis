@@ -1,24 +1,23 @@
-"""Core expression to SQL infrastructure.
-"""
+"""Core compiler infrastructure."""
 
 import abc
+import itertools
 import operator
 from collections import OrderedDict
-from io import StringIO
-from itertools import chain
 
 import toolz
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.analysis as L
-import ibis.expr.analytics as analytics
-import ibis.expr.datatypes as dt
-import ibis.expr.format as fmt
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.sql.transforms as transforms
-import ibis.util as util
+
+from ..common import exceptions as exc
+from .. import util
+from ..expr import analysis as L
+from ..expr import analytics as analytics
+from ..expr import datatypes as dt
+from ..expr import format as fmt
+from ..expr import operations as ops
+from ..expr import types as ir
+from ..sql import transforms
 
 
 class DML(abc.ABC):
@@ -57,7 +56,7 @@ class QueryAST:
         ]
         return self.context.collapse(
             list(
-                chain(
+                itertools.chain(
                     compiled_setup_queries,
                     compiled_queries,
                     compiled_teardown_queries,
@@ -373,7 +372,7 @@ class SelectBuilder:
         if isinstance(root_op, ops.TableNode):
             self._collect(source_expr, toplevel=True)
             if self.table_set is None:
-                raise com.InternalError('no table set')
+                raise exc.InternalCompilerError("no table set")
         else:
             # Expressions not depending on any table
             if isinstance(root_op, ops.ExpressionList):
@@ -928,7 +927,7 @@ def _adapt_expr(expr):
 
         return table_expr, result_handler
     else:
-        raise com.TranslationError(
+        raise exc.TranslationError(
             'Do not know how to execute: {0}'.format(type(expr))
         )
 
@@ -1314,7 +1313,7 @@ class ExprTranslator:
             formatter = self._registry[type(op)]
             return formatter(self, expr)
         else:
-            raise com.OperationNotDefinedError(
+            raise exc.OperationNotDefinedError(
                 'No translation rule for {}'.format(type(op))
             )
 
@@ -1407,25 +1406,27 @@ def _category_label(expr):
 @rewrites(ops.Any)
 def _any_expand(expr):
     arg = expr.op().args[0]
-    return arg.max()
+    return arg.sum() > 0
 
 
 @rewrites(ops.NotAny)
 def _notany_expand(expr):
     arg = expr.op().args[0]
-    return arg.max() == 0
+    return arg.sum() == 0
 
 
 @rewrites(ops.All)
 def _all_expand(expr):
     arg = expr.op().args[0]
-    return arg.min()
+    t = ir.find_base_table(arg)
+    return arg.sum() == t.count()
 
 
 @rewrites(ops.NotAll)
 def _notall_expand(expr):
     arg = expr.op().args[0]
-    return arg.min() == 0
+    t = ir.find_base_table(arg)
+    return arg.sum() < t.count()
 
 
 @rewrites(ops.Cast)
@@ -1628,18 +1629,19 @@ class Select(DML):
                     expr_str = '*'
             formatted.append(expr_str)
 
-        buf = StringIO()
+        buf = []
         line_length = 0
         max_length = 70
         tokens = 0
+        indent = self.indent
         for i, val in enumerate(formatted):
             # always line-break for multi-line expressions
             if val.count('\n'):
                 if i:
-                    buf.write(',')
-                buf.write('\n')
-                indented = util.indent(val, self.indent)
-                buf.write(indented)
+                    buf.append(',')
+                buf.append('\n')
+                indented = util.indent(val, indent)
+                buf.append(indented)
 
                 # set length of last line
                 line_length = len(indented.split('\n')[-1])
@@ -1651,15 +1653,15 @@ class Select(DML):
             ):
                 # There is an expr, and adding this new one will make the line
                 # too long
-                buf.write(',\n       ') if i else buf.write('\n')
-                buf.write(val)
+                buf.append(',\n       ') if i else buf.append('\n')
+                buf.append(val)
                 line_length = len(val) + 7
                 tokens = 1
             else:
                 if i:
-                    buf.write(',')
-                buf.write(' ')
-                buf.write(val)
+                    buf.append(',')
+                buf.append(' ')
+                buf.append(val)
                 tokens += 1
                 line_length += len(val) + 2
 
@@ -1668,7 +1670,7 @@ class Select(DML):
         else:
             select_key = 'SELECT'
 
-        return '{}{}'.format(select_key, buf.getvalue())
+        return '{}{}'.format(select_key, ''.join(buf))
 
     @property
     def table_set_formatter(self):
@@ -1707,53 +1709,49 @@ class Select(DML):
         return '\n'.join(lines)
 
     def format_where(self):
-        if not self.where:
+        where = self.where
+        if not where:
             return None
 
-        buf = StringIO()
-        buf.write('WHERE ')
+        buf = ['WHERE']
         fmt_preds = []
-        npreds = len(self.where)
-        for pred in self.where:
+        npreds = len(where)
+        for pred in where:
             new_pred = self._translate(pred, permit_subquery=True)
             if npreds > 1:
                 new_pred = '({})'.format(new_pred)
             fmt_preds.append(new_pred)
 
-        conj = ' AND\n{}'.format(' ' * 6)
-        buf.write(conj.join(fmt_preds))
-        return buf.getvalue()
+        buf.append(' AND\n{}'.format(' ' * 6).join(fmt_preds))
+        return ' '.join(buf)
 
     def format_order_by(self):
-        if not self.order_by:
+        order_by = self.order_by
+        if not order_by:
             return None
 
-        buf = StringIO()
-        buf.write('ORDER BY ')
-
+        buf = ['ORDER BY']
         formatted = []
-        for expr in self.order_by:
+        for expr in order_by:
             key = expr.op()
             translated = self._translate(key.expr)
             if not key.ascending:
                 translated += ' DESC'
             formatted.append(translated)
 
-        buf.write(', '.join(formatted))
-        return buf.getvalue()
+        buf.append(', '.join(formatted))
+        return ' '.join(buf)
 
     def format_limit(self):
-        if not self.limit:
+        limit = self.limit
+        if not limit:
             return None
 
-        buf = StringIO()
-
         n, offset = self.limit['n'], self.limit['offset']
-        buf.write('LIMIT {}'.format(n))
-        if offset is not None and offset != 0:
-            buf.write(' OFFSET {}'.format(offset))
-
-        return buf.getvalue()
+        buf = ['LIMIT {}'.format(n)]
+        if offset:
+            buf.append('OFFSET {}'.format(offset))
+        return ' '.join(buf)
 
 
 class TableSetFormatter:
@@ -1826,7 +1824,7 @@ class TableSetFormatter:
                 not isinstance(op, ops.Equals)
                 and not self._non_equijoin_supported
             ):
-                raise com.TranslationError(
+                raise exc.TranslationError(
                     'Non-equality join predicates, '
                     'i.e. non-equijoins, are not '
                     'supported'
@@ -1851,7 +1849,7 @@ class TableSetFormatter:
         if isinstance(ref_op, ops.PhysicalTable):
             name = ref_op.name
             if name is None:
-                raise com.RelationError(
+                raise exc.InvalidRelationError(
                     'Table did not have a name: {0!r}'.format(expr)
                 )
             result = self._quote_identifier(name)
@@ -1890,13 +1888,14 @@ class TableSetFormatter:
             self.join_tables.append(self._format_table(self.expr))
 
         # TODO: Now actually format the things
-        buf = StringIO()
-        buf.write(self.join_tables[0])
+        buf = []
+        buf.append(self.join_tables[0])
+        indent = self.indent
         for jtype, table, preds in zip(
             self.join_types, self.join_tables[1:], self.join_predicates
         ):
-            buf.write('\n')
-            buf.write(util.indent('{} {}'.format(jtype, table), self.indent))
+            buf.append('\n')
+            buf.append(util.indent('{} {}'.format(jtype, table), indent))
 
             fmt_preds = []
             npreds = len(preds)
@@ -1906,13 +1905,13 @@ class TableSetFormatter:
                     new_pred = '({})'.format(new_pred)
                 fmt_preds.append(new_pred)
 
-            if len(fmt_preds):
-                buf.write('\n')
+            if fmt_preds:
+                buf.append('\n')
 
                 conj = ' AND\n{}'.format(' ' * 3)
                 fmt_preds = util.indent(
-                    'ON ' + conj.join(fmt_preds), self.indent * 2
+                    'ON {}'.format(conj.join(fmt_preds)), indent * 2
                 )
-                buf.write(fmt_preds)
+                buf.append(fmt_preds)
 
-        return buf.getvalue()
+        return ''.join(buf)

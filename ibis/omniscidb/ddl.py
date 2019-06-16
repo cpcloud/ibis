@@ -1,7 +1,6 @@
 import re
 
-from ibis.sql.compiler import DDL, DML
-
+from ..sql.compiler import DDL, DML
 from .compiler import _type_to_sql_string, quote_identifier
 
 fully_qualified_re = re.compile(r"(.*)\.(?:`(.*)`|(.*))")

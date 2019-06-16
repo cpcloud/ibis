@@ -1,11 +1,9 @@
-import sys
-
 import pandas as pd
 import pytest
 from pkg_resources import get_distribution, parse_version
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 import ibis.expr.types as ir
 from ibis.tests.util import assert_equal
 
@@ -43,14 +41,14 @@ def test_list_tables(con):
 
 @pytest.mark.skipif(
     parse_version(get_distribution('pymapd').version) < parse_version('0.12'),
-    reason='must have pymapd>=12 to connect to existing session',
+    reason='must have pymapd>=12 to connect to existing session'
 )
 def test_session_id_connection(session_con):
-    new_connection = ibis.omniscidb.connect(
+    new_connection = ibis.mapd.connect(
         protocol=session_con.protocol,
         host=session_con.host,
         port=session_con.port,
-        session_id=session_con.con._session,
+        session_id=session_con.con._session
     )
     assert new_connection.list_tables()
 
@@ -72,7 +70,7 @@ def test_database_layer(con, alltypes):
 def test_compile_toplevel():
     t = ibis.table([('foo', 'double')], name='t0')
     expr = t.foo.sum()
-    result = ibis.omniscidb.compile(expr)
+    result = ibis.mapd.compile(expr)
     expected = 'SELECT sum("foo") AS "sum"\nFROM t0'  # noqa
     assert str(result) == expected
 
@@ -92,13 +90,13 @@ def test_union_op(alltypes):
     t2 = alltypes
     expr = t1.union(t2)
 
-    with pytest.raises(com.UnsupportedOperationError):
+    with pytest.raises(exc.UnsupportedOperationError):
         expr.compile()
 
     t1 = alltypes.head()
     t2 = alltypes.head()
     expr = t1.union(t2)
-    with pytest.raises(com.UnsupportedOperationError):
+    with pytest.raises(exc.UnsupportedOperationError):
         expr.compile()
 
 
@@ -135,26 +133,3 @@ def test_create_table_schema(con):
         assert isinstance(t.w, ir.MultiPolygonColumn)
     finally:
         con.drop_table(t_name)
-
-
-@pytest.mark.parametrize(
-    'sql',
-    [
-        'select * from functional_alltypes limit 10--test',
-        'select * from functional_alltypes \nlimit 10\n;',
-        'select * from functional_alltypes \nlimit 10;',
-        'select * from functional_alltypes \nlimit 10;--test',
-    ],
-)
-@pytest.mark.skipif(
-    sys.version_info < (3, 6),
-    reason='`sql` method just available for Python 3.6 or greater.',
-)
-def test_sql(con, sql):
-    # execute the expression using SQL query
-    con.sql(sql).execute()
-
-
-def test_explain(con, alltypes):
-    # execute the expression using SQL query
-    con.explain(alltypes)

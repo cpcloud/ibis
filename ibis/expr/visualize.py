@@ -3,9 +3,10 @@ import tempfile
 import graphviz as gv
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
+
+from ..common import exceptions as exc
+from . import operations as ops
+from . import types as ir
 
 
 def get_type(expr):
@@ -22,7 +23,7 @@ def get_type(expr):
             return expr.op().output_type().__name__
         except (AttributeError, NotImplementedError):
             return '\u2205'  # empty set character
-    except com.IbisError:
+    except exc.ExpressionError:
         op = expr.op()
         assert isinstance(op, ops.Join)
         left_table_name = getattr(op.left.op(), 'name', None) or ops.genname()

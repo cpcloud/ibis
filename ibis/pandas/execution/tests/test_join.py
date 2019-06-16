@@ -4,7 +4,7 @@ import pytest
 from pytest import param
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 
 pytestmark = pytest.mark.pandas
 
@@ -344,15 +344,30 @@ def test_keyed_asof_join_with_tolerance(
 @pytest.mark.parametrize(
     "how",
     [
-        "left",
+        pytest.param(
+            "left",
+            marks=pytest.mark.xfail(
+                raises=exc.ExpressionError, reason="Not yet implemented"
+            ),
+        ),
         pytest.param(
             "right",
             marks=pytest.mark.xfail(
                 raises=AttributeError, reason="right_join is not an ibis API"
             ),
         ),
-        "inner",
-        "outer",
+        pytest.param(
+            "inner",
+            marks=pytest.mark.xfail(
+                raises=exc.ExpressionError, reason="Not yet implemented"
+            ),
+        ),
+        pytest.param(
+            "outer",
+            marks=pytest.mark.xfail(
+                raises=exc.ExpressionError, reason="Not yet implemented"
+            ),
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -362,10 +377,6 @@ def test_keyed_asof_join_with_tolerance(
         pytest.param(lambda join: join[["a0", "a1"]], id="list"),
         pytest.param(lambda join: join.select(["a0", "a1"]), id="select"),
     ],
-)
-@pytest.mark.xfail(
-    raises=(com.IbisError, AttributeError),
-    reason="Select from unambiguous joins not implemented",
 )
 def test_select_on_unambiguous_join(how, func):
     df_t = pd.DataFrame(dict(a0=[1, 2, 3], b1=list("aab")))
@@ -393,7 +404,7 @@ def test_select_on_unambiguous_join(how, func):
     ],
 )
 @pytest.mark.xfail(
-    raises=(com.IbisError, AttributeError),
+    raises=exc.ExpressionError,
     reason="Select from unambiguous joins not implemented",
 )
 @merge_asof_minversion

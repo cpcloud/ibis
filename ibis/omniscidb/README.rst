@@ -26,7 +26,7 @@ the follow code into `ibi.__init__`:
 
     with suppress(ImportError):
         # pip install ibis-framework[omniscidb]
-        import ibis.omniscidb.api as omniscidb
+        import ibis.omniscidb
 
 Basically, there is 3 function on `api` module>
 

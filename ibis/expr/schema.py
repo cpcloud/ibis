@@ -2,9 +2,9 @@ import collections
 
 from multipledispatch import Dispatcher
 
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.util as util
+from ..common import exceptions as exc
+from .. import util
+from . import datatypes as dt
 
 
 class Schema:
@@ -33,7 +33,7 @@ class Schema:
         self._name_locs = dict((v, i) for i, v in enumerate(self.names))
 
         if len(self._name_locs) < len(self.names):
-            raise com.IntegrityError('Duplicate column names')
+            raise exc.IntegrityError('Duplicate column names')
 
     def __repr__(self):
         space = 2 + max(map(len, self.names), default=0)

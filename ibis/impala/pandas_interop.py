@@ -1,25 +1,10 @@
-# Copyright 2014 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import csv
 import tempfile
 from posixpath import join as pjoin
 
-import ibis.common.exceptions as com
-import ibis.expr.schema as sch
-import ibis.util as util
-from ibis.config import options
+from .. import util
+from ..config import options
+from ..expr import schema as sch
 
 
 class DataFrameWriter:
@@ -33,9 +18,7 @@ class DataFrameWriter:
     def __init__(self, client, df, path=None):
         self.client = client
         self.hdfs = client.hdfs
-
         self.df = df
-
         self.temp_hdfs_dirs = []
 
     def write_temp_csv(self):
@@ -102,7 +85,7 @@ class DataFrameWriter:
     def __del__(self):
         try:
             self.cleanup()
-        except com.IbisError:
+        except Exception:
             pass
 
     def cleanup(self):
@@ -115,4 +98,4 @@ class DataFrameWriter:
 def write_temp_dataframe(client, df):
     writer = DataFrameWriter(client, df)
     path = writer.write_temp_csv()
-    return writer, writer.delimited_table(path)
+    return writer.delimited_table(path)

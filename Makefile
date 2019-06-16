@@ -13,7 +13,8 @@ SERVICES := omniscidb postgres waiter-postgres mysql clickhouse impala kudu-mast
 clean:
 	python setup.py clean
 	find $(MAKEFILE_DIR) -name '*.pyc' -type f -delete
-	rm -rf $(MAKEFILE_DIR)/build $(MAKEFILE_DIR)/dist $(find $(MAKEFILE_DIR) -name __pycache__ -type d)
+	find $(MAKEFILE_DIR) -name __pycache__ -type d -delete
+	rm -rf $(MAKEFILE_DIR)/build $(MAKEFILE_DIR)/dist
 
 develop: clean
 	python setup.py develop

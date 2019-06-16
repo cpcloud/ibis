@@ -1,7 +1,7 @@
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 from ibis import window
 from ibis.expr.window import rows_with_max_lookback
 from ibis.impala.compiler import to_sql  # noqa: E402
@@ -251,7 +251,7 @@ def test_unsupported_aggregate_functions(alltypes, column, op):
     w = ibis.window(order_by=t.d)
     expr = getattr(t[column], op)()
     proj = t.projection([expr.over(w).name('foo')])
-    with pytest.raises(com.TranslationError):
+    with pytest.raises(exc.TranslationError):
         to_sql(proj)
 
 

@@ -3,7 +3,7 @@ from posixpath import join as pjoin
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 import ibis.expr.datatypes as dt
 import ibis.expr.types as ir
 import ibis.util as util
@@ -37,7 +37,7 @@ def test_drop_non_empty_database(con, alltypes, temp_table_db):
     con.create_table(temp_table, alltypes, database=temp_database)
     assert con.exists_table(temp_table, database=temp_database)
 
-    with pytest.raises(com.IntegrityError):
+    with pytest.raises(exc.IntegrityError):
         con.drop_database(temp_database)
 
 
@@ -185,7 +185,7 @@ def test_insert_validate_types(con, alltypes, test_data_db, temp_table):
     ]
 
     limit_expr = to_insert.limit(10)
-    with pytest.raises(com.IbisError):
+    with pytest.raises(exc.IbisInputError):
         t.insert(limit_expr)
 
 

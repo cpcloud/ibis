@@ -6,10 +6,10 @@ from typing import NamedTuple, Union
 import numpy as np
 import pandas as pd
 
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.util as util
+from ..common import exceptions as exc
+from .. import util
+from . import operations as ops
+from . import types as ir
 
 
 def _sequence_to_tuple(x):
@@ -20,16 +20,6 @@ RowsWithMaxLookback = NamedTuple('RowsWithMaxLookback',
                                  [('rows', Union[int, np.integer]),
                                   ('max_lookback', ir.IntervalValue)]
                                  )
-
-
-def _choose_non_empty_val(first, second):
-    if isinstance(first, (int, np.integer)) and first:
-        non_empty_value = first
-    elif not isinstance(first, (int, np.integer)) and first is not None:
-        non_empty_value = first
-    else:
-        non_empty_value = second
-    return non_empty_value
 
 
 def _determine_how(preceding):
@@ -118,10 +108,8 @@ class Window:
             self._order_by.append(x)
 
         if isinstance(preceding, RowsWithMaxLookback):
-            # the offset interval is used as the 'preceding' value of a window
-            # while 'rows' is used to adjust the window created using offset
-            self.preceding = preceding.max_lookback
-            self.max_lookback = preceding.rows
+            self.preceding = preceding.rows
+            self.max_lookback = preceding.max_lookback
         else:
             self.preceding = _sequence_to_tuple(preceding)
             self.max_lookback = max_lookback
@@ -156,50 +144,50 @@ class Window:
         if (preceding_tuple and has_following) or (
             following_tuple and has_preceding
         ):
-            raise com.IbisInputError(
+            raise exc.IbisInputError(
                 'Can only specify one window side when you want an '
                 'off-center window'
             )
         elif preceding_tuple:
             start, end = self.preceding
             if end is None:
-                raise com.IbisInputError("preceding end point cannot be None")
+                raise exc.IbisInputError("preceding end point cannot be None")
             if end < 0:
-                raise com.IbisInputError(
+                raise exc.IbisInputError(
                     "preceding end point must be non-negative"
                 )
             if start is not None:
                 if start < 0:
-                    raise com.IbisInputError(
+                    raise exc.IbisInputError(
                         "preceding start point must be non-negative"
                     )
                 if start <= end:
-                    raise com.IbisInputError(
+                    raise exc.IbisInputError(
                         "preceding start must be greater than preceding end"
                     )
         elif following_tuple:
             start, end = self.following
             if start is None:
-                raise com.IbisInputError(
+                raise exc.IbisInputError(
                     "following start point cannot be None"
                 )
             if start < 0:
-                raise com.IbisInputError(
+                raise exc.IbisInputError(
                     "following start point must be non-negative"
                 )
             if end is not None:
                 if end < 0:
-                    raise com.IbisInputError(
+                    raise exc.IbisInputError(
                         "following end point must be non-negative"
                     )
                 if start >= end:
-                    raise com.IbisInputError(
+                    raise exc.IbisInputError(
                         "following start must be less than following end"
                     )
         else:
             if not isinstance(self.preceding, ir.Expr):
                 if has_preceding and self.preceding < 0:
-                    raise com.IbisInputError(
+                    raise exc.IbisInputError(
                         "'preceding' must be positive, got {}".format(
                             self.preceding
                         )
@@ -207,20 +195,20 @@ class Window:
 
             if not isinstance(self.following, ir.Expr):
                 if has_following and self.following < 0:
-                    raise com.IbisInputError(
+                    raise exc.IbisInputError(
                         "'following' must be positive, got {}".format(
                             self.following
                         )
                     )
         if self.how not in {'rows', 'range'}:
-            raise com.IbisInputError(
+            raise exc.IbisInputError(
                 "'how' must be 'rows' or 'range', got {}".format(self.how)
             )
 
         if self.max_lookback is not None:
             if not isinstance(
-                    self.preceding, (ir.IntervalValue, pd.Timedelta)):
-                raise com.IbisInputError(
+                    self.max_lookback, (ir.IntervalValue, pd.Timedelta)):
+                raise exc.IbisInputError(
                     "'max_lookback' must be specified as an interval "
                     "or pandas.Timedelta object"
                 )
@@ -234,17 +222,17 @@ class Window:
 
     def combine(self, window):
         if self.how != window.how:
-            raise com.IbisInputError(
+            raise exc.IbisInputError(
                 (
                     "Window types must match. "
                     "Expecting '{}' Window, got '{}'"
                 ).format(self.how.upper(), window.how.upper())
             )
-
+        mlb = self.max_lookback
         kwds = dict(
-            preceding=_choose_non_empty_val(self.preceding, window.preceding),
-            following=_choose_non_empty_val(self.following, window.following),
-            max_lookback=self.max_lookback or window.max_lookback,
+            preceding=self.preceding or window.preceding,
+            following=self.following or window.following,
+            max_lookback=mlb if mlb is not None else window.max_lookback,
             group_by=self._group_by + window._group_by,
             order_by=self._order_by + window._order_by,
         )
@@ -310,7 +298,15 @@ class Window:
 
 
 def rows_with_max_lookback(rows, max_lookback):
-    """Create a bound preceding value for use with trailing window functions"""
+    """Create a bound preceding value for use with trailing window functions
+
+    Notes
+    -----
+    This function is exposed for use by external clients, but Ibis itself does
+    not currently do anything with the max_lookback parameter in any of its
+    backends.
+
+    """
     return RowsWithMaxLookback(rows, max_lookback)
 
 
@@ -436,7 +432,7 @@ def trailing_window(preceding, group_by=None, order_by=None):
         following=0,
         group_by=group_by,
         order_by=order_by,
-        how=how
+        how=how,
     )
 
 

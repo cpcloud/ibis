@@ -4,8 +4,7 @@ import toolz
 
 
 class NameFinder:
-    """Helper class to find the unique names in an AST.
-    """
+    """Helper class to find the unique names in an AST."""
 
     __slots__ = ()
 
@@ -50,7 +49,7 @@ def find_names(node):
 
     Returns
     -------
-    unique_names : List[ast.Name]
+    List[ast.Name]
 
     Examples
     --------
@@ -63,6 +62,7 @@ def find_names(node):
     'a'
     >>> names[1].id
     'b'
+
     """
     return list(
         toolz.unique(

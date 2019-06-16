@@ -11,7 +11,7 @@ import pytest
 import toolz
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 import ibis.expr.analysis as L
 import ibis.expr.api as api
 import ibis.expr.datatypes as dt
@@ -84,8 +84,6 @@ lineBC = [pointB, pointC]
 lineCA = [pointC, pointA]
 polygon1 = [lineAB, lineBC, lineCA]
 polygon2 = [lineAB, lineBC, lineCA]
-multilinestring = [lineAB, lineBC, lineCA]
-multipoint = [pointA, pointB, pointC]
 multipolygon1 = [polygon1, polygon2]
 
 
@@ -111,10 +109,6 @@ multipolygon1 = [polygon1, polygon2]
         (tuple(lineAB), 'linestring'),
         (list(polygon1), 'polygon'),
         (tuple(polygon1), 'polygon'),
-        (list(multilinestring), 'multilinestring'),
-        (tuple(multilinestring), 'multilinestring'),
-        (list(multipoint), 'multipoint'),
-        (tuple(multipoint), 'multipoint'),
         (list(multipolygon1), 'multipolygon'),
         (tuple(multipolygon1), 'multipolygon'),
     ],
@@ -345,7 +339,7 @@ def test_distinct_array_interactions(functional_alltypes):
     a = functional_alltypes.int_col.distinct()
     b = functional_alltypes.bigint_col
 
-    with pytest.raises(ir.RelationError):
+    with pytest.raises(ir.InvalidRelationError):
         a + b
 
 
@@ -706,7 +700,7 @@ def test_null_column():
 def test_null_column_union():
     s = ibis.table([('a', 'string'), ('b', 'double')])
     t = ibis.table([('a', 'string')])
-    with pytest.raises(ibis.common.exceptions.RelationError):
+    with pytest.raises(ibis.common.exceptions.InvalidRelationError):
         s.union(t.mutate(b=ibis.NA))  # needs a type
     assert s.union(t.mutate(b=ibis.NA.cast('double'))).schema() == s.schema()
 
@@ -744,13 +738,13 @@ def test_between(table):
     assert isinstance(result, ir.BooleanScalar)
 
     # Cases where between should immediately fail, e.g. incomparables
-    with pytest.raises(TypeError):
+    with pytest.raises(exc.IbisTypeError):
         table.f.between('0', '1')
 
-    with pytest.raises(TypeError):
+    with pytest.raises(exc.IbisTypeError):
         table.f.between(0, '1')
 
-    with pytest.raises(TypeError):
+    with pytest.raises(exc.IbisTypeError):
         table.f.between('0', 1)
 
 
@@ -767,10 +761,10 @@ def test_binop_string_type_error(table, operation):
     ints = table.d
     strs = table.g
 
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, exc.IbisTypeError)):
         operation(ints, strs)
 
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, exc.IbisTypeError)):
         operation(strs, ints)
 
 
@@ -1181,7 +1175,7 @@ def test_scalar_parameter_compare(left, right, expected):
 )
 def test_between_time_failure_time(case, creator, left, right):
     value = creator(case)
-    with pytest.raises(TypeError):
+    with pytest.raises(exc.IbisTypeError):
         value.between(left, right)
 
 
@@ -1464,7 +1458,7 @@ def test_valid_negate_float128():
 )
 def test_window_unbounded_invalid(kind, begin, end):
     kwargs = {kind: (begin, end)}
-    with pytest.raises(com.IbisInputError):
+    with pytest.raises(exc.IbisInputError):
         ibis.window(**kwargs)
 
 
@@ -1492,29 +1486,43 @@ def test_nullif_type(left, right, expected):
     ('left', 'right'), [(ibis.literal(1), ibis.literal('a'))]
 )
 def test_nullif_fail(left, right):
-    with pytest.raises(com.IbisTypeError):
+    with pytest.raises(exc.IbisTypeError):
         left.nullif(right)
-    with pytest.raises(com.IbisTypeError):
+    with pytest.raises(exc.IbisTypeError):
         right.nullif(left)
 
 
 @pytest.mark.parametrize(
     "join_method",
     [
-        "left_join",
+        pytest.param(
+            "left_join",
+            marks=pytest.mark.xfail(
+                raises=exc.ExpressionError, reason="Not yet implemented"
+            ),
+        ),
         pytest.param(
             "right_join",
             marks=pytest.mark.xfail(
                 raises=AttributeError, reason="right_join is not an ibis API"
             ),
         ),
-        "inner_join",
-        "outer_join",
-        "asof_join",
+        pytest.param(
+            "inner_join",
+            marks=pytest.mark.xfail(
+                raises=exc.ExpressionError, reason="Not yet implemented"
+            ),
+        ),
+        pytest.param(
+            "outer_join",
+            marks=pytest.mark.xfail(
+                raises=exc.ExpressionError, reason="Not yet implemented"
+            ),
+        ),
         pytest.param(
             "semi_join",
             marks=pytest.mark.xfail(
-                raises=com.IbisTypeError,
+                raises=exc.ExpressionError,
                 reason=(
                     "semi_join only gives access to the left table's "
                     "columns"
@@ -1522,10 +1530,6 @@ def test_nullif_fail(left, right):
             ),
         ),
     ],
-)
-@pytest.mark.xfail(
-    raises=(com.IbisError, AttributeError),
-    reason="Select from unambiguous joins not implemented",
 )
 def test_select_on_unambiguous_join(join_method):
     t = ibis.table([("a0", dt.int64), ("b1", dt.string)], name="t")

@@ -1,5 +1,3 @@
-import sys
-
 import pandas as pd
 import pkg_resources
 import pymapd
@@ -7,38 +5,22 @@ import regex as re
 from pymapd._parsers import _extract_column_details
 from pymapd.cursor import Cursor
 
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-from ibis.client import Database, DatabaseEntity, Query, SQLClient
-from ibis.omniscidb import ddl
-from ibis.omniscidb.compiler import OmniSciDBDialect, build_ast
-from ibis.sql.compiler import DDL, DML
-from ibis.util import log
-
-if sys.version_info >= (3, 6):
-    from pymapd.dtypes import TDatumType as pymapd_dtype
-else:
-    pymapd_dtype = None
+from ..common import exceptions as exc
+from ..client import Database, DatabaseEntity, Query, SQLClient
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import schema as sch
+from ..expr import types as ir
+from ..sql.compiler import DDL, DML
+from ..util import log
+from . import ddl
+from .compiler import MapDDialect, build_ast
 
 try:
     from cudf.dataframe.dataframe import DataFrame as GPUDataFrame
 except ImportError:
     GPUDataFrame = None
 
-# used to check if geopandas and shapely is available
-FULL_GEO_SUPPORTED = False
-try:
-    # supported just for python >= 3.6
-    if sys.version_info >= (3, 6):
-        import geopandas
-        import shapely.wkt
-
-        FULL_GEO_SUPPORTED = True
-except ImportError:
-    ...
 
 EXECUTION_TYPE_ICP = 1
 EXECUTION_TYPE_ICP_GPU = 2
@@ -49,13 +31,13 @@ fully_qualified_re = re.compile(r"(.*)\.(?:`(.*)`|(.*))")
 
 def _validate_compatible(from_schema, to_schema):
     if set(from_schema.names) != set(to_schema.names):
-        raise com.IbisInputError('Schemas have different names')
+        raise exc.IbisInputError('Schemas have different names')
 
     for name in from_schema:
         lt = from_schema[name]
         rt = to_schema[name]
         if not lt.castable(rt):
-            raise com.IbisInputError(
+            raise exc.IbisInputError(
                 'Cannot safely cast {0!r} to {1!r}'.format(lt, rt)
             )
     return
@@ -65,11 +47,12 @@ class PyMapDVersionError(Exception):
     pass
 
 
-class OmniSciDBDataType:
+class MapDDataType:
 
     __slots__ = 'typename', 'nullable'
 
     # using impala.client._HS2_TTypeId_to_dtype as reference
+    # https://www.mapd.com/docs/latest/mapd-core-guide/fixed-encoding/
     dtypes = {
         'BIGINT': dt.int64,
         'BOOL': dt.Boolean,
@@ -93,7 +76,7 @@ class OmniSciDBDataType:
 
     ibis_dtypes = {v: k for k, v in dtypes.items()}
 
-    _omniscidb_to_ibis_dtypes = {
+    _mapd_to_ibis_dtypes = {
         'BIGINT': 'int64',
         'BOOLEAN': 'Boolean',
         'BOOL': 'Boolean',
@@ -120,7 +103,7 @@ class OmniSciDBDataType:
 
     def __init__(self, typename, nullable=True):
         if typename not in self.dtypes:
-            raise com.UnsupportedBackendType(typename)
+            raise exc.UnsupportedBackendType(typename)
         self.typename = typename
         self.nullable = nullable
 
@@ -131,7 +114,7 @@ class OmniSciDBDataType:
             return self.typename
 
     def __repr__(self):
-        return '<OmniSciDB {}>'.format(str(self))
+        return '<MapD {}>'.format(str(self))
 
     @classmethod
     def parse(cls, spec):
@@ -158,8 +141,8 @@ class OmniSciDBDataType:
         return cls(typename, nullable=nullable)
 
 
-class OmniSciDBDefaultCursor:
-    """Cursor to allow the OmniSciDB client to reuse machinery in ibis/client.py
+class MapDCursor:
+    """Cursor to allow the MapD client to reuse machinery in ibis/client.py
     """
 
     def __init__(self, cursor):
@@ -184,52 +167,7 @@ class OmniSciDBDefaultCursor:
         pass
 
 
-class OmniSciDBGeoCursor(OmniSciDBDefaultCursor):
-    """Cursor to allow the OmniSciDB client to reuse machinery in ibis/client.py
-    for Geo Spatial data
-    """
-
-    def to_df(self):
-        cursor = self.cursor
-        cursor_description = cursor.description
-
-        if not isinstance(cursor, Cursor):
-            if cursor is None:
-                return geopandas.GeoDataFrame([])
-            return cursor
-
-        col_names = [c.name for c in cursor_description]
-        result = pd.DataFrame(cursor.fetchall(), columns=col_names)
-
-        # get geo types from pymapd
-        geotypes = (
-            pymapd_dtype.POINT,
-            pymapd_dtype.LINESTRING,
-            pymapd_dtype.POLYGON,
-            pymapd_dtype.MULTIPOLYGON,
-            pymapd_dtype.GEOMETRY,
-            pymapd_dtype.GEOGRAPHY,
-        )
-
-        geo_column = None
-
-        for d in cursor_description:
-            field_name = d.name
-            if d.type_code in geotypes:
-                # use the first geo column found as default geometry
-                # geopandas doesn't allow multiple GeoSeries
-                # to specify other column as a geometry on a GeoDataFrame
-                # use something like: df.set_geometry('buffers').plot()
-                geo_column = geo_column or field_name
-                result[field_name] = result[field_name].apply(
-                    shapely.wkt.loads
-                )
-        if geo_column:
-            result = geopandas.GeoDataFrame(result, geometry=geo_column)
-        return result
-
-
-class OmniSciDBQuery(Query):
+class MapDQuery(Query):
     """
 
     """
@@ -239,10 +177,10 @@ class OmniSciDBQuery(Query):
         return self.schema().apply_to(cursor.to_df())
 
 
-class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
+class MapDTable(ir.TableExpr, DatabaseEntity):
 
     """
-    References a physical table in the OmniSciDB metastore
+    References a physical table in the MapD metastore
     """
 
     @property
@@ -260,7 +198,7 @@ class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
     def _match_name(self):
         m = ddl.fully_qualified_re.match(self._qualified_name)
         if not m:
-            raise com.IbisError(
+            raise exc.InvalidArgumentError(
                 'Cannot determine database name from {0}'.format(
                     self._qualified_name
                 )
@@ -301,8 +239,8 @@ class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
 
     def load_data(self, df):
         """
-        Wraps the LOAD DATA DDL statement. Loads data into an OmniSciDB table
-        from pandas.DataFrame or pyarrow.Table
+        Wraps the LOAD DATA DDL statement. Loads data into an MapD table from
+        pandas.DataFrame or pyarrow.Table
 
         Parameters
         ----------
@@ -310,7 +248,7 @@ class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
 
         Returns
         -------
-        query : OmniSciDBQuery
+        query : MapDQuery
         """
         stmt = ddl.LoadData(self._qualified_name, df)
         return self._execute(stmt)
@@ -321,8 +259,8 @@ class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
 
     def rename(self, new_name, database=None):
         """
-        Rename table inside OmniSciDB. References to the old table are no
-        longer valid.
+        Rename table inside MapD. References to the old table are no longer
+        valid.
 
         Parameters
         ----------
@@ -331,7 +269,7 @@ class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
 
         Returns
         -------
-        renamed : OmniSciDBTable
+        renamed : MapDTable
         """
         m = ddl.fully_qualified_re.match(new_name)
         if not m and database is None:
@@ -380,15 +318,15 @@ class OmniSciDBTable(ir.TableExpr, DatabaseEntity):
         return results
 
 
-class OmniSciDBClient(SQLClient):
+class MapDClient(SQLClient):
     """
 
     """
 
     database_class = Database
-    query_class = OmniSciDBQuery
-    dialect = OmniSciDBDialect
-    table_expr_class = OmniSciDBTable
+    query_class = MapDQuery
+    dialect = MapDDialect
+    table_expr_class = MapDTable
 
     def __init__(
         self,
@@ -474,7 +412,7 @@ class OmniSciDBClient(SQLClient):
         log(msg)
 
     def close(self):
-        """Close OmniSciDB connection and drop any temporary objects"""
+        """Close MapD connection and drop any temporary objects"""
         self.con.close()
 
     def _adapt_types(self, descr):
@@ -482,9 +420,7 @@ class OmniSciDBClient(SQLClient):
         adapted_types = []
         for col in descr:
             names.append(col.name)
-            adapted_types.append(
-                OmniSciDBDataType._omniscidb_to_ibis_dtypes[col.type]
-            )
+            adapted_types.append(MapDDataType._mapd_to_ibis_dtypes[col.type])
         return names, adapted_types
 
     def _build_ast(self, expr, context):
@@ -499,12 +435,8 @@ class OmniSciDBClient(SQLClient):
         return result
 
     def _fully_qualified_name(self, name, database):
-        # OmniSciDB raises error sometimes with qualified names
+        # MapD raises error sometimes with qualified names
         return name
-
-    def _get_list(self, cur):
-        tuples = cur.cursor.fetchall()
-        return [v[0] for v in tuples]
 
     def _get_schema_using_query(self, query):
         with self._execute(query, results=True) as result:
@@ -515,18 +447,6 @@ class OmniSciDBClient(SQLClient):
             )
 
         return sch.Schema(names, ibis_types)
-
-    def _get_schema_using_validator(self, query):
-        result = self.con._client.sql_validate(self.con._session, query)
-        return sch.Schema.from_tuples(
-            (
-                r,
-                OmniSciDBDataType._omniscidb_to_ibis_dtypes[
-                    pymapd_dtype._VALUES_TO_NAMES[result[r].col_type.type]
-                ],
-            )
-            for r in result
-        )
 
     def _get_table_schema(self, table_name, database=None):
         """
@@ -562,14 +482,8 @@ class OmniSciDBClient(SQLClient):
         else:
             execute = self.con.cursor().execute
 
-        cursor = (
-            OmniSciDBGeoCursor
-            if FULL_GEO_SUPPORTED
-            else OmniSciDBDefaultCursor
-        )
-
         try:
-            result = cursor(execute(query))
+            result = MapDCursor(execute(query))
         except Exception as e:
             raise Exception('{}: {}'.format(e, query))
 
@@ -578,7 +492,7 @@ class OmniSciDBClient(SQLClient):
 
     def create_database(self, name, owner=None):
         """
-        Create a new OmniSciDB database
+        Create a new MapD database
 
         Parameters
         ----------
@@ -590,7 +504,7 @@ class OmniSciDBClient(SQLClient):
 
     def drop_database(self, name, force=False):
         """
-        Drop an OmniSciDB database
+        Drop an MapD database
 
         Parameters
         ----------
@@ -606,7 +520,7 @@ class OmniSciDBClient(SQLClient):
             tables = self.list_tables(database=name)
 
         if not force and len(tables):
-            raise com.IntegrityError(
+            raise exc.IntegrityError(
                 'Database {0} must be empty before being dropped, or set '
                 'force=True'.format(name)
             )
@@ -615,7 +529,7 @@ class OmniSciDBClient(SQLClient):
 
     def create_user(self, name, password, is_super=False):
         """
-        Create a new OmniSciDB user
+        Create a new MapD user
 
         Parameters
         ----------
@@ -635,7 +549,7 @@ class OmniSciDBClient(SQLClient):
         self, name, password=None, is_super=None, insert_access=None
     ):
         """
-        Alter OmniSciDB user parameters
+        Alter MapD user parameters
 
         Parameters
         ----------
@@ -659,7 +573,7 @@ class OmniSciDBClient(SQLClient):
 
     def drop_user(self, name):
         """
-        Drop an OmniSciDB user
+        Drop an MapD user
 
         Parameters
         ----------
@@ -671,7 +585,7 @@ class OmniSciDBClient(SQLClient):
 
     def create_view(self, name, expr, database=None):
         """
-        Create an OmniSciDB view from a table expression
+        Create an MapD view from a table expression
 
         Parameters
         ----------
@@ -679,14 +593,14 @@ class OmniSciDBClient(SQLClient):
         expr : ibis TableExpr
         database : string, default None
         """
-        ast = self._build_ast(expr, OmniSciDBDialect.make_context())
+        ast = self._build_ast(expr, MapDDialect.make_context())
         select = ast.queries[0]
         statement = ddl.CreateView(name, select, database=database)
         self._execute(statement)
 
     def drop_view(self, name, database=None):
         """
-        Drop an OmniSciDB view
+        Drop an MapD view
 
         Parameters
         ----------
@@ -700,7 +614,7 @@ class OmniSciDBClient(SQLClient):
         self, table_name, obj=None, schema=None, database=None, max_rows=None
     ):
         """
-        Create a new table in OmniSciDB using an Ibis table expression.
+        Create a new table in MapD using an Ibis table expression.
 
         Parameters
         ----------
@@ -730,7 +644,7 @@ class OmniSciDBClient(SQLClient):
                 )
             else:
                 to_insert = obj
-            ast = self._build_ast(to_insert, OmniSciDBDialect.make_context())
+            ast = self._build_ast(to_insert, MapDDialect.make_context())
             select = ast.queries[0]
 
             statement = ddl.CTAS(table_name, select, database=database)
@@ -739,7 +653,7 @@ class OmniSciDBClient(SQLClient):
                 table_name, schema, database=database, max_rows=max_rows
             )
         else:
-            raise com.IbisError('Must pass expr or schema')
+            raise exc.InvalidArgumentError('Must pass expr or schema')
 
         result = self._execute(statement, False)
 
@@ -748,7 +662,7 @@ class OmniSciDBClient(SQLClient):
 
     def drop_table(self, table_name, database=None, force=False):
         """
-        Drop an OmniSciDB table
+        Drop an MapD table
 
         Parameters
         ----------
@@ -834,8 +748,8 @@ class OmniSciDBClient(SQLClient):
 
     def load_data(self, table_name, obj, database=None, **kwargs):
         """
-        Wraps the LOAD DATA DDL statement. Loads data into an OmniSciDB table
-        by physically moving data files.
+        Wraps the LOAD DATA DDL statement. Loads data into an MapD table by
+        physically moving data files.
 
         Parameters
         ----------
@@ -924,11 +838,11 @@ class OmniSciDBClient(SQLClient):
 
         for col in self.con.get_table_details(table_name):
             col_names.append(col.name)
-            col_types.append(OmniSciDBDataType.parse(col.type))
+            col_types.append(MapDDataType.parse(col.type))
 
         return sch.schema(
             [
-                (col.name, OmniSciDBDataType.parse(col.type))
+                (col.name, MapDDataType.parse(col.type))
                 for col in self.con.get_table_details(table_name)
             ]
         )
@@ -944,15 +858,10 @@ class OmniSciDBClient(SQLClient):
         -------
         table : TableExpr
         """
-        if pymapd_dtype is None:
-            raise com.UnsupportedOperationError(
-                'This method is available just on Python version >= 3.6.'
-            )
-        # Remove `;` + `--` (comment)
-        query = re.sub(r'\s*;\s*--', '\n--', query.strip())
-        # Remove trailing ;
-        query = re.sub(r'\s*;\s*$', '', query.strip())
-        schema = self._get_schema_using_validator(query)
+        # Get the schema by adding a LIMIT 0 on to the end of the query. If
+        # there is already a limit in the query, we find and remove it
+        limited_query = 'SELECT * FROM ({}) t0 LIMIT 1'.format(query)
+        schema = self._get_schema_using_query(limited_query)
         return ops.SQLQueryResult(query, schema, self).to_expr()
 
     @property
@@ -962,12 +871,12 @@ class OmniSciDBClient(SQLClient):
         return pkg_resources.parse_version(dist.version)
 
 
-@dt.dtype.register(OmniSciDBDataType)
-def omniscidb_to_ibis_dtype(omniscidb_dtype):
+@dt.dtype.register(MapDDataType)
+def mapd_to_ibis_dtype(mapd_dtype):
     """
-    Register OmniSciDB Data Types
+    Register MapD Data Types
 
-    omniscidb_dtype:
+    mapd_dtype:
     :return:
     """
-    return omniscidb_dtype.to_ibis()
+    return mapd_dtype.to_ibis()

@@ -11,16 +11,15 @@ from google.api_core.exceptions import NotFound
 from multipledispatch import Dispatcher
 from pkg_resources import parse_version
 
-import ibis
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.lineage as lin
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-from ibis.bigquery import compiler as comp
-from ibis.bigquery.datatypes import ibis_type_to_bigquery_type
-from ibis.client import Database, Query, SQLClient
+from ..common import exceptions as exc
+from ..client import Database, Query, SQLClient
+from ..expr import datatypes as dt
+from ..expr import lineage as lin
+from ..expr import operations as ops
+from ..expr import schema as sch
+from ..expr import types as ir
+from . import compiler as comp
+from .datatypes import ibis_type_to_bigquery_type
 
 NATIVE_PARTITION_COL = '_PARTITIONTIME'
 
@@ -206,7 +205,7 @@ def bq_param_array(param, value):
     try:
         bigquery_type = ibis_type_to_bigquery_type(param_type.value_type)
     except NotImplementedError:
-        raise com.UnsupportedBackendType(param_type)
+        raise exc.UnsupportedBackendType(param_type)
     else:
         if isinstance(param_type.value_type, dt.Struct):
             query_value = [
@@ -277,6 +276,8 @@ class BigQueryTable(ops.DatabaseTable):
 
 
 def rename_partitioned_column(table_expr, bq_table):
+    import ibis
+
     partition_info = bq_table._properties.get('timePartitioning', None)
 
     # If we don't have any partiton information, the table isn't partitioned

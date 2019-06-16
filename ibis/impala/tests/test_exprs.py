@@ -10,7 +10,7 @@ import ibis
 import ibis.expr.api as api
 import ibis.expr.types as ir
 from ibis import literal as L
-from ibis.common.exceptions import RelationError
+from ibis.common.exceptions import IbisTypeError, InvalidRelationError
 from ibis.expr.datatypes import Category
 from ibis.expr.tests.mocks import MockConnection
 from ibis.impala.compiler import (  # noqa: E402
@@ -357,10 +357,10 @@ FROM alltypes"""
         bool_expr = t.f == 0
 
         cases = [
-            (bool_expr.any(), 'max(`f` = 0)'),
-            (-bool_expr.any(), 'max(`f` = 0) = FALSE'),
-            (bool_expr.all(), 'min(`f` = 0)'),
-            (-bool_expr.all(), 'min(`f` = 0) = FALSE'),
+            (bool_expr.any(), 'sum(`f` = 0) > 0'),
+            (-bool_expr.any(), 'sum(`f` = 0) = 0'),
+            (bool_expr.all(), 'sum(`f` = 0) = count(*)'),
+            (-bool_expr.all(), 'sum(`f` = 0) < count(*)'),
         ]
         self._check_expr_cases(cases)
 
@@ -465,7 +465,7 @@ class TestUnaryBuiltins(unittest.TestCase, ExprSQLTest):
         condbad_literal = L('T')
         c = self.table.double_col
         for reduction in [c.sum, c.count, c.mean, c.max, c.min]:
-            with self.assertRaises(TypeError):
+            with self.assertRaises(IbisTypeError):
                 reduction(where=condbad_literal)
 
 
@@ -1028,7 +1028,7 @@ def test_execute_exprs_no_table_ref(con, expr, expected):
     assert result == expected
 
     # ExprList
-    exlist = ibis.api.expr_list(
+    exlist = ibis.expr_list(
         [L(1).name('a'), ibis.now().name('b'), L(2).log().name('c')]
     )
     con.execute(exlist)
@@ -1392,7 +1392,7 @@ def test_div_floordiv(con, expr, expected):
 
 
 @pytest.mark.xfail(
-    raises=RelationError,
+    raises=InvalidRelationError,
     reason='Equality was broken, and fixing it broke this test',
 )
 def test_filter_predicates(con):

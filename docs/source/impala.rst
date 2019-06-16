@@ -1,4 +1,4 @@
-.. currentmodule:: ibis.impala.api
+.. currentmodule:: ibis.impala
 
 .. _impala:
 

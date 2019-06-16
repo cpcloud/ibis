@@ -1,4 +1,3 @@
-import io
 import operator
 import re
 import threading
@@ -12,21 +11,24 @@ import numpy as np
 import pandas as pd
 from pkg_resources import parse_version
 
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.rules as rlz
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-import ibis.util as util
-from ibis.client import Database, DatabaseEntity, Query, SQLClient
-from ibis.config import options
-from ibis.filesystems import HDFS, WebHDFS
-from ibis.impala import ddl, udf
-from ibis.impala.compat import HS2Error, ImpylaError, impyla
-from ibis.impala.compiler import ImpalaDialect, build_ast
-from ibis.sql.compiler import DDL, DML
-from ibis.util import log
+import ibis
+
+from ..common import exceptions as exc
+from ..client import Database, DatabaseEntity, Query, SQLClient
+from ..config import options
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import rules as rlz
+from ..expr import schema as sch
+from ..expr import types as ir
+from ..filesystems import HDFS, WebHDFS
+from ..sql.compiler import DDL, DML
+from ..util import log
+from . import ddl, udf
+from .compat import HS2Error, ImpylaError, impyla
+from .compiler import ImpalaDialect, build_ast
+from .exceptions import ImpalaConnectionError
+from .pandas_interop import DataFrameWriter, write_temp_dataframe
 
 
 class ImpalaDatabase(Database):
@@ -130,7 +132,7 @@ class ImpalaConnection:
         except IndexError:  # deque is empty
             if self.connection_pool_size < self.max_pool_size:
                 return self._new_cursor()
-            raise com.InternalError('Too many concurrent / hung queries')
+            raise ImpalaConnectionError('Too many concurrent / hung queries')
         else:
             if (
                 cursor.database != self.database
@@ -387,7 +389,7 @@ class ImpalaTable(ir.TableExpr, DatabaseEntity):
     def _match_name(self):
         m = ddl.fully_qualified_re.match(self._qualified_name)
         if not m:
-            raise com.IbisError(
+            raise exc.InvalidArgumentError(
                 'Cannot determine database name from {0}'.format(
                     self._qualified_name
                 )
@@ -477,9 +479,7 @@ class ImpalaTable(ir.TableExpr, DatabaseEntity):
         >>> t.insert(table_expr, overwrite=True)  # doctest: +SKIP
         """
         if isinstance(obj, pd.DataFrame):
-            from ibis.impala.pandas_interop import write_temp_dataframe
-
-            writer, expr = write_temp_dataframe(self._client, obj)
+            expr = write_temp_dataframe(self._client, obj)
         else:
             expr = obj
 
@@ -793,7 +793,7 @@ class ImpalaClient(SQLClient):
 
     def _get_hdfs(self):
         if self._hdfs is None:
-            raise com.IbisError(
+            raise ImpalaConnectionError(
                 'No HDFS connection; must pass connection '
                 'using the hdfs_client argument to '
                 'ibis.impala.connect'
@@ -973,8 +973,8 @@ class ImpalaClient(SQLClient):
                 )
         else:
             if len(tables) > 0 or len(udfs) > 0 or len(udas) > 0:
-                raise com.IntegrityError(
-                    'Database {0} must be empty before '
+                raise exc.IntegrityError(
+                    'Database {} must be empty before '
                     'being dropped, or set '
                     'force=True'.format(name)
                 )
@@ -1139,7 +1139,7 @@ class ImpalaClient(SQLClient):
         obj : TableExpr or pandas.DataFrame, optional
           If passed, creates table from select statement results
         schema : ibis.Schema, optional
-          Mutually exclusive with obj, creates an empty table with a
+          Mutually exclusive with expr, creates an empty table with a
           particular schema
         database : string, default None (optional)
         force : boolean, default False
@@ -1166,9 +1166,7 @@ class ImpalaClient(SQLClient):
 
         if obj is not None:
             if isinstance(obj, pd.DataFrame):
-                from ibis.impala.pandas_interop import write_temp_dataframe
-
-                writer, to_insert = write_temp_dataframe(self, obj)
+                to_insert = write_temp_dataframe(self, obj)
             else:
                 to_insert = obj
             ast = self._build_ast(to_insert, ImpalaDialect.make_context())
@@ -1196,7 +1194,7 @@ class ImpalaClient(SQLClient):
                 partition=partition,
             )
         else:
-            raise com.IbisError('Must pass obj or schema')
+            raise exc.InvalidArgumentError('Must pass expr or schema')
 
         return self._execute(statement)
 
@@ -1375,7 +1373,7 @@ class ImpalaClient(SQLClient):
     def _get_concrete_table_path(self, name, database, persist=False):
         if not persist:
             if name is None:
-                name = '__ibis_tmp_{0}'.format(util.guid())
+                name = '__ibis_tmp_{0}'.format(ibis.util.guid())
 
             if database is None:
                 self._ensure_temp_db_exists()
@@ -1383,7 +1381,9 @@ class ImpalaClient(SQLClient):
             return name, database
         else:
             if name is None:
-                raise com.IbisError('Must pass table name if persist=True')
+                raise exc.InvalidArgumentError(
+                    'Must pass table name if persist == True'
+                )
             return name, database
 
     def _ensure_temp_db_exists(self):
@@ -1928,26 +1928,26 @@ class ImpalaClient(SQLClient):
                 adapted_types.append(typename)
         return names, adapted_types
 
-    def write_dataframe(self, df, path, format='csv'):
-        """
-        Write a pandas DataFrame to indicated file path (default: HDFS) in the
-        indicated format
+    def write_dataframe(
+        self, df: pd.DataFrame, path: str, format: str = 'csv'
+    ) -> None:
+        """Write a pandas DataFrame to `path` on HDFS.
 
         Parameters
         ----------
-        df : DataFrame
-        path : string
-          Absolute output path
-        format : {'csv'}, default 'csv'
+        df
+            The DataFrame to write
+        path
+            Absolute output path on HDFS
+        format
+            The format to write the DataFrame in
 
         Returns
         -------
-        None (for now)
-        """
-        from ibis.impala.pandas_interop import DataFrameWriter
+        None
 
-        writer = DataFrameWriter(self, df)
-        return writer.write_csv(path)
+        """
+        DataFrameWriter(self, df).write_csv(path)
 
 
 # ----------------------------------------------------------------------
@@ -1968,27 +1968,26 @@ class ImpalaTemporaryTable(ops.DatabaseTable):
     def __del__(self):
         try:
             self.drop()
-        except com.IbisError:
+        except Exception:
             pass
 
     def drop(self):
         try:
             self.source.drop_table(self.name)
-        except ImpylaError:
-            # database might have been dropped
+        except ImpylaError:  # database might have been dropped
             pass
 
 
 def _validate_compatible(from_schema, to_schema):
     if set(from_schema.names) != set(to_schema.names):
-        raise com.IbisInputError('Schemas have different names')
+        raise exc.IbisInputError('Schemas have different columns')
 
     for name in from_schema:
         lt = from_schema[name]
         rt = to_schema[name]
         if not lt.castable(rt):
-            raise com.IbisInputError(
-                'Cannot safely cast {0!r} to {1!r}'.format(lt, rt)
+            raise exc.IbisInputError(
+                'Cannot safely cast {!r} to {!r}'.format(lt, rt)
             )
 
 
@@ -2007,17 +2006,17 @@ class _type_parser:
     def __init__(self, value):
         self.value = value
         self.state = self.NORMAL
-        self.buf = io.StringIO()
+        self.buf = []
         self.types = []
         for c in value:
             self._step(c)
         self._push()
 
     def _push(self):
-        val = self.buf.getvalue().strip()
+        val = ''.join(self.buf).strip()
         if val:
             self.types.append(val)
-        self.buf = io.StringIO()
+        self.buf = []
 
     def _step(self, c):
         if self.state == self.NORMAL:
@@ -2029,4 +2028,4 @@ class _type_parser:
         elif self.state == self.IN_PAREN:
             if c == ')':
                 self.state = self.NORMAL
-        self.buf.write(c)
+        self.buf.append(c)

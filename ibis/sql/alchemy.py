@@ -2,7 +2,6 @@ import contextlib
 import functools
 import operator
 import sys
-from typing import List, Optional
 
 import pandas as pd
 import sqlalchemy as sa
@@ -14,18 +13,19 @@ from sqlalchemy.dialects.sqlite.base import SQLiteDialect
 from sqlalchemy.engine.interfaces import Dialect as SQLAlchemyDialect
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.analysis as L
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-import ibis.expr.window as W
-import ibis.sql.compiler as comp
-import ibis.sql.transforms as transforms
-import ibis.util as util
-from ibis.client import Database, Query, SQLClient
-from ibis.sql.compiler import Dialect, Select, TableSetFormatter, Union
+
+from ..common import exceptions as exc
+from .. import util
+from ..client import Database, Query, SQLClient
+from ..expr import analysis as L
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import schema as sch
+from ..expr import types as ir
+from ..expr import window as W
+from ..sql import compiler as comp
+from ..sql import transforms
+from .compiler import Dialect, Select, TableSetFormatter, Union
 
 # Don't support geospatial operations on Python 3.5
 geospatial_supported = False
@@ -147,10 +147,6 @@ if geospatial_supported:
             return dt.LineString(nullable=nullable)
         if t == 'POLYGON':
             return dt.Polygon(nullable=nullable)
-        if t == 'MULTILINESTRING':
-            return dt.MultiLineString(nullable=nullable)
-        if t == 'MULTIPOINT':
-            return dt.MultiPoint(nullable=nullable)
         if t == 'MULTIPOLYGON':
             return dt.MultiPolygon(nullable=nullable)
         if t == 'GEOMETRY':
@@ -261,7 +257,7 @@ def schema_from_table(table, schema=None):
     return sch.schema(pairs)
 
 
-def table_from_schema(name, meta, schema, database: Optional[str] = None):
+def table_from_schema(name, meta, schema):
     # Convert Ibis schema to SQLA table
     columns = []
 
@@ -270,7 +266,7 @@ def table_from_schema(name, meta, schema, database: Optional[str] = None):
         column = sa.Column(colname, satype, nullable=dtype.nullable)
         columns.append(column)
 
-    return sa.Table(name, meta, schema=database, *columns)
+    return sa.Table(name, meta, *columns)
 
 
 def _variance_reduction(func_name):
@@ -311,7 +307,7 @@ def fixed_arity(sa_func, arity):
 
     def formatter(t, expr):
         if arity != len(expr.op().args):
-            raise com.IbisError('incorrect number of args')
+            raise exc.InvalidArgumentError('incorrect number of args')
 
         return _varargs_call(sa_func, t, expr)
 
@@ -570,10 +566,8 @@ def _window(t, expr):
         return t.translate(arg)
 
     if window.max_lookback is not None:
-        raise NotImplementedError(
-            'Rows with max lookback is not implemented '
-            'for SQLAlchemy-based backends.'
-        )
+        raise NotImplementedError('Rows with max lookback is not implemented '
+                                  'for SQLAlchemy-based backends.')
 
     # Some analytic functions need to have the expression of interest in
     # the ORDER BY part of the window clause
@@ -775,7 +769,6 @@ if geospatial_supported:
         ops.GeoPerimeter: unary(sa.func.ST_Perimeter),
         ops.GeoSimplify: fixed_arity(sa.func.ST_Simplify, 3),
         ops.GeoSRID: unary(sa.func.ST_SRID),
-        ops.GeoSetSRID: fixed_arity(sa.func.ST_SetSRID, 2),
         ops.GeoTouches: fixed_arity(sa.func.ST_Touches, 2),
         ops.GeoTransform: fixed_arity(sa.func.ST_Transform, 2),
         ops.GeoWithin: fixed_arity(sa.func.ST_Within, 2),
@@ -978,9 +971,7 @@ class AlchemyExprTranslator(comp.ExprTranslator):
     context_class = AlchemyContext
 
     def name(self, translated, name, force=True):
-        if hasattr(translated, 'label'):
-            return translated.label(name)
-        return translated
+        return translated.label(name)
 
     def get_sqla_type(self, data_type):
         return _to_sqla_type(data_type, type_map=self._type_map)
@@ -997,8 +988,20 @@ class AlchemyQuery(Query):
             columns=cursor.proxy.keys(),
             coerce_float=True,
         )
-        schema = self.schema()
-        return _maybe_to_geodataframe(schema.apply_to(df), schema)
+        df = self.schema().apply_to(df)
+        # If the dataframe has contents and we support geospatial operations,
+        # convert the dataframe into a GeoDataFrame with shapely geometries.
+        if len(df) and geospatial_supported:
+            geom_col = None
+            for name, dtype in self.schema().items():
+                if isinstance(dtype, dt.GeoSpatial):
+                    geom_col = geom_col or name
+                    df[name] = df.apply(
+                        lambda x: shape.to_shape(x[name]), axis=1
+                    )
+            if geom_col:
+                df = geopandas.GeoDataFrame(df, geometry=geom_col)
+        return df
 
 
 class AlchemyDialect(Dialect):
@@ -1034,7 +1037,7 @@ class AlchemyClient(SQLClient):
     dialect = AlchemyDialect
     query_class = AlchemyQuery
 
-    def __init__(self, con: sa.engine.Engine) -> None:
+    def __init__(self, con):
         super().__init__()
         self.con = con
         self.meta = sa.MetaData(bind=con)
@@ -1074,9 +1077,7 @@ class AlchemyClient(SQLClient):
             schema = expr.schema()
 
         self._schemas[self._fully_qualified_name(name, database)] = schema
-        t = self._table_from_schema(
-            name, schema, database=database or self.current_database
-        )
+        t = table_from_schema(name, self.meta, schema)
 
         with self.begin() as bind:
             t.create(bind=bind)
@@ -1085,34 +1086,15 @@ class AlchemyClient(SQLClient):
                     t.insert().from_select(list(expr.columns), expr.compile())
                 )
 
-    def _columns_from_schema(
-        self, name: str, schema: sch.Schema
-    ) -> List[sa.Column]:
-        return [
-            sa.Column(colname, _to_sqla_type(dtype), nullable=dtype.nullable)
-            for colname, dtype in zip(schema.names, schema.types)
-        ]
-
-    def _table_from_schema(
-        self, name: str, schema: sch.Schema, database: Optional[str] = None
-    ) -> sa.Table:
-        columns = self._columns_from_schema(name, schema)
-        return sa.Table(name, self.meta, *columns)
-
     @invalidates_reflection_cache
-    def drop_table(
-        self,
-        table_name: str,
-        database: Optional[str] = None,
-        force: bool = False,
-    ) -> None:
-        if database is not None and database != self.con.url.database:
+    def drop_table(self, table_name, database=None, force=False):
+        if database is not None and database != self.engine.url.database:
             raise NotImplementedError(
                 'Dropping tables from a different database is not yet '
                 'implemented'
             )
 
-        t = self._get_sqla_table(table_name, schema=database, autoload=False)
+        t = sa.Table(table_name, self.meta)
         t.drop(checkfirst=force)
 
         assert (
@@ -1128,33 +1110,23 @@ class AlchemyClient(SQLClient):
         except KeyError:  # schemas won't be cached if created with raw_sql
             pass
 
-    def truncate_table(
-        self, table_name: str, database: Optional[str] = None
-    ) -> None:
-        t = self._get_sqla_table(table_name, schema=database)
-        t.delete().execute()
+    def truncate_table(self, table_name, database=None):
+        self.meta.tables[table_name].delete().execute()
 
-    def list_tables(
-        self,
-        like: Optional[str] = None,
-        database: Optional[str] = None,
-        schema: Optional[str] = None,
-    ) -> List[str]:
-        """List tables/views in the current or indicated database.
+    def list_tables(self, like=None, database=None, schema=None):
+        """
+        List tables/views in the current (or indicated) database.
 
         Parameters
         ----------
-        like
-            Checks for this string contained in name
-        database
-            If not passed, uses the current database
-        schema
-            The schema namespace that tables should be listed from
+        like : string, default None
+          Checks for this string contained in name
+        database : string, default None
+          If not passed, uses the current/default database
 
         Returns
         -------
-        List[str]
-
+        tables : list of strings
         """
         inspector = self.inspector
         # inspector returns a mutable version of its names, so make a copy.
@@ -1164,18 +1136,19 @@ class AlchemyClient(SQLClient):
             names = [x for x in names if like in x]
         return sorted(names)
 
-    def _execute(self, query: str, results: bool = True):
-        return AlchemyProxy(self.con.execute(query))
+    def _execute(self, query, results=True):
+        with self.begin() as con:
+            return AlchemyProxy(con.execute(query))
 
     @invalidates_reflection_cache
-    def raw_sql(self, query: str, results: bool = False):
+    def raw_sql(self, query, results=False):
         return super().raw_sql(query, results=results)
 
     def _build_ast(self, expr, context):
         return build_ast(expr, context)
 
-    def _get_sqla_table(self, name, schema=None, autoload=True):
-        return sa.Table(name, self.meta, schema=schema, autoload=autoload)
+    def _get_sqla_table(self, name, schema=None):
+        return sa.Table(name, self.meta, schema=schema, autoload=True)
 
     def _sqla_table_to_expr(self, table):
         node = self.table_class(table, self)
@@ -1512,22 +1485,3 @@ def _sort_key(t, expr):
     by, ascending = expr.op().args
     sort_direction = sa.asc if ascending else sa.desc
     return sort_direction(t.translate(by))
-
-
-def _maybe_to_geodataframe(df, schema):
-    """
-    If the required libraries for geospatial support are installed, and if a
-    geospatial column is present in the dataframe, convert it to a
-    GeoDataFrame.
-    """
-    def to_shapely(row, name):
-        return shape.to_shape(row[name]) if row[name] is not None else None
-    if len(df) and geospatial_supported:
-        geom_col = None
-        for name, dtype in schema.items():
-            if isinstance(dtype, dt.GeoSpatial):
-                geom_col = geom_col or name
-                df[name] = df.apply(lambda x: to_shapely(x, name), axis=1)
-        if geom_col:
-            df = geopandas.GeoDataFrame(df, geometry=geom_col)
-    return df

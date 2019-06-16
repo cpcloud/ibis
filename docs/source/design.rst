@@ -178,9 +178,9 @@ The main pieces of a ``SELECT`` statement are:
 #. ``DISTINCT`` clauses (``distinct``)
 
 Each of these pieces is translated into a SQL string and finally assembled by
-the instance of the :class:`~ibis.sql.compiler.ExprTranslator` subclass
+the instance of the :class:`ibis.sql.compiler.ExprTranslator` subclass
 specific to the backend being compiled. For example, the
-:class:`~ibis.impala.compiler.ImpalaExprTranslator` is one of the subclasses
+:class:`ibis.impala.compiler.ImpalaExprTranslator` is one of the subclasses
 that will perform this translation.
 
 .. note::
@@ -205,7 +205,7 @@ SQL is sent from ibis.
 However, once the data arrives from the database we need to convert that
 data to a pandas DataFrame.
 
-The Query class, with its :meth:`~ibis.sql.client.Query._fetch` method,
-provides a way for ibis :class:`~ibis.sql.client.SQLClient` objects to do any
+The Query class, with its :meth:`ibis.client.Query._fetch` method,
+provides a way for ibis :class:`ibis.client.SQLClient` objects to do any
 additional processing necessary after the database returns results to the
 client.

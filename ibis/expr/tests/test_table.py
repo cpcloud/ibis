@@ -4,14 +4,14 @@ import re
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
 import ibis.config as config
+import ibis.common.exceptions as exc
 import ibis.expr.analysis as L
 import ibis.expr.api as api
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
-from ibis.common.exceptions import ExpressionError, RelationError
+from ibis.common.exceptions import ExpressionError, InvalidRelationError
 from ibis.expr.types import ColumnExpr, TableExpr
 from ibis.tests.util import assert_equal
 
@@ -109,7 +109,7 @@ def test_projection_with_exprs(table):
 
 
 def test_projection_duplicate_names(table):
-    with pytest.raises(com.IntegrityError):
+    with pytest.raises(exc.IntegrityError):
         table.projection([table.c, table.c])
 
 
@@ -120,7 +120,7 @@ def test_projection_invalid_root(table):
     right = api.table(schema1, name='bar')
 
     exprs = [right['foo'], right['bar']]
-    with pytest.raises(RelationError):
+    with pytest.raises(InvalidRelationError):
         left.projection(exprs)
 
 
@@ -157,7 +157,7 @@ def test_projection_with_star_expr(table):
 
     # cannot pass an invalid table expression
     t2 = t.aggregate([t['a'].sum().name('sum(a)')], by=['g'])
-    with pytest.raises(RelationError):
+    with pytest.raises(InvalidRelationError):
         t[[t2]]
     # TODO: there may be some ways this can be invalid
 
@@ -268,7 +268,7 @@ def test_invalid_predicate(table, schema):
     # a lookalike
     table2 = api.table(schema, name='bar')
     predicate = table2.a > 5
-    with pytest.raises(RelationError):
+    with pytest.raises(InvalidRelationError):
         table.filter(predicate)
 
 
@@ -406,7 +406,7 @@ def test_table_count(table):
 
 
 def test_len_raises_expression_error(table):
-    with pytest.raises(com.ExpressionError):
+    with pytest.raises(exc.ExpressionError):
         len(table)
 
 
@@ -536,7 +536,7 @@ def test_aggregate_post_predicate(table):
 
     invalid_having_cases = [table.f.sum(), table.f > 2]
     for case in invalid_having_cases:
-        with pytest.raises(com.ExpressionError):
+        with pytest.raises(exc.ExpressionError):
             table.aggregate(metrics, by=by, having=[case])
 
 
@@ -645,7 +645,7 @@ def test_aggregate_unnamed_expr(con):
     nation = con.table('tpch_nation')
     expr = nation.n_name.lower().left(1)
 
-    with pytest.raises(com.ExpressionError):
+    with pytest.raises(exc.ExpressionError):
         nation.group_by(expr).aggregate(nation.count().name('metric'))
 
 
@@ -765,7 +765,7 @@ def test_self_join(table):
     assert 'ref_1' in result_repr
 
     # Cannot be immediately materialized because of the schema overlap
-    with pytest.raises(RelationError):
+    with pytest.raises(InvalidRelationError):
         joined.materialize()
 
     # Project out left table schema
@@ -919,7 +919,7 @@ def test_join_key_alternatives(con):
     assert_equal(joined2, expected)
     assert_equal(joined3, expected)
 
-    with pytest.raises(com.ExpressionError):
+    with pytest.raises(exc.ExpressionError):
         t1.inner_join(t2, [('foo_id', 'foo_id', 'foo_id')])
 
 
@@ -929,7 +929,7 @@ def test_join_invalid_refs(con):
     t3 = con.table('star3')
 
     predicate = t1.bar_id == t3.bar_id
-    with pytest.raises(com.RelationError):
+    with pytest.raises(exc.InvalidRelationError):
         t1.inner_join(t2, [predicate])
 
 
@@ -938,8 +938,11 @@ def test_join_invalid_expr_type(con):
     invalid_right = left.foo_id
     join_key = ['bar_id']
 
-    with pytest.raises(TypeError, match=type(invalid_right).__name__):
+    with pytest.raises(TypeError) as e:
         left.inner_join(invalid_right, join_key)
+
+    message = str(e)
+    assert type(invalid_right).__name__ in message
 
 
 def test_join_non_boolean_expr(con):
@@ -948,7 +951,7 @@ def test_join_non_boolean_expr(con):
 
     # oops
     predicate = t1.f * t2.value1
-    with pytest.raises(com.ExpressionError):
+    with pytest.raises(exc.ExpressionError):
         t1.inner_join(t2, [predicate])
 
 
@@ -1007,7 +1010,7 @@ def test_union(table):
     assert isinstance(result.op(), ops.Union)
     assert result.op().distinct
 
-    with pytest.raises(RelationError):
+    with pytest.raises(InvalidRelationError):
         t1.union(t3)
 
 

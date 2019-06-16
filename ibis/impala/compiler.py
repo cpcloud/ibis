@@ -1,20 +1,20 @@
 import datetime
 import itertools
-import math
 from io import StringIO
 from operator import add, mul, sub
 from typing import Optional
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.analysis as L
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.impala.identifiers as identifiers
-import ibis.sql.compiler as comp
-import ibis.sql.transforms as transforms
-import ibis.util as util
+
+from ..common import exceptions as exc
+from .. import util
+from ..expr import analysis as L
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import types as ir
+from ..sql import compiler as comp
+from ..sql import transforms
+from . import identifiers
 
 
 def build_ast(expr, context):
@@ -141,7 +141,7 @@ def _type_to_sql_string(tval):
     try:
         return _sql_type_names[name]
     except KeyError:
-        raise com.UnsupportedBackendType(name)
+        raise exc.UnsupportedBackendType(name)
 
 
 def _between(translator, expr):
@@ -247,7 +247,7 @@ def _replace_interval_with_scalar(expr):
             )
     elif expr_op.args and isinstance(expr, ir.IntervalValue):
         if len(expr_op.args) > 2:
-            raise com.NotImplementedError(
+            raise exc.NotImplementedError(
                 "'preceding' argument cannot be parsed."
             )
         left_arg = _replace_interval_with_scalar(expr_op.args[0])
@@ -260,7 +260,7 @@ def _time_range_to_range_window(translator, window):
     # Check that ORDER BY column is a single time column:
     order_by_vars = [x.op().args[0] for x in window._order_by]
     if len(order_by_vars) > 1:
-        raise com.IbisInputError(
+        raise exc.IbisInputError(
             "Expected 1 order-by variable, got {}".format(len(order_by_vars))
         )
 
@@ -301,7 +301,7 @@ def _window(translator, expr):
     )
 
     if isinstance(window_op, _unsupported_reductions):
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             '{} is not supported in window functions'.format(type(window_op))
         )
 
@@ -533,7 +533,7 @@ def fixed_arity(func_name, arity):
     def formatter(translator, expr):
         op = expr.op()
         if arity != len(op.args):
-            raise com.IbisError('incorrect number of args')
+            raise exc.InvalidArgumentError('incorrect number of args')
         return _format_call(translator, func_name, *op.args)
 
     return formatter
@@ -632,18 +632,10 @@ def _string_literal_format(translator, expr):
 
 def _number_literal_format(translator, expr):
     value = expr.op().value
+    formatted = repr(value)
 
-    if math.isfinite(value):
-        formatted = repr(value)
-    else:
-        if math.isnan(value):
-            formatted_val = 'NaN'
-        elif math.isinf(value):
-            if value > 0:
-                formatted_val = 'Infinity'
-            else:
-                formatted_val = '-Infinity'
-        formatted = "CAST({!r} AS DOUBLE)".format(formatted_val)
+    if formatted in {'nan', 'inf', '-inf'}:
+        return "CAST({!r} AS DOUBLE)".format(formatted)
 
     return formatted
 
@@ -879,7 +871,7 @@ def _truncate(translator, expr):
     try:
         unit = _impala_unit_names[unit]
     except KeyError:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             '{!r} unit is not supported in timestamp truncate'.format(unit)
         )
 

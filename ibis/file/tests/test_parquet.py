@@ -9,8 +9,8 @@ from ibis.file.client import FileDatabase
 pa = pytest.importorskip('pyarrow')  # isort:skip
 pq = pytest.importorskip('pyarrow.parquet')  # isort:skip
 
-from ibis.file.parquet import ParquetClient  # noqa: E402, isort:skip
-from ibis.file.parquet import ParquetTable  # noqa: E402, isort:skip
+from ibis.parquet import ParquetClient  # noqa: E402, isort:skip
+from ibis.parquet import ParquetTable  # noqa: E402, isort:skip
 
 
 pytestmark = pytest.mark.skipif(

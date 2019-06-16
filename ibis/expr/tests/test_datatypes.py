@@ -40,14 +40,6 @@ def test_validate_type():
         ('polygon;4326', dt.polygon),
         ('polygon;4326:geometry', dt.polygon),
         ('polygon;4326:geography', dt.polygon),
-        ('multilinestring', dt.multilinestring),
-        ('multilinestring;4326', dt.multilinestring),
-        ('multilinestring;4326:geometry', dt.multilinestring),
-        ('multilinestring;4326:geography', dt.multilinestring),
-        ('multipoint', dt.multipoint),
-        ('multipoint;4326', dt.multipoint),
-        ('multipoint;4326:geometry', dt.multipoint),
-        ('multipoint;4326:geography', dt.multipoint),
         ('multipolygon', dt.multipolygon),
         ('multipolygon;4326', dt.multipolygon),
         ('multipolygon;4326:geometry', dt.multipolygon),
@@ -209,8 +201,6 @@ def test_char_varchar_invalid(spec):
         ('point', dt.point),
         ('linestring', dt.linestring),
         ('polygon', dt.polygon),
-        ('multilinestring', dt.multilinestring),
-        ('multipoint', dt.multipoint),
         ('multipolygon', dt.multipolygon),
     ],
 )
@@ -220,7 +210,7 @@ def test_primitive_from_string(spec, expected):
 
 def test_literal_mixed_type_fails():
     data = [1, 'a']
-    with pytest.raises(TypeError):
+    with pytest.raises(IbisTypeError):
         ibis.literal(data)
 
 
@@ -481,11 +471,3 @@ def test_implicitly_uncastable_values(source, target, value):
 
 def test_no_infer_ambiguities():
     assert not ambiguities(dt.infer.funcs)
-
-
-def test_struct_datatype_subclass_from_tuples():
-    class MyStruct(dt.Struct):
-        pass
-
-    dtype = MyStruct.from_tuples([('a', 'int64')])
-    assert isinstance(dtype, MyStruct)

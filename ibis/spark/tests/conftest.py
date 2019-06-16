@@ -1,26 +1,26 @@
 import os
+import tempfile
 
 import pytest
 
-import ibis.util as util
+from ibis import util
 from ibis.tests.all.conftest import get_spark_testing_client
-
-
-@pytest.fixture(scope='session', autouse=True)
-def test_data_db(client):
-    try:
-        name = os.environ.get('IBIS_TEST_DATA_DB', 'ibis_testing')
-        client.create_database(name)
-        client.set_database(name)
-        yield name
-    finally:
-        client.drop_database(name, force=True)
 
 
 @pytest.fixture(scope='session')
 def client(data_directory):
     pytest.importorskip('pyspark')
     return get_spark_testing_client(data_directory)
+
+
+@pytest.fixture(scope='session', autouse=True)
+def test_data_db(client, test_database):
+    client.create_database(test_database)
+    try:
+        client.set_database(test_database)
+        yield test_database
+    finally:
+        client.drop_database(test_database, force=True)
 
 
 @pytest.fixture(scope='session')
@@ -61,13 +61,13 @@ def alltypes_df(alltypes):
     return alltypes.execute()
 
 
-def _random_identifier(suffix):
-    return '__ibis_test_{}_{}'.format(suffix, util.guid())
+def _random_identifier(suffix: str = "") -> str:
+    return "_".join(filter(None, ("__ibis_test", suffix, util.guid())))
 
 
 @pytest.fixture(scope='session')
 def tmp_dir():
-    return '/tmp/__ibis_test_{}'.format(util.guid())
+    return os.path.join(tempfile.gettempdir(), _random_identifier())
 
 
 @pytest.fixture

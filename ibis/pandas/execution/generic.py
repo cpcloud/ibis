@@ -15,13 +15,15 @@ import toolz
 from pandas.core.groupby import DataFrameGroupBy, SeriesGroupBy
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.pandas.aggcontext as agg_ctx
-from ibis.compat import DatetimeTZDtype
-from ibis.pandas.core import (
+
+from ...common import exceptions as exc
+from ...compat import DatetimeTZDtype
+from ...expr import datatypes as dt
+from ...expr import operations as ops
+from ...expr import types as ir
+from .. import aggcontext as agg_ctx
+from ..client import PandasClient, PandasTable
+from ..core import (
     boolean_types,
     execute,
     fixed_width_types,
@@ -32,8 +34,8 @@ from ibis.pandas.core import (
     simple_types,
     timedelta_types,
 )
-from ibis.pandas.dispatch import execute_literal, execute_node
-from ibis.pandas.execution import constants
+from ..dispatch import execute_literal, execute_node
+from . import constants
 
 
 # By default return the literal value
@@ -105,7 +107,7 @@ def execute_cast_series_array(op, data, type, **kwargs):
 
 @execute_node.register(ops.Cast, pd.Series, dt.Timestamp)
 def execute_cast_series_timestamp(op, data, type, **kwargs):
-    arg = op.arg
+    arg = op.args[0]
     from_type = arg.type()
 
     if from_type.equals(type):  # noop cast
@@ -119,13 +121,9 @@ def execute_cast_series_timestamp(op, data, type, **kwargs):
         )
 
     if isinstance(from_type, (dt.String, dt.Integer)):
-        timestamps = pd.to_datetime(data.values, infer_datetime_format=True)
-        if getattr(timestamps.dtype, "tz", None) is not None:
-            method_name = "tz_convert"
-        else:
-            method_name = "tz_localize"
-        method = getattr(timestamps, method_name)
-        timestamps = method(tz)
+        timestamps = pd.to_datetime(
+            data.values, infer_datetime_format=True, unit='ns'
+        ).tz_localize(tz)
         return pd.Series(timestamps, index=data.index, name=data.name)
 
     raise TypeError("Don't know how to cast {} to {}".format(from_type, type))
@@ -493,7 +491,7 @@ def execute_arbitrary_series_groupby(op, data, _, aggcontext=None, **kwargs):
         how = 'first'
 
     if how not in {'first', 'last'}:
-        raise com.OperationNotDefinedError(
+        raise exc.OperationNotDefinedError(
             'Arbitrary {!r} is not supported'.format(how)
         )
     return aggcontext.agg(data, how)
@@ -575,7 +573,7 @@ def execute_arbitrary_series_mask(op, data, mask, aggcontext=None, **kwargs):
     elif op.how == 'last':
         index = -1
     else:
-        raise com.OperationNotDefinedError(
+        raise exc.OperationNotDefinedError(
             'Arbitrary {!r} is not supported'.format(op.how)
         )
 
@@ -759,10 +757,9 @@ def execute_series_distinct(op, data, **kwargs):
     return pd.Series(data.unique(), name=data.name)
 
 
-@execute_node.register(ops.Union, pd.DataFrame, pd.DataFrame, bool)
-def execute_union_dataframe_dataframe(op, left, right, distinct, **kwargs):
-    result = pd.concat([left, right], axis=0)
-    return result.drop_duplicates() if distinct else result
+@execute_node.register(ops.Union, pd.DataFrame, pd.DataFrame)
+def execute_union_dataframe_dataframe(op, left, right, **kwargs):
+    return pd.concat([left, right], axis=0)
 
 
 @execute_node.register(ops.IsNull, pd.Series)
@@ -872,9 +869,7 @@ def execute_node_where_scalar_scalar_series(op, cond, true, false, **kwargs):
     return pd.Series(np.repeat(true, len(false))) if cond else false
 
 
-@execute_node.register(
-    ibis.pandas.client.PandasTable, ibis.pandas.client.PandasClient
-)
+@execute_node.register(PandasTable, PandasClient)
 def execute_database_table_client(op, client, **kwargs):
     return client.dictionary[op.name]
 

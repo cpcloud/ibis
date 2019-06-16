@@ -1,5 +1,4 @@
-"""Translate a Python AST to JavaScript
-"""
+"""Translate a Python AST to JavaScript."""
 
 import ast
 import contextlib
@@ -8,9 +7,8 @@ import inspect
 import textwrap
 from collections import ChainMap
 
-import ibis.expr.datatypes as dt
-from ibis.bigquery.udf.find import find_names
-from ibis.bigquery.udf.rewrite import rewrite
+from .find import find_names
+from .rewrite import rewrite
 
 
 class SymbolTable(ChainMap):
@@ -21,6 +19,7 @@ class SymbolTable(ChainMap):
     JavaScript requires declarations in strict mode, so to implement this we
     shove a "let" at the beginning of every variable name if it doesn't already
     exist in the current scope.
+
     """
 
     def __getitem__(self, key):
@@ -42,7 +41,8 @@ def indent(lines, spaces=4):
 
     Returns
     -------
-    indented_lines : str
+    str
+
     """
     if isinstance(lines, str):
         text = [lines]
@@ -55,7 +55,8 @@ def semicolon(f):
 
     Parameters
     ----------
-    f : callable
+    callable
+
     """
 
     @functools.wraps(f)
@@ -543,6 +544,7 @@ class PythonToJavaScriptTranslator:
 
 if __name__ == '__main__':
     from ibis.bigquery.api import udf
+    import ibis.expr.datatypes as dt
 
     @udf(
         input_type=[dt.double, dt.double, dt.int64],

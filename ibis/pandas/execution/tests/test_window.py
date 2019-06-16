@@ -6,8 +6,7 @@ import pytest
 from pandas.util import testing as tm
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
+import ibis.common.exceptions as exc
 import ibis.expr.operations as ops
 from ibis.expr.window import rows_with_max_lookback
 from ibis.pandas.dispatch import pre_execute
@@ -243,9 +242,9 @@ def test_batting_cumulative(batting, batting_df, sort_kind):
         .sort_values('yearID', kind=sort_kind)
         .G.expanding()
         .sum()
-        .astype('int64')
     )
     expected = batting_df.assign(more_values=more_values)
+
     tm.assert_frame_equal(result[expected.columns], expected)
 
 
@@ -290,9 +289,9 @@ def test_batting_rolling(batting, batting_df, sort_kind):
         .sort_values('yearID', kind=sort_kind)
         .G.rolling(5, min_periods=1)
         .sum()
-        .astype('int64')
     )
     expected = batting_df.assign(more_values=more_values)
+
     tm.assert_frame_equal(result[expected.columns], expected)
 
 
@@ -433,18 +432,11 @@ def test_project_list_scalar():
     )
 
 
-@pytest.mark.parametrize(
-    'index',
-    [
-        pytest.param(lambda time: None, id='no_index'),
-        pytest.param(lambda time: time, id='index'),
-    ],
-)
-def test_window_with_preceding_expr(index):
-    time = pd.date_range('20180101', '20180110')
+def test_window_with_preceding_expr():
+    index = pd.date_range('20180101', '20180110')
     start = 2
-    data = np.arange(start, start + len(time))
-    df = pd.DataFrame({'value': data, 'time': time}, index=index(time))
+    data = np.arange(start, start + len(index))
+    df = pd.DataFrame({'value': data, 'time': index}, index=index)
     client = ibis.pandas.connect({'df': df})
     t = client.table('df')
     expected = (
@@ -464,33 +456,23 @@ def test_window_with_preceding_expr(index):
 def test_window_with_mlb():
     index = pd.date_range('20170501', '20170507')
     data = np.random.randn(len(index), 3)
-    df = (
-        pd.DataFrame(data, columns=list('abc'), index=index)
-        .rename_axis('time')
-        .reset_index(drop=False)
-    )
+    df = (pd.DataFrame(data, columns=list('abc'), index=index)
+          .rename_axis('time').reset_index(drop=False))
     client = ibis.pandas.connect({'df': df})
     t = client.table('df')
     rows_with_mlb = rows_with_max_lookback(5, ibis.interval(days=10))
     expr = t.mutate(
         sum=lambda df: df.a.sum().over(
-            ibis.trailing_window(rows_with_mlb, order_by='time', group_by='b')
+            ibis.trailing_window(rows_with_mlb, order_by='time')
         )
     )
     result = expr.execute()
-    expected = df.set_index('time')
-    gb_df = (
-        expected.groupby(['b'])['a']
-        .rolling('10d', closed='both')
-        .apply(lambda s: s.iloc[-5:].sum(), raw=False)
-        .sort_index(level=['time'])
-        .reset_index(drop=True)
-    )
-    expected = expected.reset_index(drop=False).assign(sum=gb_df)
+    expected = df
+    expected['sum'] = expected.a.rolling(5, min_periods=1).sum()
     tm.assert_frame_equal(result, expected)
 
     rows_with_mlb = rows_with_max_lookback(5, 10)
-    with pytest.raises(com.IbisInputError):
+    with pytest.raises(exc.IbisInputError):
         t.mutate(
             sum=lambda df: df.a.sum().over(
                 ibis.trailing_window(rows_with_mlb, order_by='time')
@@ -520,12 +502,3 @@ def test_window_has_pre_execute_scope():
     # twice in window op when calling execute on the ops.Lag node at the
     # beginning of execute and once before the actual computation
     assert called[0] == 3
-
-
-def test_window_grouping_key_has_scope(t, df):
-    param = ibis.param(dt.string)
-    window = ibis.window(group_by=t.dup_strings + param)
-    expr = t.plain_int64.mean().over(window)
-    result = expr.execute(params={param: "a"})
-    expected = df.groupby(df.dup_strings + "a").plain_int64.transform("mean")
-    tm.assert_series_equal(result, expected)

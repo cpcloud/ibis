@@ -163,7 +163,7 @@ def test_execute_exprs_no_table_ref(con):
         assert result == expected
 
     # ExprList
-    exlist = ibis.api.expr_list(
+    exlist = ibis.expr_list(
         [L(1).name('a'), ibis.now().name('b'), L(2).log().name('c')]
     )
     con.execute(exlist)

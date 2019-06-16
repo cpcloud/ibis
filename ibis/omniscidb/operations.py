@@ -1,17 +1,18 @@
 import warnings
+from copy import copy
 from datetime import date, datetime
 from io import StringIO
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.common.geospatial as geo
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.rules as rlz
-import ibis.expr.types as ir
-import ibis.util as util
-from ibis.impala import compiler as impala_compiler
-from ibis.omniscidb.identifiers import quote_identifier
+
+from ..common import exceptions as exc
+from .. import util
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import rules as rlz
+from ..expr import types as ir
+from ..impala import compiler as impala_compiler
+from .identifiers import quote_identifier
 
 _sql_type_names = {
     'boolean': 'boolean',
@@ -49,7 +50,7 @@ def _type_to_sql_string(tval):
 
 
 def _cast(translator, expr):
-    from ibis.omniscidb.client import OmniSciDBDataType
+    from ibis.mapd.client import MapDDataType
 
     op = expr.op()
     arg, target = op.args
@@ -60,12 +61,12 @@ def _cast(translator, expr):
         type_ = target.geotype.upper()
 
         if type_ == 'GEOMETRY':
-            raise com.UnsupportedOperationError(
-                'OmnisciDB/OmniSciDB doesn\'t support yet convert '
+            raise exc.UnsupportedOperationError(
+                'OmnisciDB/MapD doesn\'t support yet convert '
                 + 'from GEOGRAPHY to GEOMETRY.'
             )
     else:
-        type_ = str(OmniSciDBDataType.from_ibis(target, nullable=False))
+        type_ = str(MapDDataType.from_ibis(target, nullable=False))
     return 'CAST({0!s} AS {1!s})'.format(arg_, type_)
 
 
@@ -127,7 +128,7 @@ def fixed_arity(func_name, arity):
         arg_count = len(op.args)
         if arity != arg_count:
             msg = 'Incorrect number of args {0} instead of {1}'
-            raise com.UnsupportedOperationError(msg.format(arg_count, arity))
+            raise exc.UnsupportedOperationError(msg.format(arg_count, arity))
         return _call(translator, func_name, *op.args)
 
     formatter.__name__ = func_name
@@ -164,13 +165,7 @@ def _reduction(func_name, sql_func_name=None, sql_signature='{}({})'):
 
         # HACK: support trailing arguments
         where = op.where
-        args = []
-
-        for arg in op.args:
-            if arg is not where:
-                if arg.type().equals(dt.boolean):
-                    arg = arg.ifelse(1, 0)
-                args.append(arg)
+        args = [arg for arg in op.args if arg is not where]
 
         return _reduction_format(
             translator,
@@ -302,8 +297,8 @@ def _value_list(translator, expr):
 def _interval_format(translator, expr):
     dtype = expr.type()
     if dtype.unit in {'ms', 'us', 'ns'}:
-        raise com.UnsupportedOperationError(
-            "OmniSciDB doesn't support subsecond interval resolutions"
+        raise exc.UnsupportedOperationError(
+            "MapD doesn't support subsecond interval resolutions"
         )
 
     return '{1}, (sign){0}'.format(expr.op().value, dtype.resolution.upper())
@@ -315,8 +310,8 @@ def _interval_from_integer(translator, expr):
 
     dtype = expr.type()
     if dtype.unit in {'ms', 'us', 'ns'}:
-        raise com.UnsupportedOperationError(
-            "OmniSciDB doesn't support subsecond interval resolutions"
+        raise exc.UnsupportedOperationError(
+            "MapD doesn't support subsecond interval resolutions"
         )
 
     arg_ = translator.translate(arg)
@@ -358,13 +353,63 @@ def _cross_join(translator, expr):
     return translator.translate(left.join(right, ibis.literal(True)))
 
 
+def _format_point_value(value):
+    return ' '.join(str(v) for v in value)
+
+
+def _format_linestring_value(value):
+    return ', '.join(
+        '{}'.format(_format_point_value(point)) for point in value
+    )
+
+
+def _format_polygon_value(value):
+    return ', '.join(
+        '({})'.format(_format_linestring_value(line)) for line in value
+    )
+
+
+def _format_multipolygon_value(value):
+    return ', '.join(
+        '({})'.format(_format_polygon_value(polygon)) for polygon in value
+    )
+
+
+def _format_geo_metadata(op, value):
+    value = copy(value)
+    srid = op.args[1].srid
+    geotype = op.args[1].geotype
+
+    if geotype is None or geotype not in ('geometry', 'geography'):
+        return "'{}'".format(value)
+
+    if geotype == 'geography':
+        geofunc = 'ST_GeogFromText'
+    else:
+        geofunc = 'ST_GeomFromText'
+
+    return "{}('{}'{})".format(
+        geofunc, value, ', {}'.format(srid) if srid else ''
+    )
+
+
 def literal(translator, expr):
     op = expr.op()
     value = op.value
 
     # geo spatial data type
-    if isinstance(expr, ir.GeoSpatialScalar):
-        return geo.translate_literal(expr)
+    if isinstance(expr, ir.PointScalar):
+        result = "POINT({0})".format(_format_point_value(value))
+        return _format_geo_metadata(op, result)
+    elif isinstance(expr, ir.LineStringScalar):
+        result = "LINESTRING({0})".format(_format_linestring_value(value))
+        return _format_geo_metadata(op, result)
+    elif isinstance(expr, ir.PolygonScalar):
+        result = "POLYGON({0!s})".format(_format_polygon_value(value))
+        return _format_geo_metadata(op, result)
+    elif isinstance(expr, ir.MultiPolygonScalar):
+        result = "MULTIPOLYGON({0})".format(_format_multipolygon_value(value))
+        return _format_geo_metadata(op, result)
     # primitive data type
     elif isinstance(expr, ir.BooleanValue):
         return '1' if value else '0'
@@ -424,15 +469,15 @@ def _where(translator, expr):
 
 
 def raise_unsupported_expr_error(expr):
-    msg = "OmniSciDB backend doesn't support {} operation!"
+    msg = "MapD backend doesn't support {} operation!"
     op = expr.op()
-    raise com.UnsupportedOperationError(msg.format(type(op)))
+    raise exc.UnsupportedOperationError(msg.format(type(op)))
 
 
 def raise_unsupported_op_error(translator, expr, *args):
-    msg = "OmniSciDB backend doesn't support {} operation!"
+    msg = "MapD backend doesn't support {} operation!"
     op = expr.op()
-    raise com.UnsupportedOperationError(msg.format(type(op)))
+    raise exc.UnsupportedOperationError(msg.format(type(op)))
 
 
 # translator
@@ -550,8 +595,8 @@ def _arbitrary(translator, expr):
     arg, how, where = expr.op().args
 
     if how not in (None, 'last'):
-        raise com.UnsupportedOperationError(
-            '{!r} value not supported for arbitrary in OmniSciDB'.format(how)
+        raise exc.UnsupportedOperationError(
+            '{!r} value not supported for arbitrary in MapD'.format(how)
         )
 
     if where is not None:
@@ -637,18 +682,18 @@ def _window(translator, expr):
     _expr_transforms = {}
 
     if isinstance(window_op, _unsupported_win_ops):
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             '{} is not supported in window functions'.format(type(window_op))
         )
 
     if window.preceding is not None:
-        raise com.UnsupportedOperationError(
-            'Window preceding is not supported by OmniSciDB backend yet'
+        raise exc.UnsupportedOperationError(
+            'Window preceding is not supported by OmniSci/MapD backend yet'
         )
 
     if window.following is not None and window.following != 0:
-        raise com.UnsupportedOperationError(
-            'Window following is not supported by OmniSciDB backend yet'
+        raise exc.UnsupportedOperationError(
+            'Window following is not supported by OmniSci/MapD backend yet'
         )
     window.following = None
 
@@ -712,6 +757,7 @@ def _shift_like(name, default_offset=None):
 
 # operation map
 
+# https://www.mapd.com/docs/latest/mapd-core-guide/dml/
 _binary_infix_ops = {
     # math
     ops.Power: fixed_arity('power', 2),
@@ -726,7 +772,7 @@ _comparison_ops = {}
 
 # MATH
 _math_ops = {
-    ops.Degrees: unary('degrees'),  # OmniSciDB function
+    ops.Degrees: unary('degrees'),  # MapD function
     ops.Modulus: fixed_arity('mod', 2),
     ops.Pi: fixed_arity('pi', 0),
     ops.Radians: unary('radians'),
@@ -780,7 +826,7 @@ _geospatial_ops = {
     ops.GeoNRings: unary('ST_NRINGS'),
     ops.GeoSRID: unary('ST_SRID'),
     ops.GeoTransform: fixed_arity('ST_TRANSFORM', 2),
-    ops.GeoSetSRID: fixed_arity('ST_SETSRID', 2),
+    ops.GeoSetSRID: fixed_arity('ST_SETSRID', 2)
 }
 
 # STRING
@@ -815,16 +861,11 @@ _agg_ops = {
     ops.HLLCardinality: approx_count_distinct,
     ops.DistinctColumn: unary_prefix_op('distinct'),
     ops.Arbitrary: _arbitrary,
-    ops.Sum: _reduction('sum'),
-    ops.Mean: _reduction('avg'),
-    ops.Min: _reduction('min'),
-    ops.Max: _reduction('max'),
 }
 
 # GENERAL
 _general_ops = {
     ops.Literal: literal,
-    ops.NullLiteral: lambda *args: 'NULL',
     ops.ValueList: _value_list,
     ops.Cast: _cast,
     ops.Where: _where,
@@ -867,6 +908,7 @@ _unsupported_ops = [
     ops.GroupConcat,
     ops.NullIf,
     ops.NullIfZero,
+    ops.NullLiteral,
     ops.IsInf,
     ops.IsNan,
     ops.IfNull,

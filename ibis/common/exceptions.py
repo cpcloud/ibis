@@ -1,69 +1,65 @@
-# Copyright 2014 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""Ibis's custom exceptions."""
 
 
-class IbisError(Exception):
-    pass
+class HDFSError(Exception):
+    """Raised for exceptional conditions related to HDFS."""
 
 
-class InternalError(IbisError):
-    pass
+class DependencyMissingError(Exception):
+    """Raised when a dependency is missing."""
 
 
-class IntegrityError(IbisError):
-    pass
+class InternalError(Exception):
+    """Raised on internal exceptional conditions."""
 
 
-class ExpressionError(IbisError):
-    pass
+class IntegrityError(Exception):
+    """Raised for integrity errors."""
 
 
-class RelationError(ExpressionError):
-    pass
+class ExpressionError(Exception):
+    """Raised for generic expression errors."""
 
 
-class TranslationError(IbisError):
-    pass
+class InvalidRelationError(Exception):
+    """Raised when an invalid relation is encountered."""
+
+
+class TranslationError(Exception):
+    """Base class for exception related to expression translation."""
 
 
 class OperationNotDefinedError(TranslationError):
-    pass
+    """Raised when an operation is not defined."""
 
 
 class UnsupportedOperationError(TranslationError):
-    pass
+    """Raised when an operation is unsupported by a particular backend."""
 
 
 class UnsupportedBackendType(TranslationError):
-    pass
+    """Raised when a data type is unsupported by a particular backend."""
 
 
-class UnboundExpressionError(ValueError, IbisError):
-    pass
+class UnboundExpressionError(Exception):
+    """Raised when an expression is not bound to any data."""
 
 
-class IbisInputError(ValueError, IbisError):
-    pass
+class IbisInputError(Exception):
+    """Raised when the value of an input is invalid."""
 
 
-class IbisTypeError(TypeError, IbisError):
-    pass
+class IbisTypeError(Exception):
+    """Raised for generic type errors specific to ibis."""
 
 
-class InputTypeError(IbisTypeError):
-    pass
+class IbisInputTypeError(IbisInputError, IbisTypeError):
+    """Raised for type errors specific to ibis operation inputs."""
 
 
-class UnsupportedArgumentError(IbisError):
-    pass
+class InvalidArgumentError(Exception):
+    """Raised when an invalid argument is passed to a callable."""
+
+
+class UnsupportedArgumentError(Exception):
+    """Raised when an unsupported argument is encountered."""

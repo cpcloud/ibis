@@ -3,8 +3,9 @@ import operator
 import toolz
 
 import ibis
-import ibis.common.exceptions as com
-from ibis.pandas.core import execute
+
+from ...common import exceptions as exc
+from ..core import execute
 
 
 def compute_sort_key(key, data, scope=None, **kwargs):
@@ -13,7 +14,7 @@ def compute_sort_key(key, data, scope=None, **kwargs):
         if isinstance(by, str):
             return by, None
         return by.get_name(), None
-    except com.ExpressionError:
+    except exc.ExpressionError:
         new_scope = {t: data for t in by.op().root_tables()}
         new_column = execute(by, scope=toolz.merge(scope, new_scope), **kwargs)
         name = ibis.util.guid()

@@ -5,6 +5,7 @@ import pandas as pd
 import pandas.util.testing as tm
 import pytest
 
+import ibis.common.exceptions as exc
 from ibis import literal as L
 
 pytest.importorskip('clickhouse_driver')
@@ -49,7 +50,7 @@ def test_std_var_pop(con, alltypes, translate):
 def test_reduction_invalid_where(con, alltypes, reduction):
     condbad_literal = L('T')
 
-    with pytest.raises(TypeError):
+    with pytest.raises(exc.IbisTypeError):
         fn = methodcaller(reduction, where=condbad_literal)
         fn(alltypes.double_col)
 

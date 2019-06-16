@@ -5,9 +5,10 @@ import webbrowser
 import numpy as np
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.config as config
-import ibis.util as util
+
+from ..common import exceptions as exc
+from .. import util
+from ..config import options
 
 # TODO move methods containing ops import to api.py
 
@@ -23,12 +24,12 @@ class Expr:
         self._arg = arg
 
     def __repr__(self):
-        if not config.options.interactive:
+        if not options.interactive:
             return self._repr()
 
         try:
             result = self.execute()
-        except com.TranslationError as e:
+        except exc.TranslationError as e:
             output = (
                 'Translation to backend failed\n'
                 'Error message: {0}\n'
@@ -64,7 +65,7 @@ class Expr:
         """
         try:
             return self.get_name()
-        except (com.ExpressionError, AttributeError):
+        except (exc.ExpressionError, AttributeError):
             return None
 
     @property
@@ -352,7 +353,7 @@ class ColumnExpr(ValueExpr):
         """
         roots = self._root_tables()
         if len(roots) > 1:
-            raise com.RelationError(
+            raise exc.InvalidRelationError(
                 'Cannot convert array expression '
                 'involving multiple base table references '
                 'to a projection'
@@ -391,7 +392,7 @@ class TableExpr(Expr):
     def _is_valid(self, exprs):
         try:
             self._assert_valid(util.promote_list(exprs))
-        except com.RelationError:
+        except exc.InvalidRelationError:
             return False
         else:
             return True
@@ -444,7 +445,7 @@ class TableExpr(Expr):
             )
 
     def __len__(self):
-        raise com.ExpressionError('Use .count() instead')
+        raise exc.ExpressionError('Use .count() instead')
 
     def __setstate__(self, instance_dictionary):
         self.__dict__ = instance_dictionary
@@ -452,7 +453,7 @@ class TableExpr(Expr):
     def __getattr__(self, key):
         try:
             schema = self.schema()
-        except com.IbisError:
+        except exc.ExpressionError:
             raise AttributeError(key)
 
         if key not in schema:
@@ -460,7 +461,7 @@ class TableExpr(Expr):
 
         try:
             return self.get_column(key)
-        except com.IbisTypeError:
+        except exc.IbisTypeError:
             raise AttributeError(key)
 
     def __dir__(self):
@@ -536,7 +537,9 @@ class TableExpr(Expr):
         schema : Schema
         """
         if not self._is_materialized():
-            raise com.IbisError('Table operation is not yet materialized')
+            raise exc.ExpressionError(
+                'Table operation is not yet materialized'
+            )
         return self.op().schema
 
     def _is_materialized(self):
@@ -869,36 +872,6 @@ class PolygonColumn(GeoSpatialColumn, PolygonValue):
     pass  # noqa: E701,E302
 
 
-class MultiLineStringValue(GeoSpatialValue):
-    pass  # noqa: E701,E302
-
-
-class MultiLineStringScalar(
-    GeoSpatialScalar,
-    MultiLineStringValue
-):  # noqa: E302
-    pass  # noqa: E701
-
-
-class MultiLineStringColumn(
-    GeoSpatialColumn,
-    MultiLineStringValue
-):  # noqa: E302
-    pass  # noqa: E701
-
-
-class MultiPointValue(GeoSpatialValue):
-    pass  # noqa: E701,E302
-
-
-class MultiPointScalar(GeoSpatialScalar, MultiPointValue):  # noqa: E302
-    pass  # noqa: E701
-
-
-class MultiPointColumn(GeoSpatialColumn, MultiPointValue):  # noqa: E302
-    pass  # noqa: E701
-
-
 class MultiPolygonValue(GeoSpatialValue):
     pass  # noqa: E701,E302
 
@@ -980,7 +953,7 @@ class TopKExpr(AnalyticExpr):
         elif parent_table is not None:
             agg = parent_table.aggregate(by, by=[op.arg])
         else:
-            raise com.IbisError(
+            raise exc.InvalidRelationError(
                 'Cross-table TopK; must provide a parent ' 'joined table'
             )
 
@@ -1095,7 +1068,7 @@ def literal(value, type=None):
 
     try:
         inferred_dtype = dt.infer(value)
-    except com.InputTypeError:
+    except exc.IbisInputTypeError:
         has_inferred = False
     else:
         has_inferred = True
@@ -1111,7 +1084,7 @@ def literal(value, type=None):
             # ensure type correctness: check that the inferred dtype is
             # implicitly castable to the explicitly given dtype and value
             dtype = inferred_dtype.cast(explicit_dtype, value=value)
-        except com.IbisTypeError:
+        except exc.IbisTypeError:
             raise TypeError(
                 'Value {!r} cannot be safely coerced to {}'.format(value, type)
             )

@@ -1,8 +1,8 @@
 import inspect
 from collections import OrderedDict
 
-import ibis.expr.rules as rlz
-import ibis.util as util
+from .. import util
+from . import rules as rlz
 
 try:
     from cytoolz import unique

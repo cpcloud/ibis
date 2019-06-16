@@ -1,12 +1,12 @@
 import abc
 
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-import ibis.sql.compiler as comp
-import ibis.util as util
-from ibis.config import options
+from .common import exceptions as exc
+from . import util
+from .config import options
+from .expr import operations as ops
+from .expr import schema as sch
+from .expr import types as ir
+from .sql import compiler as comp
 
 
 class Client:
@@ -270,7 +270,7 @@ def validate_backends(backends):
     if not backends:
         default = options.default_backend
         if default is None:
-            raise com.IbisError(
+            raise exc.UnboundExpressionError(
                 'Expression depends on no backends, and found no default'
             )
         return [default]

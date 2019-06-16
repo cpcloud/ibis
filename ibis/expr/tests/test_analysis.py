@@ -1,7 +1,7 @@
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 import ibis.expr.analysis as L
 import ibis.expr.operations as ops
 from ibis.tests.util import assert_equal
@@ -128,7 +128,7 @@ def test_join_predicate_from_derived_raises():
     filter_pred = table['f'] > 0
     table3 = table[filter_pred]
 
-    with pytest.raises(com.ExpressionError):
+    with pytest.raises(exc.InvalidRelationError):
         table.inner_join(table2, [table3['g'] == table2['key']])
 
 
@@ -141,7 +141,7 @@ def test_bad_join_predicate_raises():
 
     table3 = ibis.table([('key', 'string'), ('value', 'double')], 'baz_table')
 
-    with pytest.raises(com.ExpressionError):
+    with pytest.raises(exc.InvalidRelationError):
         table.inner_join(table2, [table['g'] == table3['key']])
 
 

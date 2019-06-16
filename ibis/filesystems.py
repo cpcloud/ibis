@@ -1,29 +1,8 @@
-# Copyright 2014 Cloudera Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# This file may adapt small portions of https://github.com/mtth/hdfs (MIT
-# license), see the LICENSES directory.
-
 import posixpath
 from functools import wraps as implements
 
-import ibis.common.exceptions as com
-from ibis.config import options
-
-
-class HDFSError(com.IbisError):
-    pass
+from .common import exceptions as exc
+from .config import options
 
 
 class HDFS:
@@ -253,7 +232,9 @@ class HDFS:
         for filename, meta in contents:
             if meta['type'].lower() == 'file' and valid_filename(filename):
                 return filename
-        raise com.IbisError('No files found in the passed directory')
+        raise exc.InvalidArgumentError(
+            'No files found in the passed directory'
+        )
 
 
 class WebHDFS(HDFS):
@@ -315,7 +296,8 @@ class WebHDFS(HDFS):
     def put(
         self, hdfs_path, resource, overwrite=False, verbose=None, **kwargs
     ):
-        verbose = verbose or options.verbose
+        if verbose is None:
+            verbose = options.verbose
         if isinstance(resource, str):
             # `resource` is a path.
             return self.client.upload(
@@ -333,7 +315,8 @@ class WebHDFS(HDFS):
     def get(
         self, hdfs_path, local_path, overwrite=False, verbose=None, **kwargs
     ):
-        verbose = verbose or options.verbose
+        if verbose is None:
+            verbose = options.verbose
         return self.client.download(
             hdfs_path, local_path, overwrite=overwrite, **kwargs
         )

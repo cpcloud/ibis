@@ -22,7 +22,7 @@ entry to using Ibis.
 
 Impala client
 -------------
-.. currentmodule:: ibis.impala.api
+.. currentmodule:: ibis.impala
 
 These methods are available on the Impala client object after connecting to
 your HDFS cluster (``ibis.hdfs_connect``) and connecting to Impala with
@@ -139,7 +139,7 @@ Executing expressions
 
 PostgreSQL client
 -----------------
-.. currentmodule:: ibis.sql.postgres.api
+.. currentmodule:: ibis.postgres
 
 The PostgreSQL client is accessible through the ``ibis.postgres`` namespace.
 
@@ -159,7 +159,7 @@ create a client.
 
 SQLite client
 -------------
-.. currentmodule:: ibis.sql.sqlite.api
+.. currentmodule:: ibis.sqlite
 
 The SQLite client is accessible through the ``ibis.sqlite`` namespace.
 

@@ -4,6 +4,7 @@ import operator
 import pytest
 
 import ibis
+import ibis.common.exceptions as exc
 import ibis.expr.api as api
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
@@ -403,17 +404,21 @@ def test_time_arithmetics():
         assert isinstance(expr.op(), ops.TimeAdd)
 
 
-def test_invalid_date_arithmetics():
+@pytest.mark.parametrize(
+    'expr',
+    [
+        api.interval(seconds=300),
+        api.interval(minutes=15),
+        api.interval(hours=1),
+    ],
+)
+def test_invalid_date_arithmetics(expr):
     d1 = api.date('2015-01-02')
-    i1 = api.interval(seconds=300)
-    i2 = api.interval(minutes=15)
-    i3 = api.interval(hours=1)
 
-    for i in [i1, i2, i3]:
-        with pytest.raises(TypeError):
-            d1 - i
-        with pytest.raises(TypeError):
-            d1 + i
+    with pytest.raises(exc.IbisTypeError):
+        d1 - expr
+    with pytest.raises(TypeError):
+        d1 + expr
 
 
 @pytest.mark.parametrize(

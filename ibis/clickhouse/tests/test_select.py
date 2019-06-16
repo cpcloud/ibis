@@ -3,7 +3,7 @@ import pandas.util.testing as tm
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 
 driver = pytest.importorskip('clickhouse_driver')
 pytestmark = pytest.mark.clickhouse
@@ -212,7 +212,7 @@ def test_scalar_exprs_no_table_refs(expr, expected):
 
 
 def test_expr_list_no_table_refs():
-    exlist = ibis.api.expr_list(
+    exlist = ibis.expr_list(
         [
             ibis.literal(1).name('a'),
             ibis.now().name('b'),
@@ -263,7 +263,7 @@ def test_non_equijoin(alltypes):
     t2 = t.view()
     expr = t.join(t2, t.tinyint_col < t2.timestamp_col.minute()).count()
 
-    with pytest.raises(com.TranslationError):
+    with pytest.raises(exc.TranslationError):
         expr.execute()
 
 
@@ -276,7 +276,7 @@ def test_join_with_predicate_on_different_columns_raises(
     pred = t1['playerID'] == t2['awardID']
     expr = t1.inner_join(t2, [pred])[[t1]]
 
-    with pytest.raises(com.TranslationError):
+    with pytest.raises(exc.TranslationError):
         ibis.clickhouse.compile(expr)
 
 
@@ -398,7 +398,7 @@ def test_where_use_if(con, alltypes, translate):
 
 
 @pytest.mark.xfail(
-    raises=com.RelationError, reason='Expression equality is broken'
+    raises=exc.InvalidRelationError, reason='Expression equality is broken'
 )
 def test_filter_predicates(diamonds):
     predicates = [

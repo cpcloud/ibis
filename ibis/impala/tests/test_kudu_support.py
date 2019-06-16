@@ -113,7 +113,7 @@ TBLPROPERTIES (
   'kudu.key_columns'='key1, key2',
   'kudu.master_addresses'='master1.d.com:7051, master2.d.com:7051',
   'kudu.table_name'='kudu_name',
-  'storage_handler'='com.cloudera.kudu.hive.KuduStorageHandler'
+  'storage_handler'='exc.cloudera.kudu.hive.KuduStorageHandler'
 )"""
         assert result == expected
 
@@ -139,7 +139,7 @@ TBLPROPERTIES (
   'kudu.key_columns'='string_col',
   'kudu.master_addresses'='dom.d.com:7051',
   'kudu.table_name'='kudu_name',
-  'storage_handler'='com.cloudera.kudu.hive.KuduStorageHandler'
+  'storage_handler'='exc.cloudera.kudu.hive.KuduStorageHandler'
 ) AS
 SELECT *
 FROM test1"""

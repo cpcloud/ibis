@@ -2,8 +2,8 @@ import pytest
 from pandas.util import testing as tm
 
 import ibis
+from ibis.csv import CSVClient, CSVTable
 from ibis.file.client import FileDatabase
-from ibis.file.csv import CSVClient, CSVTable
 
 
 @pytest.fixture

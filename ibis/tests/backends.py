@@ -15,8 +15,6 @@ import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 import ibis.sql.compiler as comp
-from ibis.bigquery.tests.conftest import connect as bigquery_connect
-from ibis.impala.tests.conftest import IbisTestEnv as ImpalaEnv
 
 
 class RoundingConvention:
@@ -479,6 +477,7 @@ class BigQuery(UnorderedComparator, Backend, RoundAwayFromZero):
 
     @staticmethod
     def connect(data_directory: Path) -> ibis.client.Client:
+        bq_conftest = pytest.importorskip('ibis.bigquery.tests.conftest')
         project_id = os.environ.get('GOOGLE_BIGQUERY_PROJECT_ID')
         if project_id is None:
             pytest.skip(
@@ -489,7 +488,7 @@ class BigQuery(UnorderedComparator, Backend, RoundAwayFromZero):
             pytest.skip(
                 'Environment variable GOOGLE_BIGQUERY_PROJECT_ID is empty'
             )
-        return bigquery_connect(project_id, dataset_id='testing')
+        return bq_conftest.connect(project_id, dataset_id='testing')
 
 
 class Impala(UnorderedComparator, Backend, RoundAwayFromZero):
@@ -507,7 +506,9 @@ class Impala(UnorderedComparator, Backend, RoundAwayFromZero):
 
     @staticmethod
     def connect(data_directory: Path) -> ibis.client.Client:
-        env = ImpalaEnv()
+        ibis_impala = pytest.importorskip('ibis.impala')
+        impala_conftest = pytest.importorskip('ibis.impala.tests.conftest')
+        env = impala_conftest.IbisTestEnv()
         hdfs_client = ibis.hdfs_connect(
             host=env.nn_host,
             port=env.webhdfs_port,
@@ -518,7 +519,7 @@ class Impala(UnorderedComparator, Backend, RoundAwayFromZero):
         auth_mechanism = env.auth_mechanism
         if auth_mechanism == 'GSSAPI' or auth_mechanism == 'LDAP':
             print("Warning: ignoring invalid Certificate Authority errors")
-        return ibis.impala.connect(
+        return ibis_impala.connect(
             host=env.impala_host,
             port=env.impala_port,
             auth_mechanism=env.auth_mechanism,

@@ -12,7 +12,7 @@ from plumbum import CommandNotFound, local
 from plumbum.cmd import cmake, make
 
 import ibis
-from ibis.common.exceptions import IbisError
+from ibis.common.exceptions import DependencyMissingError, HDFSError
 from ibis.impala.tests.conftest import IbisTestEnv
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -61,10 +61,11 @@ def can_write_to_hdfs(con):
     try:
         con.hdfs.put(test_path, test_file)
         con.hdfs.rm(test_path)
-        return True
     except Exception:
         logger.exception('Could not write to HDFS')
         return False
+    else:
+        return True
 
 
 def can_build_udfs():
@@ -261,9 +262,11 @@ def load(data, udf, data_dir, overwrite):
 
     # validate our environment before performing possibly expensive operations
     if not can_write_to_hdfs(con):
-        raise IbisError('Failed to write to HDFS; check your settings')
+        raise HDFSError('Failed to write to HDFS; check your settings')
     if udf and not can_build_udfs():
-        raise IbisError('Build environment does not support building UDFs')
+        raise DependencyMissingError(
+            'Build environment does not support building UDFs'
+        )
 
     # load the data files
     if data:

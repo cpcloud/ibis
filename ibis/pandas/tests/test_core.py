@@ -6,7 +6,7 @@ import pytest
 from multipledispatch.conflict import ambiguities
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 from ibis.pandas.client import PandasClient
@@ -87,7 +87,7 @@ def test_execute_parameter_only():
 def test_missing_data_sources():
     t = ibis.table([('a', 'string')])
     expr = t.a.length()
-    with pytest.raises(com.UnboundExpressionError):
+    with pytest.raises(exc.UnboundExpressionError):
         ibis.pandas.execute(expr)
 
 

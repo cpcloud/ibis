@@ -7,7 +7,7 @@ from ibis.file.client import FileDatabase
 
 pytest.importorskip('tables')  # isort:skip
 
-from ibis.file.hdf5 import HDFClient, HDFTable  # noqa: E402, isort:skip
+from ibis.hdf5 import HDFClient, HDFTable  # noqa: E402, isort:skip
 
 
 @pytest.fixture

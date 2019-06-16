@@ -6,9 +6,10 @@ import pytest
 import ibis
 import ibis.expr.api as api
 import ibis.expr.operations as ops
-from ibis import impala  # noqa: E402
 from ibis.expr.tests.mocks import MockConnection
-from ibis.impala.compiler import ImpalaDialect, build_ast, to_sql  # noqa: E402
+
+impala = pytest.importorskip('ibis.impala')
+impala_compiler = pytest.importorskip('ibis.impala.compiler')
 
 pytest.importorskip('sqlalchemy')
 pytest.importorskip('impala.dbapi')
@@ -131,7 +132,7 @@ WHERE `c` > 0"""
 
         expr = flagged.value.mean() / unflagged.value.mean() - 1
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT (t0.`mean` / t1.`mean`) - 1 AS `tmp`
 FROM (
@@ -150,7 +151,7 @@ FROM (
         uv = unflagged.value
 
         expr = (fv.mean() / fv.sum()) - (uv.mean() / uv.sum())
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT t0.`tmp` - t1.`tmp` AS `tmp`
 FROM (
@@ -224,7 +225,7 @@ SELECT 1 + 2 AS `tmp`"""
             assert result == expected
 
     def test_expr_list_no_table_refs(self):
-        exlist = ibis.api.expr_list(
+        exlist = ibis.expr_list(
             [
                 ibis.literal(1).name('a'),
                 ibis.now().name('b'),
@@ -249,7 +250,9 @@ FROM alltypes"""
 
 
 def _get_query(expr):
-    ast = build_ast(expr, ImpalaDialect.make_context())
+    ast = impala_compiler.build_ast(
+        expr, impala_compiler.ImpalaDialect.make_context()
+    )
     return ast.queries[0]
 
 
@@ -787,18 +790,18 @@ class TestSelectSQL(unittest.TestCase, ExprTestCases):
         cls.con = MockConnection()
 
     def _compare_sql(self, expr, expected):
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         assert result == expected
 
     def test_nameless_table(self):
         # Generate a unique table name when we haven't passed on
         nameless = api.table([('key', 'string')])
-        assert to_sql(nameless) == 'SELECT *\nFROM {}'.format(
+        assert impala_compiler.to_sql(nameless) == 'SELECT *\nFROM {}'.format(
             nameless.op().name
         )
 
         with_name = api.table([('key', 'string')], name='baz')
-        result = to_sql(with_name)
+        result = impala_compiler.to_sql(with_name)
         assert result == 'SELECT *\nFROM baz'
 
     def test_physical_table_reference_translate(self):
@@ -851,13 +854,13 @@ FROM star1 t0
         ]
 
         for expr, expected_sql in cases:
-            result_sql = to_sql(expr)
+            result_sql = impala_compiler.to_sql(expr)
             assert result_sql == expected_sql
 
     def test_multiple_joins(self):
         what = self._case_multiple_joins()
 
-        result_sql = to_sql(what)
+        result_sql = impala_compiler.to_sql(what)
         expected_sql = """SELECT t0.*, t1.`value1`, t2.`value2`
 FROM star1 t0
   LEFT OUTER JOIN star2 t1
@@ -869,7 +872,7 @@ FROM star1 t0
     def test_join_between_joins(self):
         projected = self._case_join_between_joins()
 
-        result = to_sql(projected)
+        result = impala_compiler.to_sql(projected)
         expected = """SELECT t0.*, t1.`value3`, t1.`value4`
 FROM (
   SELECT t2.*, t3.`value2`
@@ -888,7 +891,7 @@ FROM (
 
     def test_join_just_materialized(self):
         joined = self._case_join_just_materialized()
-        result = to_sql(joined)
+        result = impala_compiler.to_sql(joined)
         expected = """SELECT *
 FROM tpch_nation t0
   INNER JOIN tpch_region t1
@@ -897,7 +900,7 @@ FROM tpch_nation t0
     ON t0.`n_nationkey` = t2.`c_nationkey`"""
         assert result == expected
 
-        result = to_sql(joined.materialize())
+        result = impala_compiler.to_sql(joined.materialize())
         assert result == expected
 
     def test_join_no_predicates_for_impala(self):
@@ -912,26 +915,26 @@ FROM tpch_nation t0
         expected = """SELECT t0.*
 FROM star1 t0
   CROSS JOIN star2 t1"""
-        result2 = to_sql(joined2)
+        result2 = impala_compiler.to_sql(joined2)
         assert result2 == expected
 
         for jtype in ['inner_join', 'left_join', 'outer_join']:
             joined = getattr(t1, jtype)(t2)[[t1]]
 
-            result = to_sql(joined)
+            result = impala_compiler.to_sql(joined)
             assert result == expected
 
     def test_semi_anti_joins(self):
         sj, aj = self._case_semi_anti_joins()
 
-        result = to_sql(sj)
+        result = impala_compiler.to_sql(sj)
         expected = """SELECT t0.*
 FROM star1 t0
   LEFT SEMI JOIN star2 t1
     ON t0.`foo_id` = t1.`foo_id`"""
         assert result == expected
 
-        result = to_sql(aj)
+        result = impala_compiler.to_sql(aj)
         expected = """SELECT t0.*
 FROM star1 t0
   LEFT ANTI JOIN star2 t1
@@ -941,14 +944,14 @@ FROM star1 t0
     def test_self_reference_simple(self):
         expr = self._case_self_reference_simple()
 
-        result_sql = to_sql(expr)
+        result_sql = impala_compiler.to_sql(expr)
         expected_sql = "SELECT *\nFROM star1"
         assert result_sql == expected_sql
 
     def test_join_self_reference(self):
         result = self._case_self_reference_join()
 
-        result_sql = to_sql(result)
+        result_sql = impala_compiler.to_sql(result)
         expected_sql = """SELECT t0.*
 FROM star1 t0
   INNER JOIN star1 t1
@@ -958,7 +961,7 @@ FROM star1 t0
     def test_join_projection_subquery_broken_alias(self):
         expr = self._case_join_projection_subquery_bug()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT t1.*, t0.*
 FROM (
   SELECT t2.`n_nationkey`, t2.`n_name` AS `nation`, t3.`r_name` AS `region`
@@ -972,7 +975,7 @@ FROM (
 
     def test_where_simple_comparisons(self):
         what = self._case_where_simple_comparisons()
-        result = to_sql(what)
+        result = impala_compiler.to_sql(what)
         expected = """SELECT *
 FROM star1
 WHERE (`f` > 0) AND
@@ -994,10 +997,10 @@ FROM star1 t0
 WHERE (t0.`f` > 0) AND
       (t1.`value3` < 1000)"""
 
-        result_sql = to_sql(e1)
+        result_sql = impala_compiler.to_sql(e1)
         assert result_sql == expected_sql
 
-        # result2_sql = to_sql(e2)
+        # result2_sql = impala_compiler.to_sql(e2)
         # assert result2_sql == expected_sql
 
     def test_where_no_pushdown_possible(self):
@@ -1024,14 +1027,14 @@ WHERE `diff` > 1"""
 
         raise unittest.SkipTest
 
-        result_sql = to_sql(filtered)
+        result_sql = impala_compiler.to_sql(filtered)
         assert result_sql == expected_sql
 
     def test_where_with_between(self):
         t = self.con.table('alltypes')
 
         what = t.filter([t.a > 0, t.f.between(0, 1)])
-        result = to_sql(what)
+        result = impala_compiler.to_sql(what)
         expected = """SELECT *
 FROM alltypes
 WHERE (`a` > 0) AND
@@ -1051,7 +1054,7 @@ WHERE (`a` > 0) AND
             ]
         ).count()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT count(*) AS `count`
 FROM functional_alltypes
@@ -1072,7 +1075,7 @@ WHERE (`timestamp_col` < date_add(cast({} as timestamp), INTERVAL 3 MONTH)) AND
         tmp2 = tmp1.sort_by(ibis.desc('dev'))
         worst = tmp2.limit(10)
 
-        result = to_sql(worst)
+        result = impala_compiler.to_sql(worst)
 
         # TODO(cpcloud): We should be able to flatten the second subquery into
         # the first
@@ -1103,20 +1106,20 @@ GROUP BY 1, 2""",
 
         cases = self._case_simple_aggregate_query()
         for expr, expected_sql in zip(cases, expected):
-            result_sql = to_sql(expr)
+            result_sql = impala_compiler.to_sql(expr)
             assert result_sql == expected_sql
 
     def test_aggregate_having(self):
         e1, e2 = self._case_aggregate_having()
 
-        result = to_sql(e1)
+        result = impala_compiler.to_sql(e1)
         expected = """SELECT `foo_id`, sum(`f`) AS `total`
 FROM star1
 GROUP BY 1
 HAVING sum(`f`) > 10"""
         assert result == expected
 
-        result = to_sql(e2)
+        result = impala_compiler.to_sql(e2)
         expected = """SELECT `foo_id`, sum(`f`) AS `total`
 FROM star1
 GROUP BY 1
@@ -1126,7 +1129,7 @@ HAVING count(*) > 100"""
     def test_aggregate_table_count_metric(self):
         expr = self.con.table('star1').count()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT count(*) AS `count`
 FROM star1"""
         assert result == expected
@@ -1134,7 +1137,7 @@ FROM star1"""
     def test_aggregate_count_joined(self):
         expr = self._case_aggregate_count_joined()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT count(*) AS `count`
 FROM (
   SELECT t2.*, t1.`r_name` AS `region`
@@ -1176,7 +1179,7 @@ FROM (
 
         expr = t0.join(t1, t0.key == t1.key)[t0.key, t0.v1, t1.v2]
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT t2.`key`, t2.`v1`, t3.`v2`
 FROM t0 t2
@@ -1235,8 +1238,8 @@ FROM tbl"""
 FROM tbl
 WHERE `value` > 0"""
 
-        table3_sql = to_sql(table3)
-        table3_filt_sql = to_sql(table3_filtered)
+        table3_sql = impala_compiler.to_sql(table3)
+        table3_filt_sql = impala_compiler.to_sql(table3_filtered)
 
         assert table3_sql == ex_sql
         assert table3_filt_sql == ex_sql2
@@ -1256,9 +1259,9 @@ WHERE `value` > 0"""
     def test_projection_filter_fuse(self):
         expr1, expr2, expr3 = self._case_projection_fuse_filter()
 
-        sql1 = to_sql(expr1)
-        sql2 = to_sql(expr2)
-        sql3 = to_sql(expr3)
+        sql1 = impala_compiler.to_sql(expr1)
+        sql2 = impala_compiler.to_sql(expr2)
+        sql3 = impala_compiler.to_sql(expr3)
 
         assert sql1 == sql2
         assert sql1 == sql3
@@ -1284,7 +1287,7 @@ WHERE `value` > 0"""
         expr = step2.projection(proj_exprs)
 
         # it works!
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 WITH t0 AS (
   SELECT t2.*, t3.`n_name`, t4.`r_name`
@@ -1314,7 +1317,7 @@ FROM t0
 
         proj = t[t.f > 0][t, (t.a + t.b).name('foo')]
 
-        result = to_sql(proj)
+        result = impala_compiler.to_sql(proj)
         expected = """SELECT *, `a` + `b` AS `foo`
 FROM alltypes
 WHERE `f` > 0"""
@@ -1326,7 +1329,7 @@ WHERE `f` > 0"""
         # predicate gets pushed down
         filtered = proj[proj.g == 'bar']
 
-        result = to_sql(filtered)
+        result = impala_compiler.to_sql(filtered)
         expected = """SELECT *, `a` + `b` AS `foo`
 FROM alltypes
 WHERE (`f` > 0) AND
@@ -1334,7 +1337,7 @@ WHERE (`f` > 0) AND
         assert result == expected
 
         agged = agg(filtered)
-        result = to_sql(agged)
+        result = impala_compiler.to_sql(agged)
         expected = """SELECT `g`, sum(`foo`) AS `foo total`
 FROM (
   SELECT *, `a` + `b` AS `foo`
@@ -1348,7 +1351,7 @@ GROUP BY 1"""
         # Pushdown is not possible (in Impala, Postgres, others)
         agged2 = agg(proj[proj.foo < 10])
 
-        result = to_sql(agged2)
+        result = impala_compiler.to_sql(agged2)
         expected = """SELECT `g`, sum(`foo`) AS `foo total`
 FROM (
   SELECT *, `a` + `b` AS `foo`
@@ -1392,7 +1395,7 @@ FROM (
         )
         agg3 = agg2.aggregate([agg2.total.sum().name('total')], by=['key1'])
 
-        result = to_sql(agg3)
+        result = impala_compiler.to_sql(agg3)
         expected = """SELECT `key1`, sum(`total`) AS `total`
 FROM (
   SELECT `key1`, `key2`, sum(`total`) AS `total`
@@ -1418,7 +1421,7 @@ GROUP BY 1"""
         )
 
         # TODO: Not fusing the aggregation with the projection yet
-        result = to_sql(what)
+        result = impala_compiler.to_sql(what)
         expected = """SELECT `foo_id`, sum(`value1`) AS `total`
 FROM (
   SELECT t1.*, t2.`value1`
@@ -1437,7 +1440,7 @@ GROUP BY 1"""
     def test_subquery_used_for_self_join(self):
         expr = self._case_subquery_used_for_self_join()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """WITH t0 AS (
   SELECT `g`, `a`, `b`, sum(`f`) AS `total`
   FROM alltypes
@@ -1460,7 +1463,7 @@ GROUP BY 1"""
         join2 = join1.view()
 
         expr = join1.union(join2)
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 WITH t0 AS (
   SELECT `a`, `g`, sum(`f`) AS `metric`
@@ -1487,7 +1490,7 @@ FROM t0
 
         expr = self._case_subquery_factor_correlated_subquery()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 WITH t0 AS (
   SELECT t6.*, t1.`r_name` AS `region`, t3.`o_totalprice` AS `amount`,
@@ -1513,7 +1516,7 @@ LIMIT 10"""
     def test_self_join_subquery_distinct_equal(self):
         expr = self._case_self_join_subquery_distinct_equal()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 WITH t0 AS (
   SELECT t2.*, t3.*
@@ -1535,7 +1538,7 @@ FROM t0
         expr = t.join(t2, t.tinyint_col < t2.timestamp_col.minute()).count()
 
         # it works
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT count(*) AS `count`
 FROM functional_alltypes t0
@@ -1546,7 +1549,7 @@ FROM functional_alltypes t0
     def test_cte_factor_distinct_but_equal(self):
         expr = self._case_cte_factor_distinct_but_equal()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 WITH t0 AS (
   SELECT `g`, sum(`f`) AS `metric`
@@ -1562,7 +1565,7 @@ FROM t0
 
     def test_tpch_self_join_failure(self):
         yoy = self._case_tpch_self_join_failure()
-        to_sql(yoy)
+        impala_compiler.to_sql(yoy)
 
     @pytest.mark.xfail(raises=AssertionError, reason='NYT')
     def test_extract_subquery_nested_lower(self):
@@ -1575,7 +1578,7 @@ FROM t0
     def test_subquery_in_filter_predicate(self):
         expr, expr2 = self._case_subquery_in_filter_predicate()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT *
 FROM star1
 WHERE `f` > (
@@ -1584,7 +1587,7 @@ WHERE `f` > (
 )"""
         assert result == expected
 
-        result = to_sql(expr2)
+        result = impala_compiler.to_sql(expr2)
         expected = """SELECT *
 FROM star1
 WHERE `f` > (
@@ -1597,7 +1600,7 @@ WHERE `f` > (
     def test_filter_subquery_derived_reduction(self):
         expr3, expr4 = self._case_filter_subquery_derived_reduction()
 
-        result = to_sql(expr3)
+        result = impala_compiler.to_sql(expr3)
         expected = """SELECT *
 FROM star1
 WHERE `f` > (
@@ -1607,7 +1610,7 @@ WHERE `f` > (
 )"""
         assert result == expected
 
-        result = to_sql(expr4)
+        result = impala_compiler.to_sql(expr4)
         expected = """SELECT *
 FROM star1
 WHERE `f` > (
@@ -1620,7 +1623,7 @@ WHERE `f` > (
     def test_topk_operation(self):
         filtered, filtered2 = self._case_topk_operation()
 
-        query = to_sql(filtered)
+        query = impala_compiler.to_sql(filtered)
         expected = """SELECT t0.*
 FROM tbl t0
   LEFT SEMI JOIN (
@@ -1637,7 +1640,7 @@ FROM tbl t0
 
         assert query == expected
 
-        query = to_sql(filtered2)
+        query = impala_compiler.to_sql(filtered2)
         expected = """SELECT t0.*
 FROM tbl t0
   LEFT SEMI JOIN (
@@ -1664,7 +1667,7 @@ FROM tbl t0
         pred = cplusgeo.n_name.topk(10, by=cplusgeo.c_acctbal.sum())
         expr = cplusgeo.filter([pred])
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 WITH t0 AS (
   SELECT t2.*, t3.`n_name`, t4.`r_name`
@@ -1702,7 +1705,7 @@ FROM t0
         t = airlines[airlines.dest.isin(dests)]
         expr = t[delay_filter].group_by('origin').size()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT t0.`origin`, count(*) AS `count`
 FROM airlines t0
@@ -1732,8 +1735,8 @@ GROUP BY 1""".format(
 
         top = t.dest.topk(10, by=t.arrdelay.mean())
 
-        result = to_sql(top)
-        expected = to_sql(top.to_aggregation())
+        result = impala_compiler.to_sql(top)
+        expected = impala_compiler.to_sql(top.to_aggregation())
         assert result == expected
 
     @pytest.mark.xfail(raises=AssertionError, reason='NYT')
@@ -1762,7 +1765,7 @@ GROUP BY 1""".format(
 
         proj = t[expr.name('col1'), expr2.name('col2'), t]
 
-        result = to_sql(proj)
+        result = impala_compiler.to_sql(proj)
         expected = """SELECT
   CASE `g`
     WHEN 'foo' THEN 'bar'
@@ -1782,7 +1785,7 @@ FROM alltypes"""
 
         expr = data[data.date.name('else'), data.explain.name('join')]
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT `date` AS `else`, `explain` AS `join`
 FROM `table`"""
         assert result == expected
@@ -1791,7 +1794,7 @@ FROM `table`"""
         t1, t2 = self.foo, self.bar
         expr = t1[t1.y > t2.x.max()]
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT *
 FROM foo
 WHERE `y` > (
@@ -1803,7 +1806,7 @@ WHERE `y` > (
     def test_where_uncorrelated_subquery(self):
         expr = self._case_where_uncorrelated_subquery()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT *
 FROM foo
 WHERE `job` IN (
@@ -1814,7 +1817,7 @@ WHERE `job` IN (
 
     def test_where_correlated_subquery(self):
         expr = self._case_where_correlated_subquery()
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT t0.*
 FROM foo t0
 WHERE t0.`y` > (
@@ -1832,7 +1835,7 @@ WHERE t0.`y` > (
     def test_exists(self):
         e1, e2 = self._case_exists()
 
-        result = to_sql(e1)
+        result = impala_compiler.to_sql(e1)
         expected = """SELECT t0.*
 FROM foo t0
 WHERE EXISTS (
@@ -1842,7 +1845,7 @@ WHERE EXISTS (
 )"""
         assert result == expected
 
-        result = to_sql(e2)
+        result = impala_compiler.to_sql(e2)
         expected = """SELECT t0.*
 FROM foo t0
 WHERE EXISTS (
@@ -1865,7 +1868,7 @@ WHERE EXISTS (
 
     def test_not_exists(self):
         expr = self._case_not_exists()
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT t0.*
 FROM foo t0
 WHERE NOT EXISTS (
@@ -1899,7 +1902,7 @@ WHERE NOT EXISTS (
         cond = (events.user_id == purchases[filt].user_id).any()
         expr = events[cond]
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT t0.*
 FROM events t0
@@ -1918,7 +1921,7 @@ WHERE EXISTS (
     def test_self_reference_in_exists(self):
         semi, anti = self._case_self_reference_in_exists()
 
-        result = to_sql(semi)
+        result = impala_compiler.to_sql(semi)
         expected = """\
 SELECT t0.*
 FROM functional_alltypes t0
@@ -1929,7 +1932,7 @@ WHERE EXISTS (
 )"""
         assert result == expected
 
-        result = to_sql(anti)
+        result = impala_compiler.to_sql(anti)
         expected = """\
 SELECT t0.*
 FROM functional_alltypes t0
@@ -1989,7 +1992,7 @@ ORDER BY `c`, `f` DESC""",
         ]
 
         for case, ex in zip(cases, expected):
-            result = to_sql(case)
+            result = impala_compiler.to_sql(case)
             assert result == ex
 
     def test_limit(self):
@@ -2016,13 +2019,13 @@ WHERE `f` > 0""",
         ]
 
         for case, ex in zip(cases, expected):
-            result = to_sql(case)
+            result = impala_compiler.to_sql(case)
             assert result == ex
 
     def test_join_with_limited_table(self):
         joined = self._case_join_with_limited_table()
 
-        result = to_sql(joined)
+        result = impala_compiler.to_sql(joined)
         expected = """SELECT t0.*
 FROM (
   SELECT *
@@ -2047,7 +2050,7 @@ FROM (
             .sort_by('string_col')
         )
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT *
 FROM (
   SELECT `string_col`, count(*) AS `nrows`
@@ -2171,7 +2174,7 @@ FROM (
             + [right[name].name('right_' + name) for name in right.columns]
         ]
 
-        result = to_sql(joined)
+        result = impala_compiler.to_sql(joined)
         expected = """\
 SELECT t0.`id` AS `left_id`, t0.`desc` AS `left_desc`, t1.`id` AS `right_id`,
        t1.`desc` AS `right_desc`
@@ -2198,7 +2201,7 @@ class TestUnions(unittest.TestCase, ExprTestCases):
     def test_union(self):
         union1 = self._case_union()
 
-        result = to_sql(union1)
+        result = impala_compiler.to_sql(union1)
         expected = """\
 SELECT `string_col` AS `key`, CAST(`float_col` AS double) AS `value`
 FROM functional_alltypes
@@ -2211,7 +2214,7 @@ WHERE `int_col` <= 0"""
 
     def test_union_distinct(self):
         union = self._case_union(distinct=True)
-        result = to_sql(union)
+        result = impala_compiler.to_sql(union)
         expected = """\
 SELECT `string_col` AS `key`, CAST(`float_col` AS double) AS `value`
 FROM functional_alltypes
@@ -2226,7 +2229,7 @@ WHERE `int_col` <= 0"""
         # select a column, get a subquery
         union1 = self._case_union()
         expr = union1[[union1.key]]
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT `key`
 FROM (
   SELECT `string_col` AS `key`, CAST(`float_col` AS double) AS `value`
@@ -2249,7 +2252,7 @@ class TestDistinct(unittest.TestCase):
 
         expr = t[t.string_col, t.int_col].distinct()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT DISTINCT `string_col`, `int_col`
 FROM functional_alltypes"""
         assert result == expected
@@ -2258,7 +2261,7 @@ FROM functional_alltypes"""
         t = self.con.table('functional_alltypes')
         expr = t.string_col.distinct()
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """SELECT DISTINCT `string_col`
 FROM functional_alltypes"""
         assert result == expected
@@ -2269,7 +2272,7 @@ FROM functional_alltypes"""
         metric = t.int_col.nunique().name('nunique')
         expr = t[t.bigint_col > 0].group_by('string_col').aggregate([metric])
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT `string_col`, count(DISTINCT `int_col`) AS `nunique`
 FROM functional_alltypes
@@ -2289,7 +2292,7 @@ GROUP BY 1"""
 
         expr = t.group_by('string_col').aggregate(metrics)
 
-        result = to_sql(expr)
+        result = impala_compiler.to_sql(expr)
         expected = """\
 SELECT `string_col`, count(DISTINCT `int_col`) AS `int_card`,
        count(DISTINCT `smallint_col`) AS `smallint_card`
@@ -2310,7 +2313,7 @@ def test_pushdown_with_or():
     )
     subset = t[(t.double_col > 3.14) & t.string_col.contains('foo')]
     filt = subset[(subset.int_col - 1 == 0) | (subset.float_col <= 1.34)]
-    result = to_sql(filt)
+    result = impala_compiler.to_sql(filt)
     expected = """\
 SELECT *
 FROM functional_alltypes
@@ -2331,7 +2334,7 @@ def test_having_size():
         'functional_alltypes',
     )
     expr = t.group_by(t.string_col).having(t.double_col.max() == 1).size()
-    result = to_sql(expr)
+    result = impala_compiler.to_sql(expr)
     assert (
         result
         == """\
@@ -2348,7 +2351,7 @@ def test_having_from_filter():
     gb = filt.group_by(filt.b)
     having = gb.having(filt.a.max() == 2)
     agg = having.aggregate(filt.a.sum().name('sum'))
-    result = to_sql(agg)
+    result = impala_compiler.to_sql(agg)
     expected = """\
 SELECT `b`, sum(`a`) AS `sum`
 FROM t
@@ -2362,7 +2365,7 @@ def test_simple_agg_filter():
     t = ibis.table([('a', 'int64'), ('b', 'string')], name='my_table')
     filt = t[t.a < 100]
     expr = filt[filt.a == filt.a.max()]
-    result = to_sql(expr)
+    result = impala_compiler.to_sql(expr)
     expected = """\
 SELECT *
 FROM (
@@ -2383,7 +2386,7 @@ def test_agg_and_non_agg_filter():
     filt = t[t.a < 100]
     expr = filt[filt.a == filt.a.max()]
     expr = expr[expr.b == 'a']
-    result = to_sql(expr)
+    result = impala_compiler.to_sql(expr)
     expected = """\
 SELECT *
 FROM (
@@ -2406,7 +2409,7 @@ def test_agg_filter():
     t = t[['a', 'b2']]
     filt = t[t.a < 100]
     expr = filt[filt.a == filt.a.max().name('blah')]
-    result = to_sql(expr)
+    result = impala_compiler.to_sql(expr)
     expected = """\
 WITH t0 AS (
   SELECT *, `b` * 2 AS `b2`
@@ -2432,7 +2435,7 @@ def test_agg_filter_with_alias():
     t = t[['a', 'b2']]
     filt = t[t.a < 100]
     expr = filt[filt.a.name('A') == filt.a.max().name('blah')]
-    result = to_sql(expr)
+    result = impala_compiler.to_sql(expr)
     expected = """\
 WITH t0 AS (
   SELECT *, `b` * 2 AS `b2`
@@ -2464,7 +2467,7 @@ def test_table_drop_with_filter():
     joined = left.join(right, left.b == right.b)
     joined = joined[left.a]
     joined = joined.filter(joined.a < 1.0)
-    result = to_sql(joined)
+    result = impala_compiler.to_sql(joined)
     # previously this was generating incorrect aliases due to not binding the
     # self to expressions when calling projection:
     # SELECT t0.`a`

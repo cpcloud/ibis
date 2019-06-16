@@ -6,7 +6,6 @@ import pytest
 import pytz
 
 import ibis
-import ibis.common.exceptions as com
 import ibis.config as config
 import ibis.expr.datatypes as dt
 import ibis.expr.types as ir
@@ -43,7 +42,7 @@ def test_cursor_garbage_collection(con):
 
 def test_raise_ibis_error_no_hdfs(con_no_hdfs):
     # GH299
-    with pytest.raises(com.IbisError):
+    with pytest.raises(ibis.impala.exceptions.ImpalaConnectionError):
         con_no_hdfs.hdfs
 
 

@@ -10,7 +10,7 @@ import pandas.util.testing as tm  # noqa: E402
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
+import ibis.common.exceptions as exc
 import ibis.expr.datatypes as dt  # noqa: E402
 from ibis.pandas.udf import udf
 
@@ -278,7 +278,7 @@ def test_ifelse_returning_bool():
             dt.float64,
             True,
             marks=pytest.mark.xfail(
-                raises=com.IbisTypeError,
+                raises=exc.IbisTypeError,
                 reason=(
                     "Implicit casting from boolean to float is not "
                     "implemented"
@@ -290,7 +290,7 @@ def test_ifelse_returning_bool():
             dt.int64,
             1.0,
             marks=pytest.mark.xfail(
-                raises=com.IbisTypeError,
+                raises=exc.IbisTypeError,
                 reason=(
                     "Implicit casting from float to int is not implemented"
                 ),
@@ -302,7 +302,7 @@ def test_ifelse_returning_bool():
             True,
             id='int_bool',
             marks=pytest.mark.xfail(
-                raises=com.IbisTypeError,
+                raises=exc.IbisTypeError,
                 reason=(
                     "Implicit casting from boolean to int is not implemented"
                 ),
@@ -312,7 +312,7 @@ def test_ifelse_returning_bool():
             dt.boolean,
             1.0,
             marks=pytest.mark.xfail(
-                raises=com.IbisTypeError,
+                raises=exc.IbisTypeError,
                 reason=(
                     "Implicit casting from float to boolean is not implemented"
                 ),

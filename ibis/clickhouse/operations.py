@@ -1,12 +1,12 @@
 from datetime import date, datetime
 from io import StringIO
 
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.sql.transforms as transforms
-import ibis.util as util
-from ibis.clickhouse.identifiers import quote_identifier
+from .. import util
+from ..common import exceptions as exc
+from ..expr import operations as ops
+from ..expr import types as ir
+from ..sql import transforms
+from .identifiers import quote_identifier
 
 
 def _cast(translator, expr):
@@ -62,7 +62,7 @@ def fixed_arity(func_name, arity):
         arg_count = len(op.args)
         if arity != arg_count:
             msg = 'Incorrect number of args {0} instead of {1}'
-            raise com.UnsupportedOperationError(msg.format(arg_count, arity))
+            raise exc.UnsupportedOperationError(msg.format(arg_count, arity))
         return _call(translator, func_name, *op.args)
 
     return formatter
@@ -162,7 +162,7 @@ def _string_find(translator, expr):
     op = expr.op()
     arg, substr, start, _ = op.args
     if start is not None:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             "String find doesn't support start argument"
         )
 
@@ -197,7 +197,7 @@ def _parse_url(translator, expr):
         else:
             return _call(translator, 'queryString', arg)
     else:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             'Parse url with extract {0} is not supported'.format(extract)
         )
 
@@ -247,7 +247,7 @@ def _hash(translator, expr):
     }
 
     if how not in algorithms:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             'Unsupported hash algorithm {0}'.format(how)
         )
 
@@ -279,7 +279,7 @@ def _value_list(translator, expr):
 def _interval_format(translator, expr):
     dtype = expr.type()
     if dtype.unit in {'ms', 'us', 'ns'}:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             "Clickhouse doesn't support subsecond interval resolutions"
         )
 
@@ -292,7 +292,7 @@ def _interval_from_integer(translator, expr):
 
     dtype = expr.type()
     if dtype.unit in {'ms', 'us', 'ns'}:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             "Clickhouse doesn't support subsecond interval resolutions"
         )
 
@@ -428,7 +428,7 @@ def _truncate(translator, expr):
     try:
         converter = converters[unit]
     except KeyError:
-        raise com.UnsupportedOperationError(
+        raise exc.UnsupportedOperationError(
             'Unsupported truncate unit {}'.format(unit)
         )
 
@@ -634,7 +634,7 @@ _operation_registry = {
 def raise_error(translator, expr, *args):
     msg = "Clickhouse backend doesn't support {0} operation!"
     op = expr.op()
-    raise com.UnsupportedOperationError(msg.format(type(op)))
+    raise exc.UnsupportedOperationError(msg.format(type(op)))
 
 
 def _null_literal(translator, expr):

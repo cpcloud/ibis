@@ -6,15 +6,15 @@ from contextlib import suppress
 
 import toolz
 
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.rules as rlz
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-from ibis import util
-from ibis.expr.schema import HasSchema, Schema
-from ibis.expr.signature import Annotable
-from ibis.expr.signature import Argument as Arg
+from ..common import exceptions as exc
+from .. import util
+from . import datatypes as dt
+from . import rules as rlz
+from . import schema as sch
+from . import types as ir
+from .schema import HasSchema, Schema
+from .signature import Annotable
+from .signature import Argument as Arg
 
 
 def _safe_repr(x, memo=None):
@@ -136,7 +136,7 @@ class ValueOp(Node):
         return distinct_roots(*exprs)
 
     def resolve_name(self):
-        raise com.ExpressionError('Expression is not named: %s' % repr(self))
+        raise exc.ExpressionError('Expression is not named: %s' % repr(self))
 
     def has_resolved_name(self):
         return False
@@ -224,7 +224,7 @@ class TableColumn(ValueOp):
 
     def _validate(self):
         if self.name not in self.table.schema():
-            raise com.IbisTypeError(
+            raise exc.IbisTypeError(
                 "'{}' is not a field in {}".format(
                     self.name, self.table.columns
                 )
@@ -309,7 +309,7 @@ class TableArrayView(ValueOp):
     def __init__(self, table):
         schema = table.schema()
         if len(schema) > 1:
-            raise com.ExpressionError('Table can only have a single column')
+            raise exc.ExpressionError('Table can only have a single column')
 
         name = schema.names[0]
         return super().__init__(table, name)
@@ -1017,7 +1017,7 @@ class WindowOp(ValueOp):
         from ibis.expr.analysis import is_analytic
 
         if not is_analytic(expr):
-            raise com.IbisInputError(
+            raise exc.IbisInputError(
                 'Expression does not contain a valid window operation'
             )
 
@@ -1029,10 +1029,10 @@ class WindowOp(ValueOp):
             error_msg = ("'max lookback' windows must be ordered "
                          "by a timestamp column")
             if len(window._order_by) != 1:
-                raise com.IbisInputError(error_msg)
+                raise exc.IbisInputError(error_msg)
             order_var = window._order_by[0].op().args[0]
             if not isinstance(order_var.type(), dt.Timestamp):
-                raise com.IbisInputError(error_msg)
+                raise exc.IbisInputError(error_msg)
 
         expr = propagate_down_window(expr, window)
         super().__init__(expr, window)
@@ -1566,7 +1566,7 @@ def _clean_join_predicates(left, right, predicates):
     for pred in predicates:
         if isinstance(pred, tuple):
             if len(pred) != 2:
-                raise com.ExpressionError('Join key tuple must be ' 'length 2')
+                raise exc.ExpressionError('Join key tuple must be ' 'length 2')
             lk, rk = pred
             lk = left._ensure_expr(lk)
             rk = right._ensure_expr(rk)
@@ -1577,7 +1577,7 @@ def _clean_join_predicates(left, right, predicates):
             raise NotImplementedError
 
         if not isinstance(pred, ir.BooleanColumn):
-            raise com.ExpressionError('Join predicate must be comparison')
+            raise exc.ExpressionError('Join predicate must be comparison')
 
         preds = L.flatten_predicate(pred)
         result.extend(preds)
@@ -1593,7 +1593,7 @@ def _validate_join_predicates(left, right, predicates):
     # considering the roots of each input table
     for predicate in predicates:
         if not fully_originate_from(predicate, [left, right]):
-            raise com.RelationError(
+            raise exc.InvalidRelationError(
                 'The expression {!r} does not fully '
                 'originate from dependencies of the table '
                 'expression.'.format(predicate)
@@ -1628,7 +1628,7 @@ class Join(TableNode):
 
         overlap = set(sleft.names) & set(sright.names)
         if overlap:
-            raise com.RelationError(
+            raise exc.InvalidRelationError(
                 'Joined tables have overlapping names: %s' % str(list(overlap))
             )
 
@@ -1710,7 +1710,7 @@ class CrossJoin(InnerJoin):
             raise NotImplementedError
 
         if len(args) < 2:
-            raise com.IbisInputError('Must pass at least 2 tables')
+            raise exc.IbisInputError('Must pass at least 2 tables')
 
         left = args[0]
         right = args[1]
@@ -1739,7 +1739,7 @@ class Union(TableNode, HasSchema):
 
     def _validate(self):
         if not self.left.schema().equals(self.right.schema()):
-            raise com.RelationError(
+            raise exc.InvalidRelationError(
                 'Table schemas must be equal ' 'to form union'
             )
 
@@ -2063,7 +2063,7 @@ class AggregateSelection:
 def _maybe_convert_sort_keys(table, exprs):
     try:
         return [to_sort_key(table, k) for k in util.promote_list(exprs)]
-    except com.IbisError:
+    except exc.IbisTypeError:
         return None
 
 
@@ -2136,7 +2136,7 @@ class Aggregation(TableNode, HasSchema):
 
         for expr in self.having:
             if not isinstance(expr, ir.BooleanScalar):
-                raise com.ExpressionError(
+                raise exc.ExpressionError(
                     'Having clause must be boolean '
                     'expression, was: {0!s}'.format(_safe_repr(expr))
                 )
@@ -2285,10 +2285,10 @@ class Comparison(BinaryOp, BooleanValueOp):
 
     def _maybe_cast_args(self, left, right):
         # it might not be necessary?
-        with suppress(com.IbisTypeError):
+        with suppress(exc.IbisTypeError):
             return left, rlz.cast(right, left)
 
-        with suppress(com.IbisTypeError):
+        with suppress(exc.IbisTypeError):
             return rlz.cast(left, right), right
 
         return left, right
@@ -2339,7 +2339,7 @@ class Between(ValueOp, BooleanValueOp):
         arg, lower, upper = self.args
 
         if not (rlz.comparable(arg, lower) and rlz.comparable(arg, upper)):
-            raise TypeError('Arguments are not comparable')
+            raise exc.IbisTypeError('Arguments are not comparable')
 
         return rlz.shape_like(self.args, dt.boolean)
 
@@ -2790,7 +2790,7 @@ class ArrayConcat(ValueOp):
     def _validate(self):
         left_dtype, right_dtype = self.left.type(), self.right.type()
         if left_dtype != right_dtype:
-            raise com.IbisTypeError(
+            raise exc.IbisTypeError(
                 'Array types must match exactly in a {} operation. '
                 'Left type {} != Right type {}'.format(
                     type(self).__name__, left_dtype, right_dtype
@@ -2838,7 +2838,7 @@ class MapValueOrDefaultForKey(ValueOp):
         default_type = default.type()
 
         if default is not None and not dt.same_kind(default_type, value_type):
-            raise com.IbisTypeError(
+            raise exc.IbisTypeError(
                 "Default value\n{}\nof type {} cannot be cast to map's value "
                 "type {}".format(default, default_type, value_type)
             )
@@ -2942,10 +2942,6 @@ class ScalarParameter(ValueOp):
             and self.counter == other.counter
             and self.dtype.equals(other.dtype, cache=cache)
         )
-
-    @property
-    def inputs(self):
-        return ()
 
     def root_tables(self):
         return []

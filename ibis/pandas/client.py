@@ -1,7 +1,5 @@
 """The pandas client implementation."""
 
-from __future__ import absolute_import
-
 import re
 from functools import partial
 
@@ -13,14 +11,14 @@ import toolz
 from multipledispatch import Dispatcher
 from pkg_resources import parse_version
 
-import ibis.client as client
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-from ibis.compat import CategoricalDtype, DatetimeTZDtype
-from ibis.pandas.core import execute_and_reset
+from .. import client
+from ..common import exceptions as exc
+from ..compat import CategoricalDtype, DatetimeTZDtype
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import schema as sch
+from ..expr import types as ir
+from .core import execute_and_reset
 
 try:
     infer_pandas_dtype = pd.api.types.infer_dtype
@@ -329,7 +327,7 @@ def ibis_schema_apply_to(schema, df):
             # ugh, we can't compare dtypes coming from pandas, assume not equal
             not_equal = True
 
-        if not_equal or isinstance(dtype, dt.String):
+        if not_equal or dtype == dt.string:
             df[column] = convert(col_dtype, dtype, col)
 
     return df
@@ -346,7 +344,7 @@ class PandasTable(ops.DatabaseTable):
 
 class PandasClient(client.Client):
 
-    dialect = None  # defined in ibis.pandas.api
+    dialect = None  # defined in ibis/pandas/__init__.py
 
     def __init__(self, dictionary):
         self.dictionary = dictionary
@@ -408,7 +406,7 @@ class PandasClient(client.Client):
     def create_table(self, table_name, obj=None, schema=None):
         """Create a table."""
         if obj is None and schema is None:
-            raise com.IbisError('Must pass expr or schema')
+            raise exc.InvalidArgumentError('Must pass expr or schema')
 
         if obj is not None:
             df = pd.DataFrame(obj)

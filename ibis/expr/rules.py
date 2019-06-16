@@ -4,11 +4,11 @@ import functools
 from contextlib import suppress
 from itertools import product, starmap
 
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-import ibis.util as util
+from ..common import exceptions as exc
+from .. import util
+from . import datatypes as dt
+from . import schema as sch
+from . import types as ir
 
 try:
     from cytoolz import curry, compose, identity
@@ -58,13 +58,13 @@ def cast(source, target):
     import ibis.expr.operations as ops  # TODO: don't use ops here
 
     if not castable(source, target):
-        raise com.IbisTypeError('Source is not castable to target type!')
+        raise exc.IbisTypeError('Source is not castable to target type!')
 
     # currently it prevents column -> scalar implicit castings
     # however the datatypes are matching
     op = source.op()
     if not isinstance(op, ops.Literal):
-        raise com.IbisTypeError('Only able to implicitly cast literals!')
+        raise exc.IbisTypeError('Only able to implicitly cast literals!')
 
     out_type = target.type().scalar_type()
     return out_type(op)
@@ -92,11 +92,11 @@ noop = validator(identity)
 def one_of(inners, arg):
     """At least one of the inner validators must pass"""
     for inner in inners:
-        with suppress(com.IbisTypeError, ValueError):
+        with suppress(exc.IbisTypeError, ValueError):
             return inner(arg)
 
     rules_formatted = ', '.join(map(repr, inners))
-    raise com.IbisTypeError(
+    raise exc.IbisTypeError(
         'Arg passes neither of the following rules: {}'.format(rules_formatted)
     )
 
@@ -142,7 +142,7 @@ def member_of(obj, arg):
         arg = arg.name
 
     if not hasattr(obj, arg):
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Value with type {} is not a member of {}'.format(type(arg), obj)
         )
     return getattr(obj, arg)
@@ -153,10 +153,10 @@ def list_of(inner, arg, min_length=0):
     if isinstance(arg, str) or not isinstance(
         arg, (collections.abc.Sequence, ir.ListExpr)
     ):
-        raise com.IbisTypeError('Argument must be a sequence')
+        raise exc.IbisTypeError('Argument must be a sequence')
 
     if len(arg) < min_length:
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Arg must have at least {} number of elements'.format(min_length)
         )
     return ir.sequence(list(map(inner, arg)))
@@ -171,7 +171,7 @@ def datatype(arg):
 def instance_of(klass, arg):
     """Require that a value has a particular Python type."""
     if not isinstance(arg, klass):
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Given argument with type {} is not an instance of {}'.format(
                 type(arg), klass
             )
@@ -200,7 +200,7 @@ def value(dtype, arg):
         arg = ir.literal(arg)
 
     if not isinstance(arg, ir.AnyValue):
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Given argument with type {} is not a value '
             'expression'.format(type(arg))
         )
@@ -216,7 +216,7 @@ def value(dtype, arg):
         # implicitly castable to it, like dt.int8 is castable to dt.int64
         return arg
     else:
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Given argument with datatype {} is not '
             'subtype of {} nor implicitly castable to '
             'it'.format(arg.type(), dtype)
@@ -238,7 +238,7 @@ def array_of(inner, arg):
     val = arg if isinstance(arg, ir.Expr) else ir.literal(arg)
     argtype = val.type()
     if not isinstance(argtype, dt.Array):
-        raise com.IbisTypeError(
+        raise exc.IbisTypeError(
             'Argument must be an array, got expression {} which is of type '
             '{}'.format(val, val.type())
         )
@@ -271,8 +271,6 @@ geospatial = value(dt.GeoSpatial)
 point = value(dt.Point)
 linestring = value(dt.LineString)
 polygon = value(dt.Polygon)
-multilinestring = value(dt.MultiLineString)
-multipoint = value(dt.MultiPoint)
 multipolygon = value(dt.MultiPolygon)
 
 
@@ -282,7 +280,7 @@ def interval(arg, units=None):
     unit = arg.type().unit
     if units is not None and unit not in units:
         msg = 'Interval unit `{}` is not among the allowed ones {}'
-        raise com.IbisTypeError(msg.format(unit, units))
+        raise exc.IbisTypeError(msg.format(unit, units))
     return arg
 
 
@@ -373,7 +371,7 @@ def table(schema, arg):
     if arg.schema() >= sch.schema(schema):
         return arg
 
-    raise com.IbisTypeError(
+    raise exc.IbisTypeError(
         'Argument is not a table with column subset of {}'.format(schema)
     )
 

@@ -1,6 +1,6 @@
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.util as util
+from .. import util
+from . import operations as ops
+from . import types as ir
 
 
 class FormatMemo:

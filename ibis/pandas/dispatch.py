@@ -6,8 +6,9 @@ import toolz
 from multipledispatch import Dispatcher
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.operations as ops
+
+from ..common import exceptions as exc
+from ..expr import operations as ops
 
 # Individual operation execution
 execute_node = Dispatcher(
@@ -21,7 +22,7 @@ execute_node = Dispatcher(
 
 @execute_node.register(ops.Node)
 def execute_node_without_scope(node, **kwargs):
-    raise com.UnboundExpressionError(
+    raise exc.UnboundExpressionError(
         (
             'Node of type {!r} has no data bound to it. '
             'You probably tried to execute an expression without a data '

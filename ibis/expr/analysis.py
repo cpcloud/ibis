@@ -2,17 +2,13 @@ import operator
 
 import toolz
 
-import ibis.expr.lineage as lin
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-from ibis import util
-from ibis.common.exceptions import (
-    ExpressionError,
-    IbisTypeError,
-    RelationError,
-)
-from ibis.expr.schema import HasSchema
-from ibis.expr.window import window
+from .. import util
+from ..common.exceptions import ExpressionError, IbisTypeError, InvalidRelationError
+from . import lineage as lin
+from . import operations as ops
+from . import types as ir
+from .schema import HasSchema
+from .window import window
 
 # ---------------------------------------------------------------------
 # Some expression metaprogramming / graph transformations to support
@@ -897,13 +893,13 @@ class ExprValidator:
 
     def assert_valid(self, expr):
         if not self.validate(expr):
-            msg = self._error_message(expr)
-            raise RelationError(msg)
+            raise InvalidRelationError(self.error_message(expr))
 
-    def _error_message(self, expr):
+    @staticmethod
+    def error_message(expr):
         return (
-            'The expression %s does not fully originate from '
-            'dependencies of the table expression.' % repr(expr)
+            'The expression {!r} does not fully originate from the '
+            'dependencies of the table expression.'.format(expr)
         )
 
 

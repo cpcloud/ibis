@@ -81,21 +81,24 @@ from __future__ import absolute_import
 import datetime
 import functools
 import numbers
+from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 import pandas as pd
 import toolz
-from multipledispatch import Dispatcher
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.expr.window as win
-import ibis.pandas.aggcontext as agg_ctx
-from ibis.client import find_backends
-from ibis.pandas.dispatch import (
+import ibis.util
+
+from ..common import exceptions as exc
+from ..client import find_backends
+from ..expr import datatypes as dt
+from ..expr import operations as ops
+from ..expr import types as ir
+from ..expr import window as win
+from . import aggcontext as agg_ctx
+from .dispatch import (
+    execute,
     execute_literal,
     execute_node,
     post_execute,
@@ -296,7 +299,7 @@ def execute_bottom_up(
 
     # if we're unable to find data then raise an exception
     if not scopes and computable_args:
-        raise com.UnboundExpressionError(
+        raise exc.UnboundExpressionError(
             'Unable to find data for expression:\n{}'.format(repr(expr))
         )
 
@@ -322,13 +325,16 @@ def execute_bottom_up(
     return {op: computed}
 
 
-execute = Dispatcher('execute')
-
-
 @execute.register(ir.Expr)
-def main_execute(expr, params=None, scope=None, aggcontext=None, **kwargs):
-    """Execute an expression against data that are bound to it. If no data
-    are bound, raise an Exception.
+def main_execute(
+    expr: ir.Expr,
+    scope: Optional[Mapping] = None,
+    aggcontext: Optional[agg_ctx.AggregationContext] = None,
+    clients: Sequence[ibis.client.Client] = (),
+    params: Optional[Mapping] = None,
+    **kwargs: Any
+):
+    """Execute an ibis expression against the pandas backend.
 
     Parameters
     ----------

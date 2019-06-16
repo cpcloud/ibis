@@ -11,20 +11,20 @@ import pandas as pd
 import toolz
 
 import ibis
-import ibis.common.exceptions as com
-import ibis.expr.analysis as _L
-import ibis.expr.analytics as _analytics
-import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
-import ibis.expr.rules as rlz
-import ibis.expr.schema as sch
-import ibis.expr.types as ir
-import ibis.util as util
-from ibis.compat import to_date, to_time
-from ibis.expr.analytics import bucket, histogram
-from ibis.expr.groupby import GroupedTableExpr  # noqa
-from ibis.expr.schema import Schema
-from ibis.expr.types import (  # noqa
+
+from ..common import exceptions as exc
+from .. import util
+from ..compat import to_date, to_time
+from . import analysis as _L
+from . import analytics as _analytics
+from . import datatypes as dt
+from . import operations as ops
+from . import rules as rlz
+from . import schema as sch
+from . import types as ir
+from .groupby import GroupedTableExpr  # noqa: F401
+from .schema import Schema
+from .types import (  # noqa: F401
     ArrayColumn,
     ArrayScalar,
     ArrayValue,
@@ -59,12 +59,6 @@ from ibis.expr.types import (  # noqa
     MapColumn,
     MapScalar,
     MapValue,
-    MultiLineStringColumn,
-    MultiLineStringScalar,
-    MultiLineStringValue,
-    MultiPointColumn,
-    MultiPointScalar,
-    MultiPointValue,
     MultiPolygonColumn,
     MultiPolygonScalar,
     MultiPolygonValue,
@@ -101,7 +95,7 @@ from ibis.expr.types import (  # noqa
     param,
     sequence,
 )
-from ibis.expr.window import (
+from .window import (
     cumulative_window,
     range_window,
     rows_with_max_lookback,
@@ -597,7 +591,7 @@ def _binop_expr(name, klass):
             other = as_value_expr(other)
             op = klass(self, other)
             return op.to_expr()
-        except (com.IbisTypeError, NotImplementedError):
+        except (exc.IbisTypeError, NotImplementedError):
             return NotImplemented
 
     f.__name__ = name
@@ -861,7 +855,7 @@ def over(expr, window):
 
     try:
         name = expr.get_name()
-    except com.ExpressionError:
+    except exc.ExpressionError:
         pass
     else:
         result = result.name(name)
@@ -886,7 +880,7 @@ def value_counts(arg, metric_name='count'):
 
     try:
         arg.get_name()
-    except com.ExpressionError:
+    except exc.ExpressionError:
         arg = arg.name('unnamed')
 
     return base.group_by(arg).aggregate(metric)
@@ -1589,8 +1583,8 @@ _numeric_column_methods = dict(
     var=variance,
     corr=correlation,
     cov=covariance,
-    bucket=bucket,
-    histogram=histogram,
+    bucket=_analytics.bucket,
+    histogram=_analytics.histogram,
     summary=_numeric_summary,
 )
 
@@ -1608,19 +1602,20 @@ _add_methods(ir.NumericColumn, _numeric_column_methods)
 # GeoSpatial API
 
 
-def geo_area(arg):
+def geo_area(arg, use_spheroid=None):
     """
     Compute area of a geo spatial data
 
     Parameters
     ----------
     arg : geometry or geography
+    use_spheroid:  default None
 
     Returns
     -------
     area : double scalar
     """
-    op = ops.GeoArea(arg)
+    op = ops.GeoArea(arg, use_spheroid)
     return op.to_expr()
 
 
@@ -1899,7 +1894,7 @@ def geo_touches(left, right):
     return op.to_expr()
 
 
-def geo_distance(left, right):
+def geo_distance(left, right, use_spheroid=None):
     """
     Compute distance between two geo spatial data
 
@@ -1907,44 +1902,47 @@ def geo_distance(left, right):
     ----------
     left : geometry or geography
     right : geometry or geography
+    use_spheroid : default None
 
     Returns
     -------
     distance : double scalar
     """
-    op = ops.GeoDistance(left, right)
+    op = ops.GeoDistance(left, right, use_spheroid)
     return op.to_expr()
 
 
-def geo_length(arg):
+def geo_length(arg, use_spheroid=None):
     """
     Compute length of a geo spatial data
 
     Parameters
     ----------
     arg : geometry or geography
+    use_spheroid : default None
 
     Returns
     -------
     length : double scalar
     """
-    op = ops.GeoLength(arg)
+    op = ops.GeoLength(arg, use_spheroid)
     return op.to_expr()
 
 
-def geo_perimeter(arg):
+def geo_perimeter(arg, use_spheroid=None):
     """
     Compute perimeter of a geo spatial data
 
     Parameters
     ----------
     arg : geometry or geography
+    use_spheroid : default None
 
     Returns
     -------
     perimeter : double scalar
     """
-    op = ops.GeoPerimeter(arg)
+    op = ops.GeoPerimeter(arg, use_spheroid)
     return op.to_expr()
 
 
@@ -3297,15 +3295,15 @@ def between_time(arg, lower, upper, timezone=None):
     -------
     BooleanValue
     """
-    op = arg.op()
-    if isinstance(op, ops.Time):
+
+    if isinstance(arg.op(), ops.Time):
         # Here we pull out the first argument to the underlying Time operation
         # which is by definition (in _timestamp_value_methods) a
         # TimestampValue. We do this so that we can potentially specialize the
         # "between time" operation for timestamp_value_expr.time().between().
         # A similar mechanism is triggered when creating expressions like
         # t.column.distinct().count(), which is turned into t.column.nunique().
-        arg = op.arg
+        arg = arg.op().args[0]
         if timezone is not None:
             arg = arg.cast(dt.Timestamp(timezone=timezone))
         op = ops.BetweenTime(arg, lower, upper)
@@ -3790,7 +3788,7 @@ def _table_materialize(table):
 def _safe_get_name(expr):
     try:
         return expr.get_name()
-    except com.ExpressionError:
+    except exc.ExpressionError:
         return None
 
 

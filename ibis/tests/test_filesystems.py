@@ -9,17 +9,17 @@ import pytest
 
 import ibis
 import ibis.util as util
-from ibis.filesystems import HDFS
-from ibis.impala.tests.conftest import IbisTestEnv
 
+filesystems = pytest.importorskip('ibis.filesystems')
+impala_conftest = pytest.importorskip('ibis.impala.tests.conftest')
 pytest.importorskip('hdfs')
 
-ENV = IbisTestEnv()
+ENV = impala_conftest.IbisTestEnv()
 
 pytestmark = pytest.mark.hdfs
 
 
-class MockHDFS(HDFS):
+class MockHDFS(filesystems.HDFS):
     def __init__(self):
         self.ls_result = []
 

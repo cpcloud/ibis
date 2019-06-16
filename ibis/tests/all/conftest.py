@@ -5,8 +5,9 @@ import pandas as pd
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
-from ibis.tests.backends import Backend
+
+from ...common import exceptions as exc
+from ..backends import Backend
 
 
 def subclasses(cls):
@@ -95,9 +96,9 @@ def pytest_pyfunc_call(pyfuncitem):
     try:
         outcome.get_result()
     except (
-        com.OperationNotDefinedError,
-        com.UnsupportedOperationError,
-        com.UnsupportedBackendType,
+        exc.OperationNotDefinedError,
+        exc.UnsupportedOperationError,
+        exc.UnsupportedBackendType,
         NotImplementedError,
     ) as e:
         markers = list(pyfuncitem.iter_markers(name="xfail_unsupported"))

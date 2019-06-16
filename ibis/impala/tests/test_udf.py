@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 
 import ibis
-import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
 import ibis.expr.rules as rules
 import ibis.expr.types as ir
@@ -413,7 +412,7 @@ def udf_creation_to_op(
 
 def test_ll_uda_not_supported(uda_ll):
     # LLVM IR UDAs are not supported as of Impala 2.2
-    with pytest.raises(com.IbisError):
+    with pytest.raises(Exception):
         conforming_wrapper(uda_ll, ['double'], 'double', 'Variance')
 
 

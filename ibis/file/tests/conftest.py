@@ -33,7 +33,7 @@ def data(opens, closes):
 
 @pytest.fixture
 def csv(tmpdir, data):
-    from ibis.file.csv import CSVClient
+    from ibis.csv import CSVClient
 
     csv = tmpdir.mkdir('csv_dir')
 
@@ -46,7 +46,7 @@ def csv(tmpdir, data):
 
 @pytest.fixture
 def csv2(tmpdir, data):
-    from ibis.file.csv import CSVClient
+    from ibis.csv import CSVClient
 
     csv2 = tmpdir.mkdir('csv_dir2')
     df = pd.merge(*data.values(), on=['time', 'ticker'])
@@ -58,7 +58,7 @@ def csv2(tmpdir, data):
 
 @pytest.fixture
 def hdf(tmpdir, data):
-    from ibis.file.hdf5 import HDFClient
+    from ibis.hdf5 import HDFClient
 
     hdf = tmpdir.mkdir('hdf_dir')
     f = hdf / 'prices.h5'
@@ -72,8 +72,8 @@ def hdf(tmpdir, data):
 @pytest.fixture
 def parquet(tmpdir, data):
     pa = pytest.importorskip('pyarrow')
-    import pyarrow.parquet as pq  # noqa: E402
-    from ibis.file.parquet import ParquetClient
+    pq = pytest.importorskip('pyarrow.parquet')
+    from ibis.parquet import ParquetClient
 
     # create single files
     d = tmpdir.mkdir('pq')

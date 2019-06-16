@@ -14,11 +14,11 @@ import toolz
 from multipledispatch import Dispatcher
 from toolz import compose, concat, concatv, first, unique
 
-import ibis.expr.operations as ops
-import ibis.expr.types as ir
-from ibis.pandas.core import execute
-from ibis.pandas.dispatch import execute_node
-from ibis.pandas.execution import constants, util
+from ...expr import operations as ops
+from ...expr import types as ir
+from ..core import execute
+from ..dispatch import execute_node
+from ..execution import constants, util
 
 compute_projection = Dispatcher(
     'compute_projection',

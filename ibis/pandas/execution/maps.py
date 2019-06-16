@@ -4,8 +4,8 @@ import functools
 import pandas as pd
 import toolz
 
-import ibis.expr.operations as ops
-from ibis.pandas.dispatch import execute_node
+from ...expr import operations as ops
+from ..dispatch import execute_node
 
 
 @execute_node.register(ops.MapLength, pd.Series)
