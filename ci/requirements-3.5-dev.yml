@@ -42,7 +42,6 @@ dependencies:
   # required for impyla in case of py3
   - thriftpy
   - toolz
-  - twine
   - xorg-libxpm
   - xorg-libxrender
   - pip:
