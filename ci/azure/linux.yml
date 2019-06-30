@@ -149,7 +149,9 @@ jobs:
         artifactFeeds: ibis_azure_pypi
       condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
 
-    - bash: 'twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) /tmp/ibis/dist/*'
+    - bash: |
+        docker-compose run -e PYPIRC_PATH=$(PYPIRC_PATH) ibis \
+          twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) /ibis/dist/*
       displayName: 'Upload wheel to Azure feed'
       condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
 
