@@ -124,6 +124,34 @@ jobs:
       displayName: 'Publish Linux environment YAML to Azure'
       condition: succeededOrFailed()  # pass or fail, but not cancelled
 
+- job: ${{ parameters.name }}UploadPackagesToAzureFeed
+
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.6'
+        addToPath: true
+      displayName: 'Set the Python version'
+
+    - task: TwineAuthenticate@0
+      inputs:
+        artifactFeeds: ibis_azure_pypi
+      condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
+      displayName: 'Twine authenticate'
+
+    - bash: python -m pip install twine
+      displayName: 'Install twine'
+
+    - bash: python setup.py sdist bdist_wheel
+      displayName: 'Build the sdist and wheel for ibis'
+
+    - bash: twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) /ibis/dist/*
+      displayName: 'Upload packages to Azure feed'
+      condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
+
 - job: ${{ parameters.name }}BuildPackages
 
   pool:
@@ -140,20 +168,6 @@ jobs:
 
     - bash: docker images
       displayName: 'List docker images'
-
-    - bash: docker-compose run ibis python setup.py sdist bdist_wheel
-      displayName: 'Build source distribution and wheel'
-
-    - task: TwineAuthenticate@0
-      inputs:
-        artifactFeeds: ibis_azure_pypi
-      condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
-
-    - bash: |
-        docker-compose run -e PYPIRC_PATH=$(PYPIRC_PATH) ibis \
-          twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) /ibis/dist/*
-      displayName: 'Upload wheel to Azure feed'
-      condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
 
     - bash: docker-compose run ibis ci/feedstock.py test
       displayName: 'Clone, update and build conda-forge recipe'
