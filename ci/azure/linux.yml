@@ -124,7 +124,7 @@ jobs:
       displayName: 'Publish Linux environment YAML to Azure'
       condition: succeededOrFailed()  # pass or fail, but not cancelled
 
-- job: ${{ parameters.name }}BuildConda
+- job: ${{ parameters.name }}BuildPackages
 
   pool:
     vmImage: ${{ parameters.vmImage }}
@@ -140,6 +140,18 @@ jobs:
 
     - bash: docker images
       displayName: 'List docker images'
+
+    - bash: docker-compose run ibis python setup.py sdist bdist_wheel
+      displayName: 'Build source distribution and wheel'
+
+    - task: TwineAuthenticate@0
+      inputs:
+        artifactFeeds: ibis_azure_pypi
+      condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
+
+    - bash: 'twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) /tmp/ibis/dist/*'
+      displayName: 'Upload wheel to Azure feed'
+      condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
 
     - bash: docker-compose run ibis ci/feedstock.py test
       displayName: 'Clone, update and build conda-forge recipe'
