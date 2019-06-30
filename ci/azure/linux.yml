@@ -142,7 +142,10 @@ jobs:
       condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
       displayName: 'Twine authenticate'
 
-    - bash: python -m pip install twine
+    - bash: which python
+      displayName: 'Show Python executable location'
+
+    - bash: python -m pip install twine wheel
       displayName: 'Install twine'
 
     - bash: python setup.py sdist bdist_wheel
