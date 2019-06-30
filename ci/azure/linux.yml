@@ -151,7 +151,7 @@ jobs:
     - bash: python setup.py sdist bdist_wheel
       displayName: 'Build the sdist and wheel for ibis'
 
-    - bash: twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) /ibis/dist/*
+    - bash: twine upload -r ibis_azure_pypi --config-file $(PYPIRC_PATH) dist/*
       displayName: 'Upload packages to Azure feed'
       condition: and(succeeded(), eq(variables['System.PullRequest.IsFork'], 'False'))
 
