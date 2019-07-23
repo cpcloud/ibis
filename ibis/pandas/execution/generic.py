@@ -121,8 +121,13 @@ def execute_cast_series_timestamp(op, data, type, **kwargs):
     if isinstance(from_type, (dt.String, dt.Integer)):
         timestamps = pd.to_datetime(
             data.values, infer_datetime_format=True, unit='ns'
-        ).tz_localize(tz)
-        return pd.Series(timestamps, index=data.index, name=data.name)
+        )
+        method_name = 'tz_convert'
+        if tz is None:
+            if not has_timezone_dtype(timestamps):
+                method_name = 'tz_localize'
+        method = operator.methodcaller(method_name, tz)
+        return pd.Series(method(timestamps), index=data.index, name=data.name)
 
     raise TypeError("Don't know how to cast {} to {}".format(from_type, type))
 

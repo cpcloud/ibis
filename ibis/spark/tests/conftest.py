@@ -1,9 +1,11 @@
 import pytest
 
+from ibis.tests.all.conftest import spark_client
+
 
 @pytest.fixture(scope='session')
-def client(spark_client_testing):
-    return spark_client_testing
+def client(data_directory):
+    return spark_client(data_directory)
 
 
 @pytest.fixture(scope='session')

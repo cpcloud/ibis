@@ -17,6 +17,7 @@ import ibis.expr.types as ir
 import ibis.sql.compiler as comp
 from ibis.bigquery.tests.conftest import connect as bigquery_connect
 from ibis.impala.tests.conftest import IbisTestEnv as ImpalaEnv
+from ibis.tests.all.conftest import spark_client
 
 
 class RoundingConvention:
@@ -525,11 +526,10 @@ class Impala(UnorderedComparator, Backend, RoundAwayFromZero):
 
 
 class Spark(Backend, RoundHalfToEven):
-
     @staticmethod
     def skip_if_missing_dependencies() -> None:
         pass
 
     @staticmethod
     def connect(data_directory):
-        return Spark.client_testing
+        return spark_client(data_directory)
