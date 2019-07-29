@@ -1,6 +1,7 @@
 import inspect
 from collections import OrderedDict
 
+import ibis.expr.datatypes as dt
 import ibis.expr.rules as rlz
 import ibis.util as util
 
@@ -95,9 +96,16 @@ class TypeSignature(OrderedDict):
     __slots__ = ()
 
     @classmethod
-    def from_dtypes(cls, dtypes):
+    def from_types(cls, dtypes):
         return cls(
-            ('_{}'.format(i), Argument(rlz.value(dtype)))
+            (
+                '_{}'.format(i),
+                Argument(
+                    rlz.value(dtype)
+                    if isinstance(dtype, dt.DataType)
+                    else dtype
+                ),
+            )
             for i, dtype in enumerate(dtypes)
         )
 
@@ -106,7 +114,7 @@ class TypeSignature(OrderedDict):
             inspect.Parameter(
                 name,
                 inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                default=_undefined
+                default=_undefined,
             )
             for (name, argument) in self.items()
         ]

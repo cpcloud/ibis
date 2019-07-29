@@ -311,3 +311,26 @@ def test_array_return_type_reduction_window(con, t, df, qs):
     expected_raw = df.b.quantile(qs).tolist()
     expected = pd.Series([expected_raw] * len(df))
     tm.assert_series_equal(result, expected)
+
+
+def test_elementwise_table_udf(con, t, df):
+    @udf.elementwise(['table'], dt.float64)
+    def add_one_table(dataframe):
+        return dataframe.b + 1.0
+
+    expr = add_one_table(t)
+    result = expr.execute()
+    expected = df.b + 1.0
+    tm.assert_series_equal(result, expected)
+
+
+def test_reduction_table_udf(con, t, df):
+    @udf.reduction(['table'], dt.float64)
+    def agg_table(dataframe):
+        import pdb; pdb.set_trace()  # noqa
+        return dataframe.b.mean()
+
+    expr = agg_table(t)
+    result = expr.execute()
+    expected = df.b.mean()
+    assert result == expected

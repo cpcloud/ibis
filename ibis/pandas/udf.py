@@ -13,11 +13,12 @@ from inspect import Parameter, signature
 import numpy as np
 import pandas as pd
 import toolz
-from pandas.core.groupby import SeriesGroupBy
+from pandas.core.groupby import DataFrameGroupBy, SeriesGroupBy
 
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.signature as sig
+import ibis.expr.types as ir
 from ibis.pandas.core import (
     date_types,
     time_types,
@@ -25,6 +26,17 @@ from ibis.pandas.core import (
     timestamp_types,
 )
 from ibis.pandas.dispatch import execute_node
+
+
+def make_types_for_signature(input_type):
+    result = []
+    for dtype in input_type:
+        if isinstance(dtype, str) and dtype == 'table':
+            parsed_dtype = ir.TableExpr
+        else:
+            parsed_dtype = dt.dtype(dtype)
+        result.append(parsed_dtype)
+    return result
 
 
 @functools.singledispatch
@@ -105,6 +117,14 @@ def array_rule(rule):
     return (list,)
 
 
+@rule_to_python_type.register(type)
+def type_rule(rule):
+    if issubclass(rule, ir.TableExpr):
+        return (pd.DataFrame,)
+    else:
+        raise TypeError()
+
+
 @rule_to_python_type.register(dt.Map)
 def map_rule(rule):
     return (dict,)
@@ -167,10 +187,10 @@ def nullable(datatype):
     -------
     Tuple[Type]
     """
-    return (type(None),) if datatype.nullable else ()
+    return (type(None),) if getattr(datatype, "nullable", False) else ()
 
 
-def udf_signature(input_type, pin, klass):
+def udf_signature(input_type, pin, klasses):
     """Compute the appropriate signature for a
     :class:`~ibis.expr.operations.Node` from a list of input types
     `input_type`.
@@ -233,13 +253,13 @@ def udf_signature(input_type, pin, klass):
 
     if nargs == 1:
         r, = input_type
-        result = (klass,) + rule_to_python_type(r) + nullable(r)
+        result = tuple(klasses) + rule_to_python_type(r) + nullable(r)
         return (result,)
 
     return tuple(
-        klass
+        klasses
         if pin is not None and pin == i
-        else ((klass,) + rule_to_python_type(r) + nullable(r))
+        else (tuple(klasses) + rule_to_python_type(r) + nullable(r))
         for i, r in enumerate(input_type)
     )
 
@@ -318,7 +338,7 @@ class udf:
         ... def my_string_length(series):
         ...     return series.str.len() * 2
         """
-        input_type = list(map(dt.dtype, input_type))
+        input_type = make_types_for_signature(input_type)
         output_type = dt.dtype(output_type)
 
         def wrapper(func):
@@ -331,7 +351,7 @@ class udf:
                 func.__name__,
                 (ops.ValueOp,),
                 {
-                    'signature': sig.TypeSignature.from_dtypes(input_type),
+                    'signature': sig.TypeSignature.from_types(input_type),
                     'output_type': output_type.column_type,
                 },
             )
@@ -342,7 +362,11 @@ class udf:
             # grouped Series
             nargs = len(input_type)
             group_by_signatures = [
-                udf_signature(input_type, pin=pin, klass=SeriesGroupBy)
+                udf_signature(
+                    input_type,
+                    pin=pin,
+                    klasses=(SeriesGroupBy, DataFrameGroupBy),
+                )
                 for pin in range(nargs)
             ]
 
@@ -377,7 +401,10 @@ class udf:
             # Define an execution rule for a simple elementwise Series
             # function
             @execute_node.register(
-                UDFNode, *udf_signature(input_type, pin=None, klass=pd.Series)
+                UDFNode,
+                *udf_signature(
+                    input_type, pin=None, klasses=(pd.Series, pd.DataFrame)
+                ),
             )
             @execute_node.register(
                 UDFNode,
@@ -483,7 +510,7 @@ class udf:
         ibis.pandas.udf.reduction
         ibis.pandas.udf.analytic
         """
-        input_type = list(map(dt.dtype, input_type))
+        input_type = make_types_for_signature(input_type)
         output_type = dt.dtype(output_type)
 
         def wrapper(func):
@@ -493,14 +520,17 @@ class udf:
                 func.__name__,
                 (base_class,),
                 {
-                    'signature': sig.TypeSignature.from_dtypes(input_type),
+                    'signature': sig.TypeSignature.from_types(input_type),
                     'output_type': output_type_method(output_type),
                 },
             )
 
             # An execution rule for a simple aggregate node
             @execute_node.register(
-                UDAFNode, *udf_signature(input_type, pin=None, klass=pd.Series)
+                UDAFNode,
+                *udf_signature(
+                    input_type, pin=None, klasses=(pd.Series, pd.DataFrame)
+                ),
             )
             def execute_udaf_node(op, *args, **kwargs):
                 args, kwargs = arguments_from_signature(
@@ -512,9 +542,16 @@ class udf:
             # includes aggregates applied over a window.
             nargs = len(input_type)
             group_by_signatures = [
-                udf_signature(input_type, pin=pin, klass=SeriesGroupBy)
+                udf_signature(
+                    input_type,
+                    pin=pin,
+                    klasses=(SeriesGroupBy, DataFrameGroupBy),
+                )
                 for pin in range(nargs)
             ]
+
+            if func.__name__ == 'agg_table':
+                import pdb; pdb.set_trace()  # noqa
 
             @toolz.compose(
                 *(
