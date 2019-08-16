@@ -79,10 +79,7 @@ jobs:
         mkdir -p /tmp/env
       displayName: 'Make artifacts directories'
 
-    - bash: docker-compose run ibis conda list
-      displayName: 'Show packages in conda environment'
-
-    - bash: docker-compose run ibis conda list --export > /tmp/env/env.yml
+    - bash: docker-compose run ibis conda env export | tee /tmp/env/env.yml
       displayName: 'Capture packages in conda environment'
 
     - bash: docker-compose run -e LOGLEVEL=DEBUG ibis ci/load-data.sh
