@@ -1,3 +1,4 @@
+import errno
 import functools
 import inspect
 import math
@@ -6,7 +7,6 @@ import os
 import regex as re
 import sqlalchemy as sa
 
-import ibis.common.exceptions as com
 import ibis.sql.alchemy as alch
 from ibis.client import Database
 from ibis.sql.sqlite.compiler import SQLiteDialect
@@ -361,8 +361,9 @@ class SQLiteClient(alch.AlchemyClient):
             Exception
         """
         if not os.path.exists(path) and not create:
-            raise com.IbisError('File {!r} does not exist'.format(path))
-
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), path
+            )
         self.raw_sql(
             "ATTACH DATABASE {path!r} AS {name}".format(
                 path=path,
