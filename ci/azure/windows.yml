@@ -60,10 +60,10 @@ jobs:
     - script: conda info
       displayName: 'Show conda info'
 
-    - script: conda list --name $(conda.env)
+    - script: conda env export -n $(conda.env)
       displayName: 'Show installed packages'
 
-    - script: conda list --export --name $(conda.env) > env.yml
+    - script: conda env export -n $(conda.env) > env.yml
       displayName: 'Capture installed packages'
 
     - task: PublishPipelineArtifact@1
