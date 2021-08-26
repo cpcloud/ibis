@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from multipledispatch import Dispatcher
+from org.apache.arrow.flatbuf import Schema as ArrowSchema
 
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
@@ -111,7 +112,7 @@ class Schema:
             new_names.append(name)
             new_types.append(type_)
 
-        return Schema(new_names, new_types)
+        return type(self)(new_names, new_types)
 
     @classmethod
     def from_tuples(cls, values):
@@ -119,11 +120,11 @@ class Schema:
             values = list(values)
 
         names, types = zip(*values) if values else ([], [])
-        return Schema(names, types)
+        return cls(names, types)
 
     @classmethod
     def from_dict(cls, dictionary):
-        return Schema(*zip(*dictionary.items()))
+        return cls(*zip(*dictionary.items()))
 
     def equals(self, other, cache=None):
         return self.names == other.names and self.types == other.types
@@ -138,7 +139,7 @@ class Schema:
         return set(self.items()) >= set(other.items())
 
     def append(self, schema):
-        return Schema(self.names + schema.names, self.types + schema.types)
+        return type(self)(self.names + schema.names, self.types + schema.types)
 
     def items(self):
         return zip(self.names, self.types)
@@ -187,6 +188,20 @@ class Schema:
                 df[column] = convert(col_dtype, dtype, col)
 
         return df
+
+    def compile_ir(self, builder) -> int:
+        fields = [
+            typ.compile_ir(builder, name=name) for name, typ in self.items()
+        ]
+
+        ArrowSchema.SchemaStartFieldsVector(builder, len(fields))
+        for field in reversed(fields):
+            builder.PrependUOffsetTRelative(field)
+        fields = builder.EndVector()
+
+        ArrowSchema.SchemaStart(builder)
+        ArrowSchema.SchemaAddFields(builder, fields)
+        return ArrowSchema.SchemaEnd(builder)
 
 
 class HasSchema:

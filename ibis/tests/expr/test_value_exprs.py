@@ -1557,3 +1557,13 @@ Selection[table]
     array_of_array = Literal[array<array<int8>>]
       [[1]]"""
     assert result == expected
+
+
+def test_literal_promotion():
+    t = ibis.table([("a", "int64")], name="t")
+    #  breakpoint()
+    expr = t.a + 1
+    op = expr.op()
+    right = op.right
+    lit = right.op()
+    assert lit.dtype == dt.int64

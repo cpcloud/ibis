@@ -49,6 +49,7 @@ requests-kerberos = { version = "^0.12", optional = true }
 shapely = { version = "^1", optional = true }
 sqlalchemy = { version = "~1.3", optional = true }
 tables = { version = "^3", optional = true }
+flatbuffers = "^2"
 
 [tool.poetry.dev-dependencies]
 Sphinx = "^4"

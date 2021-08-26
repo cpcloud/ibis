@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import abc
 import builtins
 import collections
 import datetime
@@ -25,6 +24,55 @@ from typing import (
 import pandas as pd
 import toolz
 from multipledispatch import Dispatcher
+from org.apache.arrow.computeir.flatbuf import (
+    ArrayLiteral,
+    BinaryLiteral,
+    BooleanLiteral,
+    DateLiteral,
+    DecimalLiteral,
+    Float16Literal,
+    Float32Literal,
+    Float64Literal,
+    Int8Literal,
+    Int16Literal,
+    Int32Literal,
+    Int64Literal,
+    IntervalLiteral,
+    IntervalLiteralDaysMilliseconds,
+    IntervalLiteralImpl,
+    IntervalLiteralMonths,
+    LiteralImpl,
+    MapLiteral,
+    NullLiteral,
+    StringLiteral,
+    StructLiteral,
+    TimeLiteral,
+    TimestampLiteral,
+    UInt8Literal,
+    UInt16Literal,
+    UInt32Literal,
+    UInt64Literal,
+)
+from org.apache.arrow.flatbuf import Array as ArrayType
+from org.apache.arrow.flatbuf import Binary as BinaryType
+from org.apache.arrow.flatbuf import Bool as BooleanType
+from org.apache.arrow.flatbuf import Date as DateType
+from org.apache.arrow.flatbuf import DateUnit
+from org.apache.arrow.flatbuf import Decimal as DecimalType
+from org.apache.arrow.flatbuf import Field
+from org.apache.arrow.flatbuf import FloatingPoint as FloatingPointType
+from org.apache.arrow.flatbuf import Int as IntType
+from org.apache.arrow.flatbuf import Interval as IntervalType
+from org.apache.arrow.flatbuf import List as ListType
+from org.apache.arrow.flatbuf import Map as MapType
+from org.apache.arrow.flatbuf import Null as NullType
+from org.apache.arrow.flatbuf import Precision
+from org.apache.arrow.flatbuf import Struct_ as StructType
+from org.apache.arrow.flatbuf import Time as TimeType
+from org.apache.arrow.flatbuf import Timestamp as TimestampType
+from org.apache.arrow.flatbuf import TimeUnit, Type
+from org.apache.arrow.flatbuf import Utf8 as Utf8Type
+from org.apache.arrow.flatbuf.IntervalUnit import IntervalUnit
 
 import ibis.common.exceptions as com
 import ibis.expr.types as ir
@@ -39,7 +87,7 @@ except ImportError:
     ...
 
 
-class DataType:
+class DataType(abc.ABC):
 
     __slots__ = ('nullable',)
 
@@ -126,9 +174,42 @@ class DataType:
     def column_type(self):
         return functools.partial(self.column, dtype=self)
 
-    def _literal_value_hash_key(self, value) -> Tuple[DataType, typing.Any]:
+    def _literal_value_hash_key(self, value):
         """Return a hash for `value`."""
         return self, value
+
+    def ir_literal_value(self, builder, value):
+        return value
+
+    def make_ir_literal(self, builder, value):
+        ir_literal_type = self.ir_literal_type
+        typename = flatbuffers_type_name_from_module(ir_literal_type)
+        ir_value = self.ir_literal_value(builder, value)
+        getattr(ir_literal_type, f"{typename}Start")(builder)
+        getattr(ir_literal_type, f"{typename}AddValue")(builder, ir_value)
+        return getattr(ir_literal_type, f"{typename}End")(builder), getattr(
+            LiteralImpl.LiteralImpl, f"{typename}"
+        )
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        ir_type = self.ir_type
+        typename = flatbuffers_type_name_from_module(ir_type)
+        getattr(ir_type, f"{typename}Start")(builder)
+        ty = getattr(ir_type, f"{typename}End")(builder)
+        ty_ty = getattr(Type.Type, typename)
+        name_string = make_string(builder, name)
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddType(builder, ty)
+        Field.FieldAddTypeType(builder, ty_ty)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
+
+
+def flatbuffers_type_name_from_module(module) -> str:
+    last_dot = module.__name__.rfind(".")
+    return module.__name__[last_dot + 1 :]
 
 
 class Any(DataType):
@@ -149,6 +230,9 @@ class Null(DataType):
     scalar = ir.NullScalar
     column = ir.NullColumn
 
+    ir_type = NullType
+    ir_literal_type = NullLiteral
+
     __slots__ = ()
 
 
@@ -160,6 +244,9 @@ class Boolean(Primitive):
     scalar = ir.BooleanScalar
     column = ir.BooleanColumn
 
+    ir_type = BooleanType
+    ir_literal_type = BooleanLiteral
+
     __slots__ = ()
 
 
@@ -170,13 +257,42 @@ class Integer(Primitive):
     scalar = ir.IntegerScalar
     column = ir.IntegerColumn
 
+    ir_type = IntType
+
     __slots__ = ()
 
     @property
+    @abc.abstractmethod
     def _nbytes(self) -> int:
-        raise TypeError(
-            "Cannot determine the size in bytes of an abstract integer type."
-        )
+        ...
+
+    @property
+    def _bit_width(self) -> int:
+        return self._nbytes * 8
+
+    @property
+    @abc.abstractmethod
+    def is_signed(self) -> bool:
+        pass
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        self.ir_type.IntStart(builder)
+        self.ir_type.IntAddBitWidth(builder, self._bit_width)
+        self.ir_type.IntAddIsSigned(builder, self.is_signed)
+        int_ty = self.ir_type.IntEnd(builder)
+
+        name_string = make_string(builder, name)
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddNullable(builder, self.nullable)
+        Field.FieldAddType(builder, int_ty)
+        Field.FieldAddTypeType(builder, Type.Type.Int)
+        return Field.FieldEnd(builder)
+
+
+def make_string(builder, name: Optional[str]) -> Optional[GenericAny]:
+    return builder.CreateString(name) if name is not None else None
 
 
 class String(Variadic):
@@ -191,7 +307,13 @@ class String(Variadic):
     scalar = ir.StringScalar
     column = ir.StringColumn
 
+    ir_type = Utf8Type
+    ir_literal_type = StringLiteral
+
     __slots__ = ()
+
+    def ir_literal_value(self, builder, value):
+        return builder.CreateString(value)
 
 
 class Binary(Variadic):
@@ -208,19 +330,58 @@ class Binary(Variadic):
     scalar = ir.BinaryScalar
     column = ir.BinaryColumn
 
+    ir_type = BinaryType
+    ir_literal_type = BinaryLiteral
+
     __slots__ = ()
+
+    def ir_literal_value(self, builder, value):
+        return builder.CreateByteVector(value)
 
 
 class Date(Primitive):
     scalar = ir.DateScalar
     column = ir.DateColumn
 
+    ir_type = DateType
+    ir_literal_type = DateLiteral
+
     __slots__ = ()
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        name_string = make_string(builder, name)
+
+        self.ir_type.DateStart(builder)
+        self.ir_type.DateAddUnit(builder, DateUnit.DateUnit.MILLISECOND)
+        date_ty = self.ir_type.DateEnd(builder)
+
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddType(builder, date_ty)
+        Field.FieldAddTypeType(builder, Type.Type.Date)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
+
+    def make_ir_literal(self, builder, value) -> Tuple[int, int]:
+        self.ir_literal_type.DateLiteralStart(builder)
+        self.ir_literal_type.DateLiteralAddValue(
+            # milliseconds since epoch
+            builder,
+            pd.Timestamp(value, unit="D").value // 1_000_000,
+        )
+        return (
+            self.ir_literal_type.DateLiteralEnd(builder),
+            LiteralImpl.LiteralImpl.DateLiteral,
+        )
 
 
 class Time(Primitive):
     scalar = ir.TimeScalar
     column = ir.TimeColumn
+
+    ir_type = TimeType
+    ir_literal_type = TimeLiteral
 
     __slots__ = ()
 
@@ -228,6 +389,9 @@ class Time(Primitive):
 class Timestamp(DataType):
     scalar = ir.TimestampScalar
     column = ir.TimestampColumn
+
+    ir_type = TimestampType
+    ir_literal_type = TimestampLiteral
 
     __slots__ = ('timezone',)
 
@@ -244,6 +408,33 @@ class Timestamp(DataType):
             return typename
         return '{}({!r})'.format(typename, timezone)
 
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        timezone = make_string(builder, self.timezone)
+        name_string = make_string(builder, name)
+
+        self.ir_type.TimestampStart(builder)
+        self.ir_type.TimestampAddUnit(builder, TimeUnit.TimeUnit.MICROSECOND)
+        self.ir_type.TimestampAddTimezone(builder, timezone)
+        timestamp_ty = self.ir_type.TimestampEnd(builder)
+
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddType(builder, timestamp_ty)
+        Field.FieldAddTypeType(builder, Type.Type.Timestamp)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
+
+    def make_ir_literal(self, builder, value):
+        timezone = builder.CreateString(self.timezone)
+        self.ir_literal_type.TimestampLiteralStart(builder)
+        self.ir_literal_type.TimestampLiteralAddValue(builder, int(value))
+        self.ir_literal_type.TimestampLiteralAddTimezone(builder, timezone)
+        return (
+            self.ir_literal_type.TimestampLiteralEnd(builder),
+            LiteralImpl.LiteralImpl.TimestampLiteral,
+        )
+
 
 class SignedInteger(Integer):
     @property
@@ -252,9 +443,13 @@ class SignedInteger(Integer):
 
     @property
     def bounds(self):
-        exp = self._nbytes * 8 - 1
+        exp = self._bit_width - 1
         upper = (1 << exp) - 1
         return Bounds(lower=~upper, upper=upper)
+
+    @property
+    def is_signed(self) -> bool:
+        return True
 
 
 class UnsignedInteger(Integer):
@@ -264,9 +459,13 @@ class UnsignedInteger(Integer):
 
     @property
     def bounds(self):
-        exp = self._nbytes * 8 - 1
+        exp = self._bit_width - 1
         upper = 1 << exp
         return Bounds(lower=0, upper=upper)
+
+    @property
+    def is_signed(self) -> bool:
+        return False
 
 
 class Floating(Primitive):
@@ -280,66 +479,108 @@ class Floating(Primitive):
         return float64
 
     @property
+    @abc.abstractmethod
     def _nbytes(self) -> int:
-        raise TypeError(
-            "Cannot determine the size in bytes of an abstract floating "
-            "point type."
+        ...
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        name_string = make_string(builder, name)
+        nbytes_to_precision = {
+            2: Precision.Precision.HALF,
+            4: Precision.Precision.SINGLE,
+            8: Precision.Precision.DOUBLE,
+        }
+
+        FloatingPointType.FloatingPointStart(builder)
+        FloatingPointType.FloatingPointAddPrecision(
+            builder, nbytes_to_precision[self._nbytes]
         )
+        float_ty = FloatingPointType.FloatingPointEnd(builder)
+
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddType(builder, float_ty)
+        Field.FieldAddTypeType(builder, Type.Type.FloatingPoint)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
 
 
 class Int8(SignedInteger):
     __slots__ = ()
     _nbytes = 1
 
+    ir_literal_type = Int8Literal
+
 
 class Int16(SignedInteger):
     __slots__ = ()
     _nbytes = 2
+
+    ir_literal_type = Int16Literal
 
 
 class Int32(SignedInteger):
     __slots__ = ()
     _nbytes = 4
 
+    ir_literal_type = Int32Literal
+
 
 class Int64(SignedInteger):
     __slots__ = ()
     _nbytes = 8
+
+    ir_literal_type = Int64Literal
 
 
 class UInt8(UnsignedInteger):
     __slots__ = ()
     _nbytes = 1
 
+    ir_literal_type = UInt8Literal
+
 
 class UInt16(UnsignedInteger):
     __slots__ = ()
     _nbytes = 2
+
+    ir_literal_type = UInt16Literal
 
 
 class UInt32(UnsignedInteger):
     __slots__ = ()
     _nbytes = 4
 
+    ir_literal_type = UInt32Literal
+
 
 class UInt64(UnsignedInteger):
     __slots__ = ()
     _nbytes = 8
+
+    ir_literal_type = UInt64Literal
 
 
 class Float16(Floating):
     __slots__ = ()
     _nbytes = 2
 
+    ir_literal_type = Float16Literal
+
 
 class Float32(Floating):
     __slots__ = ()
     _nbytes = 4
 
+    ir_literal_type = Float32Literal
+
 
 class Float64(Floating):
     __slots__ = ()
     _nbytes = 8
+
+    ir_literal_type = Float64Literal
 
 
 Halffloat = Float16
@@ -351,7 +592,12 @@ class Decimal(DataType):
     scalar = ir.DecimalScalar
     column = ir.DecimalColumn
 
+    ir_type = DecimalType
+    ir_literal_type = DecimalLiteral
+
     __slots__ = 'precision', 'scale'
+
+    ir_type = DecimalType
 
     def __init__(
         self, precision: int, scale: int, nullable: bool = True
@@ -387,10 +633,27 @@ class Decimal(DataType):
     def largest(self) -> 'Decimal':
         return Decimal(38, self.scale)
 
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        self.ir_type.DecimalStart(builder)
+        self.ir_type.DecimalAddPrecision(builder, self.precision)
+        self.ir_type.DecimalAddScale(builder, self.scale)
+        dec_ty = self.ir_type.DecimalEnd(builder)
+        name_string = make_string(builder, name)
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddType(builder, dec_ty)
+        Field.FieldAddTypeType(builder, Type.Type.Decimal)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
+
 
 class Interval(DataType):
     scalar = ir.IntervalScalar
     column = ir.IntervalColumn
+
+    ir_literal_type = IntervalLiteral
+    ir_type = IntervalType
 
     __slots__ = 'value_type', 'unit'
 
@@ -417,6 +680,17 @@ class Interval(DataType):
         'milliseconds': 'ms',
         'microseconds': 'us',
         'nanoseconds': 'ns',
+    }
+
+    _ir_units = {
+        "Y": IntervalUnit.YEAR_MONTH,
+        "Q": IntervalUnit.YEAR_MONTH,
+        "M": IntervalUnit.YEAR_MONTH,
+        "D": IntervalUnit.DAY_TIME,
+        "h": IntervalUnit.DAY_TIME,
+        "m": IntervalUnit.DAY_TIME,
+        "s": IntervalUnit.DAY_TIME,
+        "ms": IntervalUnit.DAY_TIME,
     }
 
     def _convert_timedelta_unit_to_interval_unit(self, unit: str):
@@ -463,6 +737,67 @@ class Interval(DataType):
         value_type_name = self.value_type.name.lower()
         return '{}<{}>(unit={!r})'.format(typename, value_type_name, unit)
 
+    @property
+    def ir_unit(self):
+        try:
+            return self._ir_units[self.unit]
+        except KeyError as e:
+            raise KeyError(
+                "Arrow compute IR does not support interval unit: "
+                f"`{self.unit!r}`"
+            ) from e
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        unit = self.ir_unit
+        self.ir_type.IntervalStart(builder)
+        self.ir_type.IntervalAddUnit(builder, unit)
+        interval_ty = self.ir_type.IntervalEnd(builder)
+        name_string = make_string(builder, name)
+        Field.FieldStart(builder)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddType(builder, interval_ty)
+        Field.FieldAddTypeType(builder, Type.Type.Interval)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
+
+    def make_ir_literal(self, builder, value) -> Tuple[int, int]:
+        unit = self.ir_unit
+        if unit == IntervalUnit.YEAR_MONTH:
+            IntervalLiteralMonths.IntervalLiteralMonthsStart(builder)
+            IntervalLiteralMonths.IntervalLiteralMonthsAddMonths(
+                builder, value
+            )
+            value = IntervalLiteralMonths.IntervalLiteralMonthsEnd(builder)
+            ty = IntervalLiteralImpl.IntervalLiteralImpl.IntervalLiteralMonths
+        else:
+            assert (
+                unit == IntervalUnit.DAY_TIME
+            ), f"got unexpected unit: `{unit}`"
+            IntervalLiteralDaysMilliseconds.IntervalLiteralDaysMillisecondsStart(  # noqa: E501
+                builder
+            )
+            IntervalLiteralDaysMilliseconds.IntervalLiteralDaysMillisecondsAddDays(  # noqa: E501
+                builder, value
+            )
+            IntervalLiteralDaysMilliseconds.IntervalLiteralDaysMillisecondsAddMilliseconds(  # noqa: E501
+                builder, value
+            )
+            value = IntervalLiteralDaysMilliseconds.IntervalLiteralDaysMillisecondsEnd(  # noqa: E501
+                builder
+            )
+            ty = (
+                IntervalLiteralImpl.IntervalLiteralImpl.IntervalLiteralDaysMilliseconds  # noqa: E501
+            )
+        self.ir_literal_type.IntervalLiteralStart(builder)
+        self.ir_literal_type.IntervalLiteralAddValue(builder, value)
+        self.ir_literal_type.IntervalLiteralAddValueType(builder, ty)
+
+        return (
+            self.ir_literal_type.IntervalLiteralEnd(builder),
+            LiteralImpl.LiteralImpl.DateLiteral,
+        )
+
 
 class Category(DataType):
     scalar = ir.CategoryScalar
@@ -492,6 +827,9 @@ class Category(DataType):
 class Struct(DataType):
     scalar = ir.StructScalar
     column = ir.StructColumn
+
+    ir_type = StructType
+    ir_literal_type = StructLiteral
 
     __slots__ = 'names', 'types'
 
@@ -562,6 +900,34 @@ class Struct(DataType):
     def _literal_value_hash_key(self, value):
         return self, _tuplize(value.items())
 
+    def compile_ir(self, builder, name: Optional[str] = None):
+        children = [
+            typ.compile_ir(builder, name=name) for name, typ in self.pairs
+        ]
+        Field.FieldStartChildrenVector(builder, len(children))
+        for child in reversed(children):
+            builder.PrependUOffsetTRelative(child)
+        children_offsets = builder.EndVector()
+
+        StructType.StructStart(builder)
+        struct_ty = StructType.StructEnd(builder)
+
+        if name is not None:
+            name_string = builder.CreateString(name)
+        else:
+            name_string = None
+
+        Field.FieldStart(builder)
+        Field.FieldAddType(builder, struct_ty)
+
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+
+        Field.FieldAddTypeType(builder, Type.Type.Struct)
+        Field.FieldAddChildren(builder, children_offsets)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
+
 
 def _tuplize(values):
     """Recursively convert `values` to a tuple of tuples."""
@@ -579,6 +945,9 @@ class Array(Variadic):
     scalar = ir.ArrayScalar
     column = ir.ArrayColumn
 
+    ir_type = ArrayType
+    ir_literal_type = ArrayLiteral
+
     __slots__ = ('value_type',)
 
     def __init__(
@@ -592,6 +961,27 @@ class Array(Variadic):
 
     def _literal_value_hash_key(self, value):
         return self, _tuplize(value)
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        field_ty = self.value_type.compile_ir(builder)
+
+        Field.FieldStartChildrenVector(builder, 1)
+        builder.PrependUOffsetTRelative(field_ty)
+        field_children_offsets = builder.EndVector()
+
+        ListType.ListStart(builder)
+        list_ty = ListType.ListEnd(builder)
+
+        name_string = make_string(builder, name)
+
+        Field.FieldStart(builder)
+        Field.FieldAddType(builder, list_ty)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddTypeType(builder, Type.Type.List)
+        Field.FieldAddChildren(builder, field_children_offsets)
+        Field.FieldAddNullable(builder, self.nullable)
+        return Field.FieldEnd(builder)
 
 
 class Set(Variadic):
@@ -628,6 +1018,9 @@ class Map(Variadic):
     scalar = ir.MapScalar
     column = ir.MapColumn
 
+    ir_type = MapType
+    ir_literal_type = MapLiteral
+
     __slots__ = 'key_type', 'value_type'
 
     def __init__(
@@ -644,6 +1037,33 @@ class Map(Variadic):
 
     def _literal_value_hash_key(self, value):
         return self, _tuplize(value.items())
+
+    def compile_ir(self, builder, name: Optional[str] = None) -> int:
+        ty = Array(
+            Struct.from_tuples(
+                [("key", self.key_type), ("value", self.value_type)]
+            )
+        )
+        field_ty = ty.compile_ir(builder)
+
+        Field.FieldStartChildrenVector(builder, 1)
+        builder.PrependUOffsetTRelative(field_ty)
+        field_children_offsets = builder.EndVector()
+
+        MapType.MapStart(builder)
+        map_ty = MapType.MapEnd(builder)
+
+        name_string = make_string(builder, name)
+
+        Field.FieldStart(builder)
+        Field.FieldAddType(builder, map_ty)
+        Field.FieldAddTypeType(builder, Type.Type.Map)
+        if name_string is not None:
+            Field.FieldAddName(builder, name_string)
+        Field.FieldAddChildren(builder, field_children_offsets)
+        Field.FieldAddNullable(builder, False)  # entries cannot be nullable
+
+        return Field.FieldEnd(builder)
 
 
 class JSON(String):
@@ -839,12 +1259,10 @@ class INET(String):
 any = Any()
 null = Null()
 boolean = Boolean()
-int_ = Integer()
 int8 = Int8()
 int16 = Int16()
 int32 = Int32()
 int64 = Int64()
-uint_ = UnsignedInteger()
 uint8 = UInt8()
 uint16 = UInt16()
 uint32 = UInt32()

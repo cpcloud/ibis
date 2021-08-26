@@ -1,10 +1,13 @@
+import abc
 import itertools
 import os
 import warnings
 import webbrowser
 from typing import TYPE_CHECKING, Optional
 
+import flatbuffers
 import numpy as np
+from org.apache.arrow.computeir.flatbuf import Expression
 
 import ibis
 import ibis.common.exceptions as com
@@ -20,7 +23,7 @@ if TYPE_CHECKING:
 # TODO move methods containing ops import to api.py
 
 
-class Expr:
+class Expr(abc.ABC):
     """Base expression class"""
 
     def _type_display(self):
@@ -416,6 +419,16 @@ class ValueExpr(Expr):
 
         return factory
 
+    def compile_ir(self, builder) -> int:
+        op = self.op()
+        op_ir, op_variant = op.compile_ir(builder)
+        typ = self.type().compile_ir(builder)
+        Expression.ExpressionStart(builder)
+        Expression.ExpressionAddImpl(builder, op_ir)
+        Expression.ExpressionAddImplType(builder, op_variant)
+        Expression.ExpressionAddType(builder, typ)
+        return Expression.ExpressionEnd(builder)
+
 
 class ScalarExpr(ValueExpr):
     def _type_display(self):
@@ -658,6 +671,14 @@ class TableExpr(Expr):
         return GroupedTableExpr(self, by, **additional_grouping_expressions)
 
     groupby = group_by
+
+    def ir(self) -> bytes:
+        """Compile an expression into IR."""
+        builder = flatbuffers.Builder(0)
+        op = self.op()
+        offset = op.compile_ir(builder)
+        builder.Finish(offset)
+        return bytes(builder.Output())
 
 
 # -----------------------------------------------------------------------------
@@ -1155,6 +1176,9 @@ class SortExpr(Expr):
 
     def get_name(self):
         return self.op().resolve_name()
+
+    def compile_ir(self, builder):
+        return self.op().compile_ir(builder)
 
 
 class DayOfWeek(Expr):

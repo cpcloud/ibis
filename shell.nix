@@ -69,13 +69,14 @@ in
         value = pkgs.mkShell {
           name = "ibis-${name}";
           inherit shellHook;
-          PYTHONPATH = builtins.toPath ./.;
+          PYTHONPATH = lib.concatMapStringsSep ":" builtins.toPath [ ./. /home/cloud/src/arrow/python/generated ];
           buildInputs = commonBuildInputs ++ [
             (mkPoetryEnv pkgs.${name})
             conda-shell-run
           ] ++ (with pkgs; [
             cacert
             conda
+            flatbuffers
             graphviz
             openjdk11
             pandoc

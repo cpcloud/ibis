@@ -3,11 +3,44 @@ import functools
 import itertools
 import operator
 from contextlib import suppress
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import toolz
 from cached_property import cached_property
+from org.apache.arrow.computeir.flatbuf import (
+    Aggregate,
+    AggregateCall,
+    AggregateImpl,
+    Call,
+    CanonicalAggregate,
+    CanonicalAggregateId,
+    CanonicalFunction,
+    CanonicalFunctionId,
+)
+from org.apache.arrow.computeir.flatbuf import Cast as CastIR
+from org.apache.arrow.computeir.flatbuf import (
+    Emit,
+    FieldName,
+    FieldRef,
+    Filter,
+    FunctionImpl,
+)
+from org.apache.arrow.computeir.flatbuf import Literal as IRLiteral
+from org.apache.arrow.computeir.flatbuf import (
+    OrderBy,
+    Ordering,
+    PassThrough,
+    Project,
+    Read,
+    Relation,
+    RelationImpl,
+    RelBase,
+    Remap,
+)
+from org.apache.arrow.computeir.flatbuf import SortKey as SortKeyType
+from org.apache.arrow.computeir.flatbuf.Deref import Deref
+from org.apache.arrow.computeir.flatbuf.ExpressionImpl import ExpressionImpl
 
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
@@ -15,7 +48,7 @@ import ibis.expr.rules as rlz
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
 from ibis import util
-from ibis.expr.schema import HasSchema, Schema
+from ibis.expr.schema import HasSchema
 from ibis.expr.signature import Annotable
 from ibis.expr.signature import Argument as Arg
 
@@ -33,7 +66,7 @@ def distinct_roots(*expressions):
 
 
 class Node(Annotable):
-    __slots__ = '_expr_cached', '_hash'
+    __slots__ = '_expr_cached', '_hash', "_ir_builder"
 
     def __repr__(self):
         return self._repr()
@@ -219,6 +252,19 @@ class TableColumn(ValueOp):
     name = Arg((str, int))
     table = Arg(ir.TableExpr)
 
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        schema = self.table.schema()
+
+        FieldName.FieldNameStart(builder)
+        FieldName.FieldNameAddPosition(builder, schema._name_locs[self.name])
+        deref = FieldName.FieldNameEnd(builder)
+
+        FieldRef.FieldRefStart(builder)
+        FieldRef.FieldRefAddRef(builder, deref)
+        FieldRef.FieldRefAddRefType(builder, Deref.FieldName)
+        FieldRef.FieldRefAddRelationIndex(builder, 0)
+        return FieldRef.FieldRefEnd(builder), ExpressionImpl.FieldRef
+
     def __init__(self, name, table):
         schema = table.schema()
         if isinstance(name, int):
@@ -300,6 +346,38 @@ class DatabaseTable(PhysicalTable):
     def change_name(self, new_name):
         return type(self)(new_name, self.args[1], self.source)
 
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        # base
+        RelBase.RelBaseStartArgumentsVector(builder, 0)
+        arguments = builder.EndVector()
+
+        PassThrough.PassThroughStart(builder)
+        output_mapping = PassThrough.PassThroughEnd(builder)
+
+        RelBase.RelBaseStart(builder)
+        RelBase.RelBaseAddArguments(builder, arguments)
+        RelBase.RelBaseAddOutputMapping(builder, output_mapping)
+        RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
+        base = RelBase.RelBaseEnd(builder)
+
+        # schema
+        table_schema_ir = self.schema.compile_ir(builder)
+
+        resource = builder.CreateString(self.source.name)
+
+        # TODO: resource + options API
+
+        Read.ReadStart(builder)
+        Read.ReadAddBase(builder, base)
+        Read.ReadAddResource(builder, resource)
+        Read.ReadAddSchema(builder, table_schema_ir)
+        read = Read.ReadEnd(builder)
+
+        Relation.RelationStart(builder)
+        Relation.RelationAddImpl(builder, read)
+        Relation.RelationAddImplType(builder, RelationImpl.RelationImpl.Read)
+        return Relation.RelationEnd(builder)
+
 
 class SQLQueryResult(TableNode, HasSchema):
     """A table sourced from the result set of a select query"""
@@ -346,6 +424,32 @@ class BinaryOp(ValueOp):
     left = Arg(rlz.any)
     right = Arg(rlz.any)
 
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        CanonicalFunction.CanonicalFunctionStart(builder)
+        CanonicalFunction.CanonicalFunctionAddId(
+            builder,
+            getattr(
+                CanonicalFunctionId.CanonicalFunctionId, type(self).__name__
+            ),
+        )
+        canonical_function = CanonicalFunction.CanonicalFunctionEnd(builder)
+
+        left_ir = self.left.compile_ir(builder)
+        right_ir = self.right.compile_ir(builder)
+
+        Call.CallStartArgumentsVector(builder, 2)
+        builder.PrependUOffsetTRelative(right_ir)
+        builder.PrependUOffsetTRelative(left_ir)
+        arguments = builder.EndVector()
+
+        Call.CallStart(builder)
+        Call.CallAddKind(builder, canonical_function)
+        Call.CallAddKindType(
+            builder, FunctionImpl.FunctionImpl.CanonicalFunction
+        )
+        Call.CallAddArguments(builder, arguments)
+        return Call.CallEnd(builder), ExpressionImpl.Call
+
 
 class Cast(ValueOp):
     arg = Arg(rlz.any)
@@ -357,6 +461,14 @@ class Cast(ValueOp):
 
     def output_type(self):
         return rlz.shape_like(self.arg, dtype=self.to)
+
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        to_type_ir = self.to.compile_ir(builder)
+        expr_ir = self.arg.compile_ir(builder)
+        CastIR.CastStart(builder)
+        CastIR.CastAddExpression(builder, expr_ir)
+        CastIR.CastAddType(builder, to_type_ir)
+        return CastIR.CastEnd(builder), ExpressionImpl.Cast
 
 
 class TypeOf(UnaryOp):
@@ -869,6 +981,51 @@ class StringAscii(UnaryOp):
 class Reduction(ValueOp):
     _reduction = True
 
+    def compile_ir(self, builder) -> int:
+        CanonicalAggregate.CanonicalFunctionStart(builder)
+        CanonicalAggregate.CanonicalFunctionAddId(
+            builder,
+            getattr(
+                CanonicalAggregateId.CanonicalAggregateId, type(self).__name__
+            ),
+        )
+        canon_impl = CanonicalAggregate.CanonicalFunctionEnd(builder)
+
+        try:
+            where = self.where
+        except AttributeError:
+            where = predicate_ir = None
+        else:
+            if where is not None:
+                predicate_ir = where.compile_ir(builder)
+            else:
+                predicate_ir = None
+
+        args = [
+            arg.compile_ir(builder) for arg in self.args if arg is not None
+        ]
+        AggregateCall.AggregateCallStartArgumentsVector(builder, len(args))
+        for arg in reversed(args):
+            builder.PrependUOffsetTRelative(arg)
+        arguments = builder.EndVector()
+
+        AggregateCall.AggregateCallStart(builder)
+        AggregateCall.AggregateCallAddKind(builder, canon_impl)
+        AggregateCall.AggregateCallAddKindType(
+            builder, AggregateImpl.AggregateImpl.CanonicalAggregate
+        )
+
+        # TODO: this doesn't exist in the ibis API yet
+        #  AggregateCall.AggregateCallAddKindOrderings(builder, orderings)
+
+        if predicate_ir is not None:
+            AggregateCall.AggregateCallAddPredicate(builder, predicate_ir)
+        AggregateCall.AggregateCallAddArguments(builder, arguments)
+        return (
+            AggregateCall.AggregateCallEnd(builder),
+            ExpressionImpl.AggregateCall,
+        )
+
 
 class Count(Reduction):
     arg = Arg((ir.ColumnExpr, ir.TableExpr))
@@ -876,6 +1033,50 @@ class Count(Reduction):
 
     def output_type(self):
         return functools.partial(ir.IntegerScalar, dtype=dt.int64)
+
+    def compile_ir(self, builder) -> int:
+        if isinstance(self.arg, ir.TableExpr):
+            id = CanonicalAggregateId.CanonicalAggregateId.CountTable
+        else:
+            id = CanonicalAggregateId.CanonicalAggregateId.Count
+        CanonicalFunction.CanonicalFunctionStart(builder)
+        CanonicalFunction.CanonicalFunctionAddId(builder, id)
+        canon_impl = CanonicalFunction.CanonicalFunctionEnd(builder)
+
+        try:
+            where = self.where
+        except AttributeError:
+            where = predicate_ir = None
+        else:
+            if where is not None:
+                predicate_ir = where.compile_ir(builder)
+            else:
+                predicate_ir = None
+
+        args = []
+        if not isinstance(self.arg, ir.TableExpr):
+            args.append(self.arg.compile_ir(builder))
+        AggregateCall.AggregateCallStartArgumentsVector(builder, len(args))
+        for arg in reversed(args):
+            builder.PrependUOffsetTRelative(arg)
+        arguments = builder.EndVector()
+
+        AggregateCall.AggregateCallStart(builder)
+        AggregateCall.AggregateCallAddKind(builder, canon_impl)
+        AggregateCall.AggregateCallAddKindType(
+            builder, AggregateImpl.AggregateImpl.CanonicalAggregate
+        )
+
+        # TODO: this doesn't exist in the ibis API yet
+        #  AggregateCall.AggregateCallAddKindOrderings(builder, orderings)
+
+        if predicate_ir is not None:
+            AggregateCall.AggregateCallAddPredicate(builder, predicate_ir)
+        AggregateCall.AggregateCallAddArguments(builder, arguments)
+        return (
+            AggregateCall.AggregateCallEnd(builder),
+            ExpressionImpl.AggregateCall,
+        )
 
 
 class Arbitrary(Reduction):
@@ -1936,6 +2137,19 @@ class SortKey(Node):
     def resolve_name(self):
         return self.expr.get_name()
 
+    def compile_ir(self, builder) -> int:
+        expr = self.expr.compile_ir(builder)
+        SortKeyType.SortKeyStart(builder)
+        SortKeyType.SortKeyAddExpression(builder, expr)
+        # TODO: handle nulls
+        SortKeyType.SortKeyAddOrdering(
+            builder,
+            Ordering.Ordering.ASCENDING_THEN_NULLS
+            if self.ascending
+            else Ordering.Ordering.DESCENDING_THEN_NULLS,
+        )
+        return SortKeyType.SortKeyEnd(builder)
+
 
 class DeferredSortKey:
     def __init__(self, what, ascending=True):
@@ -2052,7 +2266,7 @@ class Selection(TableNode, HasSchema):
                 names.extend(schema.names)
                 types.extend(schema.types)
 
-        return Schema(names, types)
+        return sch.Schema(names, types)
 
     def blocks(self):
         return bool(self.selections)
@@ -2108,6 +2322,126 @@ class Selection(TableNode, HasSchema):
                 )
 
         return Selection(expr, [], sort_keys=sort_exprs)
+
+    def compile_ir(self, builder) -> int:
+        # TODO: split into three different IR nodes until we can
+        # refactor the API to split
+        op = self.table.op()
+        base = op.compile_ir(builder)
+
+        if self.predicates:
+            # first handle filter
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            filter_arguments = builder.EndVector()
+
+            PassThrough.PassThroughStart(builder)
+            filter_output_mapping = PassThrough.PassThroughEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, filter_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, filter_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
+            filter_base = RelBase.RelBaseEnd(builder)
+
+            predicate_expr = functools.reduce(operator.and_, self.predicates)
+            predicate_ir = predicate_expr.compile_ir(builder)
+
+            Filter.FilterStart(builder)
+            Filter.FilterAddBase(builder, filter_base)
+            Filter.FilterAddPredicate(builder, predicate_ir)
+            filter = Filter.FilterEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, filter)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.Filter
+            )
+            base = Relation.RelationEnd(builder)
+
+        if self.selections:
+            # projection (selections here)
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            project_arguments = builder.EndVector()
+
+            schema = self.schema
+
+            Remap.RemapStartMappingVector(builder, len(schema))
+            for name in reversed(self.schema.names):
+                builder.PrependUint32(schema._name_locs[name])
+            project_mapping = builder.EndVector()
+
+            Remap.RemapStart(builder)
+            Remap.RemapAddMapping(builder, project_mapping)
+            project_output_mapping = Remap.RemapEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, project_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, project_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.Remap)
+            project_base = RelBase.RelBaseEnd(builder)
+
+            project_expr_irs = [
+                project_expr.compile_ir(builder)
+                for project_expr in self.selections
+            ]
+
+            Project.ProjectStartExpressionsVector(
+                builder, len(project_expr_irs)
+            )
+            for project_expr_ir in reversed(project_expr_irs):
+                builder.PrependUOffsetTRelative(project_expr_ir)
+            project_exprs = builder.EndVector()
+
+            Project.ProjectStart(builder)
+            Project.ProjectAddBase(builder, project_base)
+            Project.ProjectAddExpressions(builder, project_exprs)
+            project = Project.ProjectEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, project)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.Project
+            )
+            base = Relation.RelationEnd(builder)
+
+        # then order by
+        if self.sort_keys:
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            order_by_arguments = builder.EndVector()
+
+            PassThrough.PassThroughStart(builder)
+            order_by_output_mapping = PassThrough.PassThroughEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, order_by_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, order_by_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
+            order_by_base = RelBase.RelBaseEnd(builder)
+
+            order_by_expr_irs = [
+                order_by_expr.compile_ir(builder)
+                for order_by_expr in self.sort_keys
+            ]
+            OrderBy.OrderByStartKeysVector(builder, len(order_by_expr_irs))
+            for order_by_expr_ir in reversed(order_by_expr_irs):
+                builder.PrependUOffsetTRelative(order_by_expr_ir)
+            order_by_exprs = builder.EndVector()
+
+            OrderBy.OrderByStart(builder)
+            OrderBy.OrderByAddBase(builder, order_by_base)
+            OrderBy.OrderByAddKeys(builder, order_by_exprs)
+            order_by = OrderBy.OrderByEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, order_by)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.OrderBy
+            )
+            base = Relation.RelationEnd(builder)
+        return base
 
 
 class AggregateSelection:
@@ -2310,7 +2644,7 @@ class Aggregation(TableNode, HasSchema):
                 names.append(e.get_name())
                 types.append(e.type())
 
-        return Schema(names, types)
+        return sch.Schema(names, types)
 
     def sort_by(self, expr, sort_exprs):
         sort_exprs = util.promote_list(sort_exprs)
@@ -2327,6 +2661,166 @@ class Aggregation(TableNode, HasSchema):
             )
 
         return Selection(expr, [], sort_keys=sort_exprs)
+
+    def compile_ir(self, builder) -> int:
+        # TODO: split into three different IR nodes until we can
+        # refactor the API to split
+        op = self.table.op()
+        base = op.compile_ir(builder)
+
+        # TODO: dedup
+        if self.predicates:
+            # first handle filter
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            filter_arguments = builder.EndVector()
+
+            PassThrough.PassThroughStart(builder)
+            filter_output_mapping = PassThrough.PassThroughEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, filter_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, filter_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
+            filter_base = RelBase.RelBaseEnd(builder)
+
+            predicate_expr = functools.reduce(operator.and_, self.predicates)
+            predicate_ir = predicate_expr.compile_ir(builder)
+
+            Filter.FilterStart(builder)
+            Filter.FilterAddBase(builder, filter_base)
+            Filter.FilterAddPredicate(builder, predicate_ir)
+            filter = Filter.FilterEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, filter)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.Filter
+            )
+            base = Relation.RelationEnd(builder)
+
+        if self.by or self.metrics:
+            # projection (selections here)
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            aggregate_arguments = builder.EndVector()
+
+            schema = self.schema
+
+            Remap.RemapStartMappingVector(builder, len(schema))
+            for name in reversed(self.schema.names):
+                builder.PrependUint32(schema._name_locs[name])
+            aggregate_mapping = builder.EndVector()
+
+            Remap.RemapStart(builder)
+            Remap.RemapAddMapping(builder, aggregate_mapping)
+            aggregate_output_mapping = Remap.RemapEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, aggregate_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, aggregate_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.Remap)
+            aggregate_base = RelBase.RelBaseEnd(builder)
+
+            aggregate_expr_irs = [
+                expr.compile_ir(builder) for expr in self.metrics
+            ]
+
+            Aggregate.AggregateStartAggregationsVector(
+                builder, len(aggregate_expr_irs)
+            )
+            for expr_ir in reversed(aggregate_expr_irs):
+                builder.PrependUOffsetTRelative(expr_ir)
+            aggregate_exprs = builder.EndVector()
+
+            aggregate_keys_irs = [expr.compile_ir(builder) for expr in self.by]
+
+            Aggregate.AggregateStartKeysVector(
+                builder, len(aggregate_keys_irs)
+            )
+            for expr in reversed(aggregate_keys_irs):
+                builder.PrependUOffsetTRelative(expr)
+            aggregate_keys = builder.EndVector()
+
+            Aggregate.AggregateStart(builder)
+            Aggregate.AggregateAddBase(builder, aggregate_base)
+            Aggregate.AggregateAddAggregations(builder, aggregate_exprs)
+            Aggregate.AggregateAddKeys(builder, aggregate_keys)
+            aggregate = Aggregate.AggregateEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, aggregate)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.Aggregate
+            )
+            base = Relation.RelationEnd(builder)
+
+        if self.having:
+            # first handle filter
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            filter_arguments = builder.EndVector()
+
+            PassThrough.PassThroughStart(builder)
+            filter_output_mapping = PassThrough.PassThroughEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, filter_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, filter_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
+            filter_base = RelBase.RelBaseEnd(builder)
+
+            predicate_expr = functools.reduce(operator.and_, self.having)
+            predicate_ir = predicate_expr.compile_ir(builder)
+
+            Filter.FilterStart(builder)
+            Filter.FilterAddBase(builder, filter_base)
+            Filter.FilterAddPredicate(builder, predicate_ir)
+            filter = Filter.FilterEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, filter)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.Filter
+            )
+            base = Relation.RelationEnd(builder)
+
+        # then order by
+        if self.sort_keys:
+            RelBase.RelBaseStartArgumentsVector(builder, 1)
+            builder.PrependUOffsetTRelative(base)
+            order_by_arguments = builder.EndVector()
+
+            PassThrough.PassThroughStart(builder)
+            order_by_output_mapping = PassThrough.PassThroughEnd(builder)
+
+            RelBase.RelBaseStart(builder)
+            RelBase.RelBaseAddArguments(builder, order_by_arguments)
+            RelBase.RelBaseAddOutputMapping(builder, order_by_output_mapping)
+            RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
+            order_by_base = RelBase.RelBaseEnd(builder)
+
+            order_by_expr_irs = [
+                order_by_expr.compile_ir(builder)
+                for order_by_expr in self.sort_keys
+            ]
+            OrderBy.OrderByStartKeysVector(builder, len(order_by_expr_irs))
+            for order_by_expr_ir in reversed(order_by_expr_irs):
+                builder.PrependUOffsetTRelative(order_by_expr_ir)
+            order_by_exprs = builder.EndVector()
+
+            OrderBy.OrderByStart(builder)
+            OrderBy.OrderByAddBase(builder, order_by_base)
+            OrderBy.OrderByAddKeys(builder, order_by_exprs)
+            order_by = OrderBy.OrderByEnd(builder)
+
+            Relation.RelationStart(builder)
+            Relation.RelationAddImpl(builder, order_by)
+            Relation.RelationAddImplType(
+                builder, RelationImpl.RelationImpl.OrderBy
+            )
+            base = Relation.RelationEnd(builder)
+        return base
 
 
 class NumericBinaryOp(BinaryOp):
@@ -3083,6 +3577,16 @@ class Literal(ValueOp):
         """
         return hash(self.dtype._literal_value_hash_key(self.value))
 
+    def compile_ir(self, builder) -> int:
+        value, ir_literal_type = self.dtype.make_ir_literal(
+            builder, self.value
+        )
+
+        IRLiteral.LiteralStart(builder)
+        IRLiteral.LiteralAddImpl(builder, value)
+        IRLiteral.LiteralAddImplType(builder, ir_literal_type)
+        return IRLiteral.LiteralEnd(builder), ExpressionImpl.Literal
+
 
 class NullLiteral(Literal):
     """Typeless NULL literal"""
@@ -3711,4 +4215,6 @@ class NotExistsSubquery(Node):
     predicates = Arg(rlz.noop)
 
     def output_type(self):
+        return ir.ExistsExpr
+        return ir.ExistsExpr
         return ir.ExistsExpr
