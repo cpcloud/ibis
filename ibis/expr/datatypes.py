@@ -53,7 +53,6 @@ from org.apache.arrow.computeir.flatbuf import (
     UInt32Literal,
     UInt64Literal,
 )
-from org.apache.arrow.flatbuf import Array as ArrayType
 from org.apache.arrow.flatbuf import Binary as BinaryType
 from org.apache.arrow.flatbuf import Bool as BooleanType
 from org.apache.arrow.flatbuf import Date as DateType
@@ -364,12 +363,10 @@ class Date(Primitive):
         return Field.FieldEnd(builder)
 
     def make_ir_literal(self, builder, value) -> Tuple[int, int]:
+        # milliseconds since epoch
+        value = pd.Timestamp(value, unit="D").value // 1_000_000
         self.ir_literal_type.DateLiteralStart(builder)
-        self.ir_literal_type.DateLiteralAddValue(
-            # milliseconds since epoch
-            builder,
-            pd.Timestamp(value, unit="D").value // 1_000_000,
-        )
+        self.ir_literal_type.DateLiteralAddValue(builder, value)
         return (
             self.ir_literal_type.DateLiteralEnd(builder),
             LiteralImpl.LiteralImpl.DateLiteral,
@@ -795,7 +792,7 @@ class Interval(DataType):
 
         return (
             self.ir_literal_type.IntervalLiteralEnd(builder),
-            LiteralImpl.LiteralImpl.DateLiteral,
+            LiteralImpl.LiteralImpl.IntervalLiteral,
         )
 
 
@@ -945,7 +942,7 @@ class Array(Variadic):
     scalar = ir.ArrayScalar
     column = ir.ArrayColumn
 
-    ir_type = ArrayType
+    ir_type = ListType
     ir_literal_type = ArrayLiteral
 
     __slots__ = ('value_type',)

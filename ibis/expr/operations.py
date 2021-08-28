@@ -10,26 +10,18 @@ import toolz
 from cached_property import cached_property
 from org.apache.arrow.computeir.flatbuf import (
     Aggregate,
-    AggregateCall,
-    AggregateImpl,
     Call,
-    CanonicalAggregate,
-    CanonicalAggregateId,
-    CanonicalFunction,
     CanonicalFunctionId,
-)
-from org.apache.arrow.computeir.flatbuf import Cast as CastIR
-from org.apache.arrow.computeir.flatbuf import (
+    Collation,
     Emit,
     FieldName,
     FieldRef,
     Filter,
-    FunctionImpl,
+    Grouping,
 )
 from org.apache.arrow.computeir.flatbuf import Literal as IRLiteral
 from org.apache.arrow.computeir.flatbuf import (
     OrderBy,
-    Ordering,
     PassThrough,
     Project,
     Read,
@@ -348,14 +340,10 @@ class DatabaseTable(PhysicalTable):
 
     def compile_ir(self, builder) -> Tuple[int, int]:
         # base
-        RelBase.RelBaseStartArgumentsVector(builder, 0)
-        arguments = builder.EndVector()
-
         PassThrough.PassThroughStart(builder)
         output_mapping = PassThrough.PassThroughEnd(builder)
 
         RelBase.RelBaseStart(builder)
-        RelBase.RelBaseAddArguments(builder, arguments)
         RelBase.RelBaseAddOutputMapping(builder, output_mapping)
         RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
         base = RelBase.RelBaseEnd(builder)
@@ -417,6 +405,22 @@ class TableArrayView(ValueOp):
 class UnaryOp(ValueOp):
     arg = Arg(rlz.any)
 
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        id = getattr(
+            CanonicalFunctionId.CanonicalFunctionId, type(self).__name__
+        )
+
+        arg_ir = self.arg.compile_ir(builder)
+
+        Call.CallStartArgumentsVector(builder, 1)
+        builder.PrependUOffsetTRelative(arg_ir)
+        arguments = builder.EndVector()
+
+        Call.CallStart(builder)
+        Call.CallAddKind(builder, id)
+        Call.CallAddArguments(builder, arguments)
+        return Call.CallEnd(builder), ExpressionImpl.Call
+
 
 class BinaryOp(ValueOp):
     """A binary operation"""
@@ -425,14 +429,9 @@ class BinaryOp(ValueOp):
     right = Arg(rlz.any)
 
     def compile_ir(self, builder) -> Tuple[int, int]:
-        CanonicalFunction.CanonicalFunctionStart(builder)
-        CanonicalFunction.CanonicalFunctionAddId(
-            builder,
-            getattr(
-                CanonicalFunctionId.CanonicalFunctionId, type(self).__name__
-            ),
+        id = getattr(
+            CanonicalFunctionId.CanonicalFunctionId, type(self).__name__
         )
-        canonical_function = CanonicalFunction.CanonicalFunctionEnd(builder)
 
         left_ir = self.left.compile_ir(builder)
         right_ir = self.right.compile_ir(builder)
@@ -443,10 +442,7 @@ class BinaryOp(ValueOp):
         arguments = builder.EndVector()
 
         Call.CallStart(builder)
-        Call.CallAddKind(builder, canonical_function)
-        Call.CallAddKindType(
-            builder, FunctionImpl.FunctionImpl.CanonicalFunction
-        )
+        Call.CallAddKind(builder, id)
         Call.CallAddArguments(builder, arguments)
         return Call.CallEnd(builder), ExpressionImpl.Call
 
@@ -463,12 +459,16 @@ class Cast(ValueOp):
         return rlz.shape_like(self.arg, dtype=self.to)
 
     def compile_ir(self, builder) -> Tuple[int, int]:
-        to_type_ir = self.to.compile_ir(builder)
-        expr_ir = self.arg.compile_ir(builder)
-        CastIR.CastStart(builder)
-        CastIR.CastAddExpression(builder, expr_ir)
-        CastIR.CastAddType(builder, to_type_ir)
-        return CastIR.CastEnd(builder), ExpressionImpl.Cast
+        arg_ir = self.arg.compile_ir(builder)
+
+        Call.CallStartArgumentsVector(builder, 1)
+        builder.PrependUOffsetTRelative(arg_ir)
+        arguments = builder.EndVector()
+
+        Call.CallStart(builder)
+        Call.CallAddKind(builder, CanonicalFunctionId.CanonicalFunctionId.Cast)
+        Call.CallAddArguments(builder, arguments)
+        return Call.CallEnd(builder), ExpressionImpl.Call
 
 
 class TypeOf(UnaryOp):
@@ -981,50 +981,36 @@ class StringAscii(UnaryOp):
 class Reduction(ValueOp):
     _reduction = True
 
-    def compile_ir(self, builder) -> int:
-        CanonicalAggregate.CanonicalFunctionStart(builder)
-        CanonicalAggregate.CanonicalFunctionAddId(
-            builder,
-            getattr(
-                CanonicalAggregateId.CanonicalAggregateId, type(self).__name__
-            ),
-        )
-        canon_impl = CanonicalAggregate.CanonicalFunctionEnd(builder)
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        import ibis
+        from ibis import NA
 
-        try:
-            where = self.where
-        except AttributeError:
-            where = predicate_ir = None
-        else:
-            if where is not None:
-                predicate_ir = where.compile_ir(builder)
-            else:
-                predicate_ir = None
+        id = getattr(
+            CanonicalFunctionId.CanonicalFunctionId, type(self).__name__
+        )
+
+        where = self.where
 
         args = [
-            arg.compile_ir(builder) for arg in self.args if arg is not None
+            (
+                ibis.ifelse(where, arg, NA) if where is not None else arg
+            ).compile_ir(builder)
+            for arg in self.args
+            if arg is not None and arg is not where
         ]
-        AggregateCall.AggregateCallStartArgumentsVector(builder, len(args))
+        Call.CallStartArgumentsVector(builder, len(args))
         for arg in reversed(args):
             builder.PrependUOffsetTRelative(arg)
         arguments = builder.EndVector()
 
-        AggregateCall.AggregateCallStart(builder)
-        AggregateCall.AggregateCallAddKind(builder, canon_impl)
-        AggregateCall.AggregateCallAddKindType(
-            builder, AggregateImpl.AggregateImpl.CanonicalAggregate
-        )
+        Call.CallStart(builder)
+        Call.CallAddKind(builder, id)
 
         # TODO: this doesn't exist in the ibis API yet
         #  AggregateCall.AggregateCallAddKindOrderings(builder, orderings)
 
-        if predicate_ir is not None:
-            AggregateCall.AggregateCallAddPredicate(builder, predicate_ir)
-        AggregateCall.AggregateCallAddArguments(builder, arguments)
-        return (
-            AggregateCall.AggregateCallEnd(builder),
-            ExpressionImpl.AggregateCall,
-        )
+        Call.CallAddArguments(builder, arguments)
+        return Call.CallEnd(builder), ExpressionImpl.Call
 
 
 class Count(Reduction):
@@ -1034,48 +1020,41 @@ class Count(Reduction):
     def output_type(self):
         return functools.partial(ir.IntegerScalar, dtype=dt.int64)
 
-    def compile_ir(self, builder) -> int:
-        if isinstance(self.arg, ir.TableExpr):
-            id = CanonicalAggregateId.CanonicalAggregateId.CountTable
-        else:
-            id = CanonicalAggregateId.CanonicalAggregateId.Count
-        CanonicalFunction.CanonicalFunctionStart(builder)
-        CanonicalFunction.CanonicalFunctionAddId(builder, id)
-        canon_impl = CanonicalFunction.CanonicalFunctionEnd(builder)
+    def compile_ir(self, builder) -> Tuple[int, int]:
+        import ibis
+        from ibis import NA
 
-        try:
-            where = self.where
-        except AttributeError:
-            where = predicate_ir = None
+        if isinstance(self.arg, ir.TableExpr):
+            id = CanonicalFunctionId.CanonicalFunctionId.CountTable
         else:
-            if where is not None:
-                predicate_ir = where.compile_ir(builder)
-            else:
-                predicate_ir = None
+            id = CanonicalFunctionId.CanonicalFunctionId.Count
+
+        where = self.where
+        arg = self.arg
 
         args = []
-        if not isinstance(self.arg, ir.TableExpr):
-            args.append(self.arg.compile_ir(builder))
-        AggregateCall.AggregateCallStartArgumentsVector(builder, len(args))
+        if not isinstance(arg, ir.TableExpr):
+            args.append(
+                (
+                    ibis.ifelse(where, arg, NA) if where is not None else arg
+                ).compile_ir(builder)
+            )
+
+        Call.CallStartArgumentsVector(builder, len(args))
         for arg in reversed(args):
             builder.PrependUOffsetTRelative(arg)
         arguments = builder.EndVector()
 
-        AggregateCall.AggregateCallStart(builder)
-        AggregateCall.AggregateCallAddKind(builder, canon_impl)
-        AggregateCall.AggregateCallAddKindType(
-            builder, AggregateImpl.AggregateImpl.CanonicalAggregate
-        )
+        Call.CallStart(builder)
+        Call.CallAddKind(builder, id)
 
         # TODO: this doesn't exist in the ibis API yet
-        #  AggregateCall.AggregateCallAddKindOrderings(builder, orderings)
+        #  Call.CallAddKindOrderings(builder, orderings)
 
-        if predicate_ir is not None:
-            AggregateCall.AggregateCallAddPredicate(builder, predicate_ir)
-        AggregateCall.AggregateCallAddArguments(builder, arguments)
+        Call.CallAddArguments(builder, arguments)
         return (
-            AggregateCall.AggregateCallEnd(builder),
-            ExpressionImpl.AggregateCall,
+            Call.CallEnd(builder),
+            ExpressionImpl.Call,
         )
 
 
@@ -2142,11 +2121,11 @@ class SortKey(Node):
         SortKeyType.SortKeyStart(builder)
         SortKeyType.SortKeyAddExpression(builder, expr)
         # TODO: handle nulls
-        SortKeyType.SortKeyAddOrdering(
+        SortKeyType.SortKeyAddCollation(
             builder,
-            Ordering.Ordering.ASCENDING_THEN_NULLS
+            Collation.Collation.ASCENDING_THEN_NULLS
             if self.ascending
-            else Ordering.Ordering.DESCENDING_THEN_NULLS,
+            else Collation.Collation.DESCENDING_THEN_NULLS,
         )
         return SortKeyType.SortKeyEnd(builder)
 
@@ -2331,15 +2310,10 @@ class Selection(TableNode, HasSchema):
 
         if self.predicates:
             # first handle filter
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            filter_arguments = builder.EndVector()
-
             PassThrough.PassThroughStart(builder)
             filter_output_mapping = PassThrough.PassThroughEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, filter_arguments)
             RelBase.RelBaseAddOutputMapping(builder, filter_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
             filter_base = RelBase.RelBaseEnd(builder)
@@ -2349,6 +2323,7 @@ class Selection(TableNode, HasSchema):
 
             Filter.FilterStart(builder)
             Filter.FilterAddBase(builder, filter_base)
+            Filter.FilterAddRel(builder, base)
             Filter.FilterAddPredicate(builder, predicate_ir)
             filter = Filter.FilterEnd(builder)
 
@@ -2361,10 +2336,6 @@ class Selection(TableNode, HasSchema):
 
         if self.selections:
             # projection (selections here)
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            project_arguments = builder.EndVector()
-
             schema = self.schema
 
             Remap.RemapStartMappingVector(builder, len(schema))
@@ -2377,7 +2348,6 @@ class Selection(TableNode, HasSchema):
             project_output_mapping = Remap.RemapEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, project_arguments)
             RelBase.RelBaseAddOutputMapping(builder, project_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.Remap)
             project_base = RelBase.RelBaseEnd(builder)
@@ -2396,6 +2366,7 @@ class Selection(TableNode, HasSchema):
 
             Project.ProjectStart(builder)
             Project.ProjectAddBase(builder, project_base)
+            Project.ProjectAddRel(builder, base)
             Project.ProjectAddExpressions(builder, project_exprs)
             project = Project.ProjectEnd(builder)
 
@@ -2408,15 +2379,10 @@ class Selection(TableNode, HasSchema):
 
         # then order by
         if self.sort_keys:
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            order_by_arguments = builder.EndVector()
-
             PassThrough.PassThroughStart(builder)
             order_by_output_mapping = PassThrough.PassThroughEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, order_by_arguments)
             RelBase.RelBaseAddOutputMapping(builder, order_by_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
             order_by_base = RelBase.RelBaseEnd(builder)
@@ -2431,6 +2397,7 @@ class Selection(TableNode, HasSchema):
             order_by_exprs = builder.EndVector()
 
             OrderBy.OrderByStart(builder)
+            OrderBy.OrderByAddRel(builder, base)
             OrderBy.OrderByAddBase(builder, order_by_base)
             OrderBy.OrderByAddKeys(builder, order_by_exprs)
             order_by = OrderBy.OrderByEnd(builder)
@@ -2671,15 +2638,10 @@ class Aggregation(TableNode, HasSchema):
         # TODO: dedup
         if self.predicates:
             # first handle filter
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            filter_arguments = builder.EndVector()
-
             PassThrough.PassThroughStart(builder)
             filter_output_mapping = PassThrough.PassThroughEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, filter_arguments)
             RelBase.RelBaseAddOutputMapping(builder, filter_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
             filter_base = RelBase.RelBaseEnd(builder)
@@ -2689,6 +2651,7 @@ class Aggregation(TableNode, HasSchema):
 
             Filter.FilterStart(builder)
             Filter.FilterAddBase(builder, filter_base)
+            Filter.FilterAddRel(builder, base)
             Filter.FilterAddPredicate(builder, predicate_ir)
             filter = Filter.FilterEnd(builder)
 
@@ -2701,10 +2664,6 @@ class Aggregation(TableNode, HasSchema):
 
         if self.by or self.metrics:
             # projection (selections here)
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            aggregate_arguments = builder.EndVector()
-
             schema = self.schema
 
             Remap.RemapStartMappingVector(builder, len(schema))
@@ -2717,7 +2676,6 @@ class Aggregation(TableNode, HasSchema):
             aggregate_output_mapping = Remap.RemapEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, aggregate_arguments)
             RelBase.RelBaseAddOutputMapping(builder, aggregate_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.Remap)
             aggregate_base = RelBase.RelBaseEnd(builder)
@@ -2726,7 +2684,7 @@ class Aggregation(TableNode, HasSchema):
                 expr.compile_ir(builder) for expr in self.metrics
             ]
 
-            Aggregate.AggregateStartAggregationsVector(
+            Aggregate.AggregateStartMeasuresVector(
                 builder, len(aggregate_expr_irs)
             )
             for expr_ir in reversed(aggregate_expr_irs):
@@ -2734,18 +2692,20 @@ class Aggregation(TableNode, HasSchema):
             aggregate_exprs = builder.EndVector()
 
             aggregate_keys_irs = [expr.compile_ir(builder) for expr in self.by]
+            Grouping.GroupingStartKeysVector(builder, len(aggregate_keys_irs))
+            for key_ir in reversed(aggregate_keys_irs):
+                builder.PrependUOffsetTRelative(key_ir)
+            grouping = builder.EndVector()
 
-            Aggregate.AggregateStartKeysVector(
-                builder, len(aggregate_keys_irs)
-            )
-            for expr in reversed(aggregate_keys_irs):
-                builder.PrependUOffsetTRelative(expr)
+            Aggregate.AggregateStartGroupingsVector(builder, 1)
+            builder.PrependUOffsetTRelative(grouping)
             aggregate_keys = builder.EndVector()
 
             Aggregate.AggregateStart(builder)
             Aggregate.AggregateAddBase(builder, aggregate_base)
-            Aggregate.AggregateAddAggregations(builder, aggregate_exprs)
-            Aggregate.AggregateAddKeys(builder, aggregate_keys)
+            Aggregate.AggregateAddRel(builder, base)
+            Aggregate.AggregateAddMeasures(builder, aggregate_exprs)
+            Aggregate.AggregateAddGroupings(builder, aggregate_keys)
             aggregate = Aggregate.AggregateEnd(builder)
 
             Relation.RelationStart(builder)
@@ -2757,15 +2717,10 @@ class Aggregation(TableNode, HasSchema):
 
         if self.having:
             # first handle filter
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            filter_arguments = builder.EndVector()
-
             PassThrough.PassThroughStart(builder)
             filter_output_mapping = PassThrough.PassThroughEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, filter_arguments)
             RelBase.RelBaseAddOutputMapping(builder, filter_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
             filter_base = RelBase.RelBaseEnd(builder)
@@ -2775,6 +2730,7 @@ class Aggregation(TableNode, HasSchema):
 
             Filter.FilterStart(builder)
             Filter.FilterAddBase(builder, filter_base)
+            Filter.FilterAddRel(builder, base)
             Filter.FilterAddPredicate(builder, predicate_ir)
             filter = Filter.FilterEnd(builder)
 
@@ -2787,15 +2743,10 @@ class Aggregation(TableNode, HasSchema):
 
         # then order by
         if self.sort_keys:
-            RelBase.RelBaseStartArgumentsVector(builder, 1)
-            builder.PrependUOffsetTRelative(base)
-            order_by_arguments = builder.EndVector()
-
             PassThrough.PassThroughStart(builder)
             order_by_output_mapping = PassThrough.PassThroughEnd(builder)
 
             RelBase.RelBaseStart(builder)
-            RelBase.RelBaseAddArguments(builder, order_by_arguments)
             RelBase.RelBaseAddOutputMapping(builder, order_by_output_mapping)
             RelBase.RelBaseAddOutputMappingType(builder, Emit.Emit.PassThrough)
             order_by_base = RelBase.RelBaseEnd(builder)
@@ -2810,6 +2761,7 @@ class Aggregation(TableNode, HasSchema):
             order_by_exprs = builder.EndVector()
 
             OrderBy.OrderByStart(builder)
+            OrderBy.OrderByAddRel(builder, base)
             OrderBy.OrderByAddBase(builder, order_by_base)
             OrderBy.OrderByAddKeys(builder, order_by_exprs)
             order_by = OrderBy.OrderByEnd(builder)
