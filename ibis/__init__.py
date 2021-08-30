@@ -47,18 +47,7 @@ with ibis.config.config_prefix('sql'):
         'Number of rows to be retrieved for an unlimited table expression',
     )
 
-try:
-    import importlib.metadata as importlib_metadata
-except ImportError:
-    # TODO: remove this when Python 3.7 support is dropped
-    import importlib_metadata
-
-try:
-    __version__ = importlib_metadata.version(__name__)
-except Exception:
-    __version__ = importlib_metadata.version("ibis-framework")
-
-del importlib_metadata
+__version__ = "1.4.0"
 
 
 def __getattr__(name: str) -> BaseBackend:
