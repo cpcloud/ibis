@@ -1,0 +1,51 @@
+name: Update copyright year(s)
+
+on:
+  schedule:
+    - cron: "0 3 1 1 *"
+  # this `on` allows ad hoc running of this workflow
+  # e.g., gh workflow run update-licenses.yaml
+  workflow_dispatch:
+jobs:
+  update-license-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - uses: FantasticFiasco/action-update-license-year@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: LICENSE.txt
+          branchName: license/file/{{currentYear}}
+          commitTitle: "chore(license): update LICENSE.txt"
+          prTitle: "chore(license): update LICENSE.txt"
+
+  update-source-files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - uses: FantasticFiasco/action-update-license-year@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: ibis/**/*.py
+          branchName: license/sources/{{currentYear}}
+          commitTitle: "chore(license/sources): update license in code"
+          prTitle: "chore(license): update license in code"
+
+  update-website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - uses: FantasticFiasco/action-update-license-year@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: docs/web/config.yml
+          from: (?<=Copyright )(?<from>\d{4})
+          branchName: license/website/{{currentYear}}
+          commitTitle: "chore(license): update license"
+          prTitle: "chore(license): update license on the website"

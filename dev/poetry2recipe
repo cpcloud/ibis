@@ -1,0 +1,130 @@
+#!/usr/bin/env nix-shell
+#!nix-shell --pure -p python3Packages.tomli python3Packages.poetry-core python3Packages.ruamel-yaml python3Packages.click -i python
+# vim: filetype=python
+
+import io
+import re
+from pathlib import Path
+from typing import Optional, Sequence
+
+import click
+import tomli
+from poetry.core.factory import Factory
+from poetry.core.masonry.builders.sdist import SdistBuilder
+from ruamel.yaml import YAML
+
+
+@click.command()
+@click.option(
+    "-i",
+    "--input-directory",
+    type=click.Path(
+        exists=True, file_okay=False, dir_okay=True, path_type=Path
+    ),
+    default=Path(__file__).parent.parent.absolute(),
+)
+@click.option(
+    "-o",
+    "--output-file",
+    type=click.File(mode="w"),
+    default=click.get_text_stream('stdout'),
+)
+@click.option(
+    "-r",
+    "--recipe-maintainers",
+    type=list,
+    default=["jreback", "xmnlab", "datapythonista"],
+)
+@click.option("-w", "--width", type=int, default=100)
+@click.option("-n", "--noarch", type=str, default="python")
+@click.option("-s", "--sha256", type=str, default=None)
+@click.option("-u", "--url", type=str, default=None)
+def main(
+    input_directory: Path,
+    output_file,
+    recipe_maintainers: Sequence[str],
+    width: int,
+    noarch: str,
+    sha256: Optional[str],
+    url: Optional[str],
+) -> None:
+    toml = tomli.loads(input_directory.joinpath('pyproject.toml').read_text())
+    poetry2conda = toml["tool"]["poetry2conda"]
+    poetry2conda_deps = poetry2conda["dependencies"]
+    pip_deps = {
+        dep
+        for dep, info in poetry2conda_deps.items()
+        if info.get("channel") == "pip"
+    }
+    renames = {
+        dep: info.get("name", dep) for dep, info in poetry2conda_deps.items()
+    }
+
+    poetry = Factory().create_poetry(input_directory)
+    builder = SdistBuilder(poetry)
+    requires = builder._package.requires
+    run = []
+    for dep in requires:
+        if dep.name not in pip_deps:
+            match = re.match(r"(.+) \((.+)\)", dep.to_pep_508())
+            assert match is not None
+            name = match.group(1)
+            constraint = match.group(2)
+            new_name = renames.get(name, name)
+            run.append(f"{new_name}{constraint}")
+
+    poetry = poetry.pyproject.poetry_config
+    version = poetry["version"]
+
+    output = {
+        "package": {"name": "ibis-framework", "version": str(version)},
+        "source": (
+            {"url": str(url), "sha256": sha256}
+            if url is not None and sha256 is not None
+            else {"path": str(input_directory)}
+        ),
+        "build": {
+            "noarch": noarch,
+            "number": 0,
+            "script": "{{ PYTHON }} -m pip install . --no-deps --ignore-installed --no-cache-dir -vvv",  # noqa: E501
+            "skip": True,
+        },
+        "requirements": {
+            "host": ["pip", "python", "setuptools", "poetry"],
+            "run": run,
+        },
+        "test": {
+            "imports": ["ibis"]
+            + sorted(
+                imp
+                for imp in set(
+                    map(str, poetry["plugins"]["ibis.backends"].values())
+                )
+                # TODO: cannot import impala because a recent version of impyla
+                # isn't available on conda-forge
+                if imp != "ibis.backends.impala"
+            ),
+        },
+        "about": {
+            "license": "Apache-2.0",
+            "license_family": "Apache",
+            "license_file": "LICENSE.txt",
+            "home": "http://www.ibis-project.org",
+            "summary": "Productivity-centric Python Big Data Framework",
+        },
+        "extra": {"recipe-maintainers": recipe_maintainers},
+    }
+
+    yaml = YAML(typ='rt')
+    string_io = io.StringIO()
+    yaml.dump(output, string_io)
+    yaml_str = string_io.getvalue()
+    yaml = YAML(typ='rt')
+    data = yaml.load(yaml_str)
+    data["build"].insert(1, "skip", True, comment="[py<37]")
+    yaml.width = width
+    yaml.dump(data, output_file)
+
+
+if __name__ == "__main__":
+    main()

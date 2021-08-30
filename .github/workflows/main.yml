@@ -1,79 +1,272 @@
-name: Main
+name: Continuous Integration
 
 on:
   push:
-    branches: master
+    branches:
+      - master
   pull_request:
-    branches: master
+    branches:
+      - master
 
 jobs:
-  Tests_pandas:
-    name: Tests pandas / files
+  commitlint:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
+
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          extraPullNames: nix-community
+
+      - name: get base commit
+        id: get_base
+        run: echo "::set-output name=commit::$(git rev-list '${{ github.event.pull_request.base.sha }}..${{ github.sha }}' | tail -n1)"
+
+      - name: lint commits
+        run: nix-shell -A commitlint --pure --run 'commitlint --from=${{ steps.get_base.outputs.commit }} --to=${{ github.sha }}' --keep-going
+  lint:
+    runs-on: ubuntu-latest
+    needs:
+      - commitlint
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
+
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: nix-community
+
+      - name: pre-commit checks
+        run: nix-shell --pure -A python39 --run 'pre-commit run --all-files' --keep-going
+  nix:
     runs-on: ${{ matrix.os }}
-    env:
-      BACKENDS: "pandas csv parquet hdf5"
+    needs:
+      - commitlint
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python_version: ["3.7", "3.9"]
+        os:
+          - ubuntu-latest
+          - macos-latest
+        python-version:
+          - "3.7"
+          - "3.8"
+          - "3.9"
     steps:
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "${{ matrix.python_version }}" "$BACKENDS"
-      shell: bash
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
 
-    - name: run tests
-      run: PYTEST_BACKENDS=$BACKENDS ./ci/run_tests.sh
-      shell: bash
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: nix-community
 
-    - name: pytest errors
-      run: ./ci/pytest_errors.sh
-      if: failure()
+      - name: nix build and test
+        run: nix-build --argstr python python${{ matrix.python-version }} --keep-going
 
-  Tests_dask:
-    name: Tests dask
+  gen_conda_env_file:
     runs-on: ubuntu-latest
-    env:
-      BACKENDS: "dask"
-    strategy:
-      fail-fast: false
-      matrix:
-        python_version: ["3.7", "3.9"]
+    needs:
+      - commitlint
     steps:
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "${{ matrix.python_version }}" "$BACKENDS"
-      shell: bash
+      - name: install python
+        uses: actions/setup-python@v2
 
-    - name: run tests
-      run: PYTEST_BACKENDS=$BACKENDS ./ci/run_tests.sh
-      shell: bash
+      - name: install poetry2conda
+        run: pip install poetry2conda
 
-    - name: pytest errors
-      run: ./ci/pytest_errors.sh
-      if: failure()
+      - name: generate conda env file
+        run: |
+          set -euo pipefail
 
-  Tests_sql:
-    name: Tests SQL
-    runs-on: ubuntu-latest
-    env:
-      BACKENDS: "postgres mysql sqlite"
+          poetry2conda --dev --extras all pyproject.toml - | tee environment.yaml
+
+      - name: upload conda env file
+        uses: actions/upload-artifact@v2
+        with:
+          name: conda-env-file
+          path: environment.yaml
+          if-no-files-found: error
+
+      - name: cleanup generated env files
+        run: rm environment.yaml
+
+  test_no_backends:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - gen_conda_env_file
+    defaults:
+      run:
+        shell: bash -l {0}
     strategy:
       fail-fast: false
       matrix:
-        python_version: ["3.7", "3.9"]
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.7"
+          - "3.9"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: download env file
+        uses: actions/download-artifact@v2
+        with:
+          name: conda-env-file
+          path: tmp
+
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          activate-environment: ibis
+          python-version: ${{ matrix.python-version }}
+          environment-file: tmp/environment.yaml
+          condarc-file: ci/condarc
+
+      - name: install ibis
+        run: pip install .
+
+      - name: run tests
+        run: |
+          pytest \
+            ibis/tests \
+            --numprocesses 2 \
+            --quiet \
+            -ra \
+            --junitxml=junit.xml \
+            --cov=ibis \
+            --cov-report=xml:coverage.xml | tee pytest.log
+
+      - name: pytest errors
+        run: ./ci/pytest_errors.sh
+        if: failure()
+
+  test_backends:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - gen_conda_env_file
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.7"
+          - "3.9"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: download env file
+        uses: actions/download-artifact@v2
+        with:
+          name: conda-env-file
+          path: tmp
+
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          activate-environment: ibis
+          python-version: ${{ matrix.python-version }}
+          environment-file: tmp/environment.yaml
+          condarc-file: ci/condarc
+
+      - name: install ibis
+        run: pip install .
+
+      - name: download backend data
+        run: python ci/datamgr.py download
+
+      - name: set backends
+        id: set_backends
+        run: echo '::set-output name=backends::["csv", "dask", "hdf5", "pandas", "parquet", "sqlite"]'
+
+      - name: install backend data
+        run: |
+          for backend in ${{ join(fromJSON(steps.set_backends.outputs.backends), ' ') }}; do
+            python ci/datamgr.py "$backend"
+          done
+
+      - name: run tests
+        env:
+          PYTEST_BACKENDS: ${{ join(fromJSON(steps.set_backends.outputs.backends), ' ') }}
+        run: |
+          pytest \
+            ibis/backends/{${{ join(fromJSON(steps.set_backends.outputs.backends), ',') }}} \
+            ibis/backends/tests \
+            -m "${{ join(fromJSON(steps.set_backends.outputs.backends), ' or ') }}" \
+            --numprocesses 2 \
+            --quiet \
+            -ra \
+            --junitxml=junit.xml \
+            --cov=ibis \
+            --cov-report=xml:coverage.xml | tee pytest.log
+
+      - name: pytest errors
+        run: ./ci/pytest_errors.sh
+        if: failure()
+
+  test_linux_only_backends:
+    runs-on: ubuntu-latest
+    needs:
+      - gen_conda_env_file
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.7"
+          - "3.9"
     services:
       postgres:
         image: shajekpivotal/ibis-docker-postgres-9.5
         ports:
           - 5432:5432
         env:
-          POSTGRES_PASSWORD: ''
+          POSTGRES_PASSWORD: ""
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mysql:
         image: mariadb:10.4.12
@@ -86,24 +279,70 @@ jobs:
           MYSQL_PASSWORD: ibis
         options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
     steps:
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "${{ matrix.python_version }}" "$BACKENDS"
+      - name: download env file
+        uses: actions/download-artifact@v2
+        with:
+          name: conda-env-file
+          path: tmp
 
-    - name: run tests
-      run: PYTEST_BACKENDS=$BACKENDS PYTEST_EXPRESSION="not udf" ./ci/run_tests.sh
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          activate-environment: ibis
+          python-version: ${{ matrix.python-version }}
+          environment-file: tmp/environment.yaml
+          condarc-file: ci/condarc
 
-    - name: pytest errors
-      run: ./ci/pytest_errors.sh
-      if: failure()
+      - name: install ibis
+        run: pip install .
 
-  Tests_impala_clickhouse:
-    name: Tests Impala / Clickhouse
+      - name: download backend data
+        run: python ci/datamgr.py download
+
+      - name: set backends
+        id: set_backends
+        run: echo '::set-output name=backends::["mysql", "postgres", "pyspark"]'
+
+      - name: install backend data
+        run: |
+          for backend in ${{ join(fromJSON(steps.set_backends.outputs.backends), ' ') }}; do
+            python ci/datamgr.py "$backend"
+          done
+
+      - name: run tests
+        env:
+          PYTEST_BACKENDS: ${{ join(fromJSON(steps.set_backends.outputs.backends), ' ') }}
+        run: |
+          pytest \
+            --numprocesses 2 \
+            ibis/backends/{${{ join(fromJSON(steps.set_backends.outputs.backends), ',') }}} \
+            ibis/backends/tests \
+            --durations=25 \
+            -m "(postgres and not udf) or mysql or pyspark" \
+            --quiet \
+            -ra \
+            --junitxml=junit.xml \
+            --cov=ibis \
+            --cov-report=xml:coverage.xml | tee pytest.log
+
+      - name: pytest errors
+        run: ./ci/pytest_errors.sh
+        if: failure()
+
+  test_impala_clickhouse:
     runs-on: ubuntu-latest
+    needs:
+      - gen_conda_env_file
+    defaults:
+      run:
+        shell: bash -l {0}
     env:
-      BACKENDS: "impala clickhouse"
       IBIS_TEST_NN_HOST: localhost
       IBIS_TEST_IMPALA_HOST: localhost
       IBIS_TEST_IMPALA_PORT: 21050
@@ -112,15 +351,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # TODO Latest impyla (0.16.3) doesn't support Python 3.9. Use 3.9 instead of 3.8 once a new impyla is released
-        python_version: ["3.7", "3.8"]
+        python-version:
+          - "3.7"
+          - "3.9"
     services:
       postgres:
         image: shajekpivotal/ibis-docker-postgres-9.5
         ports:
           - 5432:5432
         env:
-          POSTGRES_PASSWORD: ''
+          POSTGRES_PASSWORD: ""
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       kudu-master:
         image: ibisproject/kudu:latest
@@ -167,170 +407,345 @@ jobs:
           - 9000:9000
 
     steps:
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: install boost
-      run: sudo apt-get -qq update --yes && sudo apt-get -qq install --yes --no-install-recommends libboost-dev
+      - name: download env file
+        uses: actions/download-artifact@v2
+        with:
+          name: conda-env-file
+          path: tmp
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "${{ matrix.python_version }}" "$BACKENDS"
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          activate-environment: ibis
+          python-version: ${{ matrix.python-version }}
+          environment-file: tmp/environment.yaml
+          condarc-file: ci/condarc
 
-    - name: run tests
-      run: PYTEST_BACKENDS=$BACKENDS ./ci/run_tests.sh
+      - name: install boost
+        run: mamba install -n ibis boost
 
-    - name: pytest errors
-      run: ./ci/pytest_errors.sh
-      if: failure()
+      - name: install ibis
+        run: pip install .
 
-  Tests_pyspark:
-    name: Tests PySpark
-    runs-on: ubuntu-18.04
-    env:
-      BACKENDS: "pyspark"
+      - name: download backend data
+        run: python ci/datamgr.py download
+
+      - name: set backends
+        id: set_backends
+        run: echo '::set-output name=backends::["impala", "clickhouse"]'
+
+      - name: install backend data
+        run: |
+          python ci/impalamgr.py load --data
+          python ci/datamgr.py clickhouse
+
+      - name: run tests
+        env:
+          PYTEST_BACKENDS: ${{ join(fromJSON(steps.set_backends.outputs.backends), ' ') }}
+        run: |
+          pytest \
+            ibis/backends/{${{ join(fromJSON(steps.set_backends.outputs.backends), ',') }}} \
+            ibis/backends/tests \
+            -m "${{ join(fromJSON(steps.set_backends.outputs.backends), ' or ') }}" \
+            --numprocesses 2 \
+            --quiet \
+            -ra \
+            --junitxml=junit.xml \
+            --cov=ibis \
+            --cov-report=xml:coverage.xml | tee pytest.log
+
+      - name: pytest errors
+        run: ./ci/pytest_errors.sh
+        if: failure()
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    needs:
+      - gen_conda_env_file
     strategy:
       fail-fast: false
       matrix:
-        python_version: ["3.7", "3.9"]
+        python-version:
+          - "3.9"
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "${{ matrix.python_version }}" "$BACKENDS"
+      - name: download env file
+        uses: actions/download-artifact@v2
+        with:
+          name: conda-env-file
+          path: tmp
 
-    - name: run tests
-      run: PYTEST_BACKENDS=$BACKENDS ./ci/run_tests.sh
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          activate-environment: ibis
+          python-version: ${{ matrix.python-version }}
+          environment-file: tmp/environment.yaml
+          condarc-file: ci/condarc
 
-    - name: pytest errors
-      run: ./ci/pytest_errors.sh
-      if: failure()
+      - name: install ibis
+        run: pip install .
 
-  Lint_and_benchmarks:
-    name: Lint and benckmarks
+      - name: benchmark
+        run: |
+          asv machine --yes
+          asv dev
+
+  docs:
     runs-on: ubuntu-latest
-    env:
-      PYTHON_VERSION: "3.9"
-      BACKENDS: ""
-      LOAD_TEST_DATA: "false"
+    needs:
+      - commitlint
     steps:
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "$PYTHON_VERSION" "$BACKENDS" "$LOAD_TEST_DATA"
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: nix-community
 
-    - name: flake8
-      run: flake8 .
-      if: always()
+      - name: build web
+        run: nix-shell -A python39 --pure --run 'python -m pysuerga docs/web --target-path=/tmp/ibis-project.org/' --keep-going
 
-    - name: black
-      run: black --check .
-      if: always()
+      - name: build docs
+        run: nix-shell -A python39 --pure --run 'sphinx-build -b html docs/source /tmp/ibis-project.org/docs -W -T' --keep-going
 
-    - name: mypy
-      run: |
-        mypy --ignore-missing-imports --exclude 'ibis/expr|ibis/backends' ibis
-        # TODO: mypy has errors that need to be fixed before it can be added to all directories
-        mypy --ignore-missing-imports ibis || true
-      if: always()
+      - name: Add config to docs
+        run: |
+          cd /tmp/ibis-project.org
+          touch .nojekyll
+          echo "ibis-project.org" > CNAME
 
-    - name: pydocstyle
-      # TODO: change match-dir when docstrings are fixed for other backends
-      run: pydocstyle --match-dir="(ibis|omniscidb)"
-      if: always()
+      - name: Push docs
+        if: ${{ github.event_name == 'push' }}
+        uses: cpina/github-action-push-to-another-repository@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.IBIS_PROJECT_DOCS_PAT }}
+        with:
+          source-directory: /tmp/ibis-project.org
+          destination-github-username: ibis-project
+          destination-repository-name: ibis-project.org
+          user-name: github-actions
+          user-email: github-actions@github.com
 
-    - name: isort
-      run: isort --check-only .
-      if: always()
-
-    - name: publish feedstock artifact
-      uses: actions/upload-artifact@master
-      with:
-        name: LinuxCondaPackage
-        path: /tmp/ibis/packages
-      if: github.event_name == 'push'
-
-    - name: benckmark
-      run: asv machine --yes && asv dev
-      if: always()
-
-  Conda_package:
-    name: Conda package
+  conda_package:
+    # TODO: fully automate the conda-forge PR submission on release
     runs-on: ubuntu-latest
-    env:
-      PYTHON_VERSION: "3.9"
-      BACKENDS: ""
-      LOAD_TEST_DATA: "false"
+    needs:
+      - commitlint
+    strategy:
+      matrix:
+        python-version:
+          - "3.9"
     steps:
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "$PYTHON_VERSION" "$BACKENDS" "$LOAD_TEST_DATA"
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: nix-community
 
-    - name: clone feedstock repo
-      run: git clone https://github.com/conda-forge/ibis-framework-feedstock /tmp/feedstock
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          mamba-version: "*"
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          channel-priority: strict
+          activate-environment: ibis
+          python-version: ${{ matrix.python-version }}
 
-    - name: update recipe file
-      run: |
-        set -x
-        IBIS_PATH=`pwd`
-        sed -i "s|url:.*|path: $IBIS_PATH|g" ci/recipe/meta.yaml
-        IBIS_VERSION=`python -c "import ibis; print(ibis.__version__)"`
-        sed -i "s/{{ version }}/$IBIS_VERSION/g" ci/recipe/meta.yaml
-        cat ci/recipe/meta.yaml
+      - name: generate conda recipe from poetry
+        run: |
+          set -euo pipefail
 
-    - name: build recipe
-      run: conda build -c conda-forge --python 3.7 ci/recipe
+          mkdir -p /tmp/recipe
 
-    - name: deploy recipe package
-      run: |
-        mkdir /tmp/packages
-        cp -r /usr/share/miniconda/conda-bld/noarch /tmp/packages/noarch
-        cp -r /usr/share/miniconda/conda-bld/linux-64 /tmp/packages/linux-64
-        conda index /tmp/packages
+          ./dev/poetry2recipe | tee /tmp/recipe/meta.yaml
 
-  Docs:
-    name: Docs
+      - name: install conda build and boa
+        run: mamba install conda-build boa
+
+      - name: build recipe
+        run: conda mambabuild -c conda-forge --python "${{ matrix.python-version }}" /tmp/recipe
+
+  release:
+    needs:
+      - benchmarks
+      - commitlint
+      - conda_package
+      - docs
+      - lint
+      - nix
+      - test_backends
+      - test_impala_clickhouse
+      - test_linux_only_backends
+      - test_no_backends
     runs-on: ubuntu-latest
-    env:
-      PYTHON_VERSION: "3.8"
-      BACKENDS: "bigquery clickhouse dask impala mysql parquet postgres pyspark spark"
-      LOAD_TEST_DATA: "false"
+    concurrency: release
+    outputs:
+      commit: ${{ steps.get_commit.outputs.commit }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        if: ${{ github.event_name == 'push' }}
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: checkout
-      uses: actions/checkout@v1
+      - name: Checkout PR
+        uses: actions/checkout@v2
+        if: ${{ github.event_name != 'push' }}
+        with:
+          fetch-depth: 0
 
-    - name: set up environment
-      run: ./ci/setup_env.sh "$PYTHON_VERSION" "$BACKENDS" "$LOAD_TEST_DATA"
+      - name: Configure git for semantic release
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
 
-    - name: build web
-      run: python -m pysuerga docs/web --target-path=/tmp/ibis-project.org/
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
 
-    - name: build docs
-      run: sphinx-build -b html docs/source /tmp/ibis-project.org/docs -W -T
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          extraPullNames: nix-community
 
-    - name: Install github key
-      run: |
-        mkdir -m 700 -p ~/.ssh
-        echo "${{ secrets.DOCS_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-      if: github.event_name == 'push'
+      - name: generate setup.py
+        run: ./dev/poetry2setup -o setup.py
 
-    - name: Push docs
-      run: |
-        cd /tmp/ibis-project.org
-        touch .nojekyll
-        echo "ibis-project.org" > CNAME
-        git init
-        git remote add origin git@github.com:ibis-project/ibis-project.org
-        git config user.name 'Ibis GitHub actions'
-        git config user.email ''
-        git add --all .
-        git commit -m "Ibis docs - $(date) - $GITHUB_SHA"
-        git push -f -u origin master
-      if: github.event_name == 'push'
+      - uses: EndBug/add-and-commit@v7
+        with:
+          add: setup.py
+          author_name: github-actions
+          author_email: github-actions@github.com
+          message: "chore(build): generate setup.py [skip ci]"
+          push: ${{ github.event_name == 'push' }}
+
+      - name: get commit hash of generatedd setup.py
+        id: get_commit_after_setup_gen
+        run: echo "::set-output name=commit::$(git rev-parse HEAD)"
+
+      - name: checkout committed generated setup.py
+        uses: actions/checkout@v2
+        if: ${{ github.event_name == 'push' }}
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ steps.get_commit_after_setup_gen.outputs.commit }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+
+      - name: Install poetry and semantic-release
+        run: pip install poetry python-semantic-release
+
+      - name: Semantic release
+        if: ${{ github.event_name == 'push' }}
+        run: semantic-release publish --verbosity=DEBUG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+      - name: Semantic release
+        if: ${{ github.event_name != 'push' }}
+        run: semantic-release publish --noop --verbosity=DEBUG
+
+      - name: get release commit hash
+        id: get_commit
+        run: echo "::set-output name=commit::$(git rev-parse HEAD)"
+
+  upload_conda_artifacts:
+    needs:
+      - gen_conda_env_file
+      - release
+    runs-on: ubuntu-latest
+    concurrency: upload_conda_artifacts
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: get url of source artifact
+        id: get_url
+        run: echo "::set-output name=url::https://github.com/ibis-project/ibis/archive/${{ needs.release.outputs.commit }}.tar.gz"
+
+      - name: get sha256 of source artifact
+        id: get_sha
+        run: |
+          set -euo pipefail
+
+          echo "::set-output name=sha256::$(curl -LsS ${{ steps.get_url.outputs.url }} | sha256sum | cut -d ' ' -f1)"
+
+      - name: install nix
+        uses: cachix/install-nix-action@v12
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
+
+      - name: setup cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          extraPullNames: nix-community
+
+      - name: generate conda recipe
+        run: ./dev/poetry2recipe --url "${{ steps.get_url.outputs.url }}" --sha256 "${{ steps.get_sha.outputs.sha256 }}" | tee recipe.yaml
+
+      - name: upload conda recipe to github actions
+        uses: svenstaro/upload-release-action@v2
+        if: ${{ github.event_name == 'push' }}
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: recipe.yaml
+          tag: ${{ github.ref }}
+          overwrite: true
+
+      - name: download env file
+        uses: actions/download-artifact@v2
+        with:
+          name: conda-env-file
+          path: tmp
+
+      - name: upload conda environment to github actions
+        uses: svenstaro/upload-release-action@v2
+        if: ${{ github.event_name == 'push' }}
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: tmp/environment.yaml
+          asset_name: environment.yaml
+          tag: ${{ github.ref }}
+          overwrite: true

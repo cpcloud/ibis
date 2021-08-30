@@ -124,6 +124,10 @@ def trace(func):
 
     @functools.wraps(func)
     def traced_func(*args, **kwargs):
+        import ibis
+
+        ibis.pandas
+
         trace_enabled = get_option(_TRACE_CONFIG)
 
         if not trace_enabled:

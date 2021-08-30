@@ -67,3 +67,8 @@ ibis_testing*
 .ipynb_checkpoints/
 .pytest_cache
 .mypy_cache
+.direnv
+.pre-commit-config.yaml
+result
+result-*
+docs/source/backends/generated

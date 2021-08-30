@@ -1,0 +1,72 @@
+name: Update Dependencies
+on:
+  schedule:
+    # run roughly every six hours
+    - cron: "* */6 * * *"
+  # allow running ad hoc
+  # e.g., gh workflow run update-deps.yaml
+  workflow_dispatch:
+jobs:
+  niv-update:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dep:
+          - nixpkgs
+          - pre-commit-hooks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v13
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable-small
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v10
+        with:
+          name: ibis
+          extraPullNames: nix-community
+
+      - name: Get current commit
+        id: get_current_commit
+        run: echo ::set-output name=sha256::$(./dev/get_dep_info.sh ${{ matrix.dep }} rev)
+
+      - name: Update ${{ matrix.dep }}
+        run: nix run nixpkgs.niv -c niv update ${{ matrix.dep }}
+
+      - name: Get new commit
+        id: get_new_commit
+        run: echo ::set-output name=sha256::$(./dev/get_dep_info.sh ${{ matrix.dep }} rev)
+
+      - name: Get repository owner
+        id: repo_owner
+        run: echo ::set-output name=value::$(./dev/get_dep_info.sh ${{ matrix.dep }} owner)
+
+      - name: Get repository name
+        id: repo_name
+        run: echo ::set-output name=value::$(./dev/get_dep_info.sh ${{ matrix.dep }} repo)
+
+      - name: Get commit details for ${{ matrix.dep }} changes
+        uses: cpcloud/compare-commits-action@v3.0.1
+        id: compare_commits
+        if: ${{ steps.get_current_commit.outputs.sha256 != steps.get_new_commit.outputs.sha256 }}
+        with:
+          owner: ${{ steps.repo_owner.outputs.value }}
+          repo: ${{ steps.repo_name.outputs.value }}
+          basehead: ${{ steps.get_current_commit.outputs.sha256 }}...${{ steps.get_new_commit.outputs.sha256 }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          include-merge-commits: false
+
+      - name: Create a pull request to update ${{ matrix.dep }}
+        if: ${{ steps.get_current_commit.outputs.sha256 != steps.get_new_commit.outputs.sha256 }}
+        uses: peter-evans/create-pull-request@v3
+        with:
+          commit-message: "chore(deps): update ${{ matrix.dep }}"
+          branch: "create-pull-request/update-${{ matrix.dep }}"
+          delete-branch: true
+          author: "github-actions <github-actions@github.com>"
+          title: "chore(deps): update ${{ matrix.dep }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: ${{ steps.compare_commits.outputs.differences }}
