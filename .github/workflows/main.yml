@@ -723,7 +723,12 @@ jobs:
           extraPullNames: nix-community
 
       - name: generate conda recipe
-        run: ./dev/poetry2recipe --url "${{ steps.get_url.outputs.url }}" --sha256 "${{ steps.get_sha.outputs.sha256 }}" | tee recipe.yaml
+        run: |
+          set -euxo pipefail
+
+          ls
+          ls dev
+          ./dev/poetry2recipe --url "${{ steps.get_url.outputs.url }}" --sha256 "${{ steps.get_sha.outputs.sha256 }}" | tee recipe.yaml
 
       - name: upload conda recipe to github actions
         uses: svenstaro/upload-release-action@v2
