@@ -1,6 +1,9 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+#
 # Run the Ibis tests. Two environment variables are considered:
 # - PYTEST_BACKENDS: Space-separated list of backends to run
+
+set -e
 
 TESTS_DIRS="ibis/tests ibis/backends/tests"
 for BACKEND in $PYTEST_BACKENDS; do
