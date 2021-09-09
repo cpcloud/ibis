@@ -806,12 +806,6 @@ class ImpalaClient(SQLClient):
         """
         Close Impala connection and drop any temporary objects
         """
-        for obj in self._temp_objects:
-            try:
-                obj.drop()
-            except HS2Error:
-                pass
-
         self._temp_objects.clear()
         self.con.close()
 
