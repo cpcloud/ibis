@@ -768,7 +768,7 @@ class ImpalaClient(SQLClient):
         self._hdfs = hdfs_client
         self._kudu = None
 
-        self._temp_objects = weakref.WeakSet()
+        self._temp_objects = set()
 
     def fetch_from_cursor(self, cursor, schema):
         batches = cursor.fetchall(columnar=True)
@@ -812,6 +812,7 @@ class ImpalaClient(SQLClient):
             except HS2Error:
                 pass
 
+        self._temp_objects.clear()
         self.con.close()
 
     def disable_codegen(self, disabled=True):
@@ -1319,6 +1320,9 @@ class ImpalaClient(SQLClient):
         else:
             schema = self.get_schema(qualified_name)
             node = ImpalaTemporaryTable(qualified_name, schema, self)
+            self._temp_objects.add(
+                weakref.finalize(node, operator.methodcaller("drop"), node)
+            )
             t = self.table_expr_class(node)
 
         # Compute number of rows in table for better default query planning
@@ -1330,8 +1334,6 @@ class ImpalaClient(SQLClient):
             )
         )
         self.raw_sql(set_card)
-
-        self._temp_objects.add(t)
         return t
 
     def text_file(self, hdfs_path, column_name='value'):
@@ -1875,12 +1877,6 @@ class AggregateFunction:
 
 
 class ImpalaTemporaryTable(ops.DatabaseTable):
-    def __del__(self):
-        try:
-            self.drop()
-        except com.IbisError:
-            pass
-
     def drop(self):
         try:
             self.source.drop_table(self.name)
