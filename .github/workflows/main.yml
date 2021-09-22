@@ -53,6 +53,7 @@ jobs:
   nix:
     runs-on: ${{ matrix.os }}
     needs:
+      - commitlint
       - lint
     strategy:
       fail-fast: false
@@ -84,6 +85,7 @@ jobs:
   test_no_backends:
     runs-on: ${{ matrix.os }}
     needs:
+      - commitlint
       - lint
     strategy:
       fail-fast: false
@@ -373,6 +375,7 @@ jobs:
   test_impala:
     runs-on: ubuntu-latest
     needs:
+      - commitlint
       - lint
     env:
       IBIS_TEST_NN_HOST: localhost
@@ -476,6 +479,7 @@ jobs:
   test_mysql_clickhouse:
     runs-on: ubuntu-latest
     needs:
+      - commitlint
       - lint
     strategy:
       fail-fast: false
@@ -544,6 +548,7 @@ jobs:
   benchmarks:
     runs-on: ubuntu-latest
     needs:
+      - commitlint
       - lint
     steps:
       - name: checkout
@@ -569,6 +574,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     needs:
+      - commitlint
       - lint
     steps:
       - name: checkout
