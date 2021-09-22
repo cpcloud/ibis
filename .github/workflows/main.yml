@@ -564,12 +564,11 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           extraPullNames: nix-community,poetry2nix
 
-      - name: benchmark
-        run: |
-          set -euo pipefail
+      - name: setup asv
+        run: nix-shell --pure --run 'asv machine --yes'
 
-          nix-shell --pure --run 'asv machine --yes'
-          nix-shell --pure --run 'asv dev'
+      - name: run benchmarks
+        run: nix-shell --pure --run 'asv dev'
 
   docs:
     runs-on: ubuntu-latest
