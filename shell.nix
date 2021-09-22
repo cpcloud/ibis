@@ -58,27 +58,14 @@ let
 
   pythonName = "python${builtins.replaceStrings [ "." ] [ "" ] python}";
 in
-{
-  commitlint = pkgs.mkShell {
-    name = "commitlint";
-    buildInputs = [ pkgs.commitlint ];
-  };
+pkgs.mkShell {
+  name = "ibis-${pythonName}";
 
-  build = pkgs.mkShell {
-    name = "build";
-    inherit shellHook;
-    buildInputs = commonBuildInputs;
-  };
+  inherit shellHook;
 
-  "${pythonName}" = pkgs.mkShell {
-    name = "ibis-${pythonName}";
+  buildInputs = commonBuildInputs ++ [
+    (mkPoetryEnv pkgs.${pythonName})
+  ];
 
-    inherit shellHook;
-
-    buildInputs = commonBuildInputs ++ [
-      (mkPoetryEnv pkgs.${pythonName})
-    ];
-
-    PYTHONPATH = builtins.toPath ./.;
-  };
+  PYTHONPATH = builtins.toPath ./.;
 }
