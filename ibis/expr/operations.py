@@ -1,4 +1,6 @@
 import collections
+import datetime
+import enum
 import functools
 import itertools
 import operator
@@ -7,6 +9,7 @@ from typing import Any as Any_
 from typing import Dict, List
 
 import numpy as np
+import pandas as pd
 import toolz
 from cached_property import cached_property
 
@@ -3023,8 +3026,28 @@ class StructField(ValueOp):
 
 
 class Literal(ValueOp):
-    value = Arg(rlz.noop)
-    dtype = Arg(dt.dtype)
+    value = Arg(
+        (
+            int,
+            str,
+            float,
+            list,
+            dict,
+            tuple,
+            set,
+            frozenset,
+            datetime.date,
+            datetime.datetime,
+            datetime.timedelta,
+            datetime.time,
+            pd.Timestamp,
+            pd.Timedelta,
+            np.generic,
+            type(None),
+            enum.Enum,
+        )
+    )
+    dtype = Arg(rlz.datatype)
 
     def __repr__(self):
         return '{}({})'.format(
