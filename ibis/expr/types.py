@@ -316,6 +316,9 @@ class ExprList(Expr):
     def _type_display(self):
         return ', '.join(expr._type_display() for expr in self.exprs())
 
+    def __iter__(self):
+        return iter(self.exprs())
+
     def exprs(self):
         return self.op().exprs
 
