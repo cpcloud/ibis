@@ -548,6 +548,17 @@ def reduction(argument, **kwargs):
 
 
 @validator
+def non_negative_integer(arg, **kwargs):
+    if not isinstance(arg, int):
+        raise com.IbisTypeError(
+            f"positive integer must be int type, got {type(arg).__name__}"
+        )
+    if arg < 0:
+        raise ValueError("got negative value for non-negative integer rule")
+    return arg
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
