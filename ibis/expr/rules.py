@@ -381,6 +381,42 @@ def table(schema, arg):
     )
 
 
+@validator
+def analytic(arg, **kwargs):
+    from ibis.expr.analysis import is_analytic
+
+    if not is_analytic(arg):
+        raise com.IbisInputError(
+            'Expression does not contain a valid window operation'
+        )
+    return arg
+
+
+@validator
+def window(win, *, from_base_table_of, arguments):
+    from ibis.expr.window import Window
+
+    if not isinstance(win, Window):
+        raise com.IbisTypeError(
+            "`win` argument should be of type `ibis.expr.window.Window`; "
+            f"got type {type(win).__name__}"
+        )
+    table = ir.find_base_table(arguments[from_base_table_of])
+    if table is not None:
+        win = win.bind(table)
+
+    if win.max_lookback is not None:
+        error_msg = (
+            "'max lookback' windows must be ordered " "by a timestamp column"
+        )
+        if len(win._order_by) != 1:
+            raise com.IbisInputError(error_msg)
+        order_var = win._order_by[0].op().args[0]
+        if not isinstance(order_var.type(), dt.Timestamp):
+            raise com.IbisInputError(error_msg)
+    return win
+
+
 # TODO: might just use bounds instead of actual literal values
 # that could simplify interval binop output_type methods
 def _promote_numeric_binop(exprs, op):

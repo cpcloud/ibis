@@ -18,6 +18,7 @@ from ibis import util
 from ibis.expr.schema import HasSchema, Schema
 from ibis.expr.signature import Annotable
 from ibis.expr.signature import Argument as Arg
+from ibis.expr.window import propagate_down_window
 
 
 def _safe_repr(x, memo=None):
@@ -1114,38 +1115,17 @@ class AnalyticOp(ValueOp):
 
 
 class WindowOp(ValueOp):
-    expr = Arg(rlz.noop)
-    window = Arg(rlz.noop)
+    expr = Arg(
+        rlz.analytic,
+        post_process=lambda *, expr, window: propagate_down_window(
+            expr,
+            window,
+        ),
+    )
+    window = Arg(rlz.window(from_base_table_of="expr"))
     output_type = rlz.array_like('expr')
 
     display_argnames = False
-
-    def __init__(self, expr, window):
-        from ibis.expr.analysis import is_analytic
-        from ibis.expr.window import propagate_down_window
-
-        if not is_analytic(expr):
-            raise com.IbisInputError(
-                'Expression does not contain a valid window operation'
-            )
-
-        table = ir.find_base_table(expr)
-        if table is not None:
-            window = window.bind(table)
-
-        if window.max_lookback is not None:
-            error_msg = (
-                "'max lookback' windows must be ordered "
-                "by a timestamp column"
-            )
-            if len(window._order_by) != 1:
-                raise com.IbisInputError(error_msg)
-            order_var = window._order_by[0].op().args[0]
-            if not isinstance(order_var.type(), dt.Timestamp):
-                raise com.IbisInputError(error_msg)
-
-        expr = propagate_down_window(expr, window)
-        super().__init__(expr, window)
 
     def over(self, window):
         new_window = self.window.combine(window)
