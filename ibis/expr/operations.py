@@ -247,24 +247,10 @@ class TableNode(Node):
 
 
 class TableColumn(ValueOp):
-    """Selects a column from a TableExpr"""
+    """Selects a column from a `TableExpr`."""
 
-    name = Arg((str, int))
-    table = Arg(ir.TableExpr)
-
-    def __init__(self, name, table):
-        schema = table.schema()
-        if isinstance(name, int):
-            name = schema.name_at_position(name)
-        super().__init__(name, table)
-
-    def _validate(self):
-        if self.name not in self.table.schema():
-            raise com.IbisTypeError(
-                "'{}' is not a field in {}".format(
-                    self.name, self.table.columns
-                )
-            )
+    name = Arg(rlz.column_name_from("table"))
+    table = Arg(rlz.table)
 
     def parent(self):
         return self.table
