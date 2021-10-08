@@ -4059,7 +4059,12 @@ def aggregate(table, metrics=None, by=None, having=None, **kwargs):
         for name, expr in sorted(kwargs.items(), key=operator.itemgetter(0))
     )
 
-    op = table.op().aggregate(table, metrics, by=by, having=having)
+    op = table.op().aggregate(
+        table,
+        metrics,
+        by=util.promote_list(by if by is not None else []),
+        having=util.promote_list(having if having is not None else []),
+    )
     return op.to_expr()
 
 
