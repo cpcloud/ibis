@@ -4137,12 +4137,7 @@ def _table_sort_by(table, sort_exprs):
     """
     result = table.op().sort_by(
         table,
-        [
-            key
-            for key in util.promote_list(
-                sort_exprs if sort_exprs is not None else []
-            )
-        ],
+        util.promote_list(sort_exprs if sort_exprs is not None else []),
     )
     return result.to_expr()
 
