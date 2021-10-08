@@ -3,7 +3,8 @@ import functools
 import itertools
 import operator
 from contextlib import suppress
-from typing import Any, Dict, List
+from typing import Any as Any_
+from typing import Dict, List
 
 import numpy as np
 import toolz
@@ -58,7 +59,7 @@ class Node(Annotable):
 
         return '{}({})'.format(opname, ', '.join(pprint_args))
 
-    def __getstate__(self) -> Dict[str, Any]:
+    def __getstate__(self) -> Dict[str, Any_]:
         """The attributes _expr_cached and _hash are
         used as caches; they can be excluded from
         serialization without affecting correctness.
@@ -79,7 +80,7 @@ class Node(Annotable):
             if slot not in excluded_slots
         }
 
-    def __setstate__(self, state: Dict[str, Any]) -> None:
+    def __setstate__(self, state: Dict[str, Any_]) -> None:
         """
         Parameters
         ----------
