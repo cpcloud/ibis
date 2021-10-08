@@ -347,16 +347,11 @@ class TableArrayView(ValueOp):
     subqueries to be viewed as arrays)
     """
 
-    table = Arg(ir.TableExpr)
-    name = Arg(str)
+    table = Arg(rlz.table)
 
-    def __init__(self, table):
-        schema = table.schema()
-        if len(schema) > 1:
-            raise com.ExpressionError('Table can only have a single column')
-
-        name = schema.names[0]
-        return super().__init__(table, name)
+    @property
+    def name(self):
+        return self.table.schema().names[0]
 
     def _make_expr(self):
         ctype = self.table._get_type(self.name)

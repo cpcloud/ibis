@@ -4202,11 +4202,15 @@ def _table_difference(left: TableExpr, right: TableExpr):
 
 
 def _table_to_array(self):
-    """
-    Single column tables can be viewed as arrays.
-    """
-    op = ops.TableArrayView(self)
-    return op.to_expr()
+    """View a single column table as an array."""
+
+    schema = self.schema()
+    if len(schema) > 1:
+        raise com.ExpressionError(
+            'Table can only have a single column when viewed as array'
+        )
+
+    return ops.TableArrayView(self).to_expr()
 
 
 def _table_materialize(table):
