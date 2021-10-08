@@ -200,6 +200,39 @@ def value_list_of(inner, arg, *, min_length=0, **kwargs):
 
 
 @validator
+def sort_key(key, *, from_=None, arguments, **kwargs):
+    import ibis.expr.operations as ops
+
+    if isinstance(key, ir.SortExpr):
+        return key
+
+    if isinstance(key, (tuple, list)):
+        key, sort_order = key
+    else:
+        sort_order = True
+
+    if not isinstance(key, ir.Expr):
+        if from_ is not None:
+            table = arguments[from_]
+            key = table._ensure_expr(key)
+            if isinstance(key, (ir.SortExpr, ops.DeferredSortKey)):
+                return ops.to_sort_key(table, key)
+        else:
+            raise ValueError(
+                "`key` is not an expression, "
+                "but no `from_` argument was provided"
+            )
+
+    if isinstance(sort_order, str):
+        if sort_order.lower() in ('desc', 'descending'):
+            sort_order = False
+        elif not isinstance(sort_order, bool):
+            sort_order = bool(sort_order)
+
+    return ops.SortKey(key, ascending=sort_order).to_expr()
+
+
+@validator
 def datatype(arg, **kwargs):
     return dt.dtype(arg)
 
