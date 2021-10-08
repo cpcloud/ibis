@@ -159,10 +159,11 @@ def test_projection_invalid_root(table):
 def test_projection_unnamed_literal_interactive_blowup(con):
     # #147 and #153 alike
     table = con.table('functional_alltypes')
+    exprs = [table.bigint_col, ibis.literal(5)]
 
     with config.option_context('interactive', True):
         try:
-            table.select([table.bigint_col, ibis.literal(5)])
+            table.select(exprs)
         except Exception as e:
             assert 'named' in e.args[0]
 
