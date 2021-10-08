@@ -573,6 +573,29 @@ def literal(value, arg, **kwargs):
 
 
 @validator
+def named_literal_expression(value, **kwargs):
+    import ibis.expr.operations as ops
+
+    if not isinstance(value, ir.Expr):
+        raise com.IbisTypeError(
+            "`value` must be an ibis expression; "
+            f"got value of type {type(value).__name__}"
+        )
+
+    if not isinstance(value.op(), ops.Literal):
+        raise com.IbisTypeError(
+            "`value` must map to an ibis literal; "
+            f"got expr with op {type(value.op()).__name__}"
+        )
+
+    # check that the literal has a name
+    if not value.has_name():
+        raise com.IbisTypeError("`value` literal is not named")
+
+    return value
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
