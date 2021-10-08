@@ -1013,7 +1013,10 @@ def test_join_invalid_expr_type(con):
     invalid_right = left.foo_id
     join_key = ['bar_id']
 
-    with pytest.raises(TypeError, match=type(invalid_right).__name__):
+    with pytest.raises(
+        NotImplementedError,
+        match=r'string __getitem__\[str\]',
+    ):
         left.inner_join(invalid_right, join_key)
 
 
