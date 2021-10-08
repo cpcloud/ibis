@@ -559,6 +559,20 @@ def non_negative_integer(arg, **kwargs):
 
 
 @validator
+def literal(value, arg, **kwargs):
+    if (
+        not isinstance(arg, type(value))
+        or not isinstance(value, type(arg))
+        or arg != value
+    ):
+        raise ValueError(
+            "arg must be a literal exactly equal in type and value to value "
+            f"{value} with type {type(value)}, got `arg` with type {type(arg)}"
+        )
+    return arg
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
