@@ -1710,14 +1710,14 @@ FROM t0
             'airlines',
         )
 
-        dests = ['ORD', 'JFK', 'SFO']
-        dests_formatted = repr(tuple(set(dests)))
+        dests = {'ORD', 'JFK', 'SFO'}
+        dests_formatted = repr(tuple(dests))
         delay_filter = airlines.dest.topk(10, by=airlines.arrdelay.mean())
         t = airlines[airlines.dest.isin(dests)]
         expr = t[delay_filter].group_by('origin').size()
 
         result = Compiler.to_sql(expr)
-        expected = """\
+        expected = f"""\
 SELECT t0.`origin`, count(*) AS `count`
 FROM airlines t0
   LEFT SEMI JOIN (
@@ -1731,10 +1731,8 @@ FROM airlines t0
     LIMIT 10
   ) t1
     ON t0.`dest` = t1.`dest`
-WHERE t0.`dest` IN {}
-GROUP BY 1""".format(
-            dests_formatted
-        )
+WHERE t0.`dest` IN {dests_formatted}
+GROUP BY 1"""
 
         assert result == expected
 
