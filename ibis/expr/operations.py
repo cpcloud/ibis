@@ -363,11 +363,9 @@ class BinaryOp(ValueOp):
 
 class Cast(ValueOp):
     arg = Arg(rlz.any)
-    to = Arg(dt.dtype)
+    to = Arg(rlz.datatype)
 
-    # see #396 for the issue preventing this
-    # def resolve_name(self):
-    #     return self.args[0].get_name()
+    # see #396 for the issue preventing an implementation of resolve_name
 
     def output_type(self):
         return rlz.shape_like(self.arg, dtype=self.to)
@@ -3081,7 +3079,7 @@ class NullLiteral(Literal):
 class ScalarParameter(ValueOp):
     _counter = itertools.count()
 
-    dtype = Arg(dt.dtype)
+    dtype = Arg(rlz.datatype)
     counter = Arg(int, default=lambda: next(ScalarParameter._counter))
 
     def resolve_name(self):
