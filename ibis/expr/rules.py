@@ -538,6 +538,16 @@ def expr_list_of(inner, arg, *, min_length=0, **kwargs):
 
 
 @validator
+def reduction(argument, **kwargs):
+    from ibis.expr.analysis import is_reduction
+
+    if not is_reduction(argument):
+        raise com.IbisTypeError("`argument` must be a reduction")
+
+    return argument
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
