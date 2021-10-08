@@ -467,6 +467,24 @@ def table(schema, arg):
 
 
 @validator
+def function_of(
+    argument,
+    fn,
+    *,
+    output_rule=any,
+    preprocess=identity,
+    arguments,
+):
+    if not callable(fn):
+        raise com.IbisTypeError("value for argument `fn` must be callable")
+
+    return output_rule(
+        fn(preprocess(arguments[argument])),
+        arguments=arguments,
+    )
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
