@@ -11,9 +11,9 @@ import ibis.expr.types as ir
 import ibis.util as util
 
 try:
-    from cytoolz import compose, curry, identity
+    from cytoolz import compose, curry
 except ImportError:
-    from toolz import compose, curry, identity
+    from toolz import compose, curry
 
 
 def highest_precedence_dtype(exprs):
@@ -83,15 +83,17 @@ class validator(curry):
         )
 
 
-noop = validator(identity)
+@validator
+def noop(arg, **kwargs):
+    return arg
 
 
 @validator
-def one_of(inners, arg):
+def one_of(inners, arg, **kwargs):
     """At least one of the inner validators must pass"""
     for inner in inners:
         with suppress(com.IbisTypeError, ValueError):
-            return inner(arg)
+            return inner(arg, **kwargs)
 
     rules_formatted = ', '.join(map(repr, inners))
     raise com.IbisTypeError(
@@ -100,7 +102,7 @@ def one_of(inners, arg):
 
 
 @validator
-def all_of(inners, arg):
+def all_of(inners, arg, **kwargs):
     """All of the inner validators must pass.
 
     The order of inner validators matters.
@@ -118,11 +120,11 @@ def all_of(inners, arg):
     arg : Any
       Value maybe coerced by inner validators to the appropiate types
     """
-    return compose(*inners)(arg)
+    return compose(*inners)(arg, **kwargs)
 
 
 @validator
-def isin(values, arg):
+def isin(values, arg, **kwargs):
     if arg not in values:
         raise ValueError(f'Value with type {type(arg)} is not in {values!r}')
     if isinstance(values, dict):  # TODO check for mapping instead
@@ -132,7 +134,8 @@ def isin(values, arg):
 
 
 @validator
-def member_of(obj, arg):
+@validator
+def member_of(obj, arg, **kwargs):
     if isinstance(arg, ir.EnumValue):
         arg = arg.op().value
     if isinstance(arg, enum.Enum):
@@ -161,24 +164,23 @@ def list_of(inner, arg, min_length=0):
 
 
 @validator
-def datatype(arg):
+def datatype(arg, **kwargs):
     return dt.dtype(arg)
 
 
 @validator
-def instance_of(klass, arg):
+def instance_of(klasses, arg, **kwargs):
     """Require that a value has a particular Python type."""
-    if not isinstance(arg, klass):
+    if not isinstance(arg, klasses):
         raise com.IbisTypeError(
-            'Given argument with type {} is not an instance of {}'.format(
-                type(arg), klass
-            )
+            f'Given argument with type {type(arg)} '
+            f'is not an instance of {klasses}'
         )
     return arg
 
 
 @validator
-def value(dtype, arg):
+def value(dtype, arg, **kwargs):
     """Validates that the given argument is a Value with a particular datatype
 
     Parameters
@@ -199,8 +201,8 @@ def value(dtype, arg):
 
     if not isinstance(arg, ir.AnyValue):
         raise com.IbisTypeError(
-            'Given argument with type {} is not a value '
-            'expression'.format(type(arg))
+            f'Given argument with type {type(arg)} is not a value '
+            'expression'
         )
 
     # retrieve literal values for implicit cast check
@@ -215,37 +217,51 @@ def value(dtype, arg):
         return arg
     else:
         raise com.IbisTypeError(
-            'Given argument with datatype {} is not '
-            'subtype of {} nor implicitly castable to '
-            'it'.format(arg.type(), dtype)
+            f'Given argument with datatype {arg.type()} is not '
+            f'subtype of {dtype} nor implicitly castable to it'
         )
 
 
 @validator
-def scalar(inner, arg):
-    return instance_of(ir.ScalarExpr, inner(arg))
+def scalar(inner, arg, **kwargs):
+    return instance_of(
+        ir.ScalarExpr,
+        functools.partial(inner, **kwargs)(arg),
+        **kwargs,
+    )
 
 
 @validator
-def column(inner, arg):
-    return instance_of(ir.ColumnExpr, inner(arg))
+def column(inner, arg, **kwargs):
+    return instance_of(
+        ir.ColumnExpr,
+        functools.partial(inner, **kwargs)(arg),
+        **kwargs,
+    )
 
 
 @validator
-def array_of(inner, arg):
+def array_of(inner, arg, **kwargs):
     val = arg if isinstance(arg, ir.Expr) else ir.literal(arg)
     argtype = val.type()
     if not isinstance(argtype, dt.Array):
         raise com.IbisTypeError(
-            'Argument must be an array, got expression {} which is of type '
-            '{}'.format(val, val.type())
+            'Argument must be an array, '
+            f'got expression which is of type {val.type()}'
         )
-    return value(dt.Array(inner(val[0]).type()), val)
+    return value(dt.Array(inner(val[0], **kwargs).type()), val, **kwargs)
 
 
 @validator
-def optional(validator, arg):
-    return one_of([instance_of(type(None)), validator], arg)
+def optional(validator, arg, **kwargs):
+    return one_of(
+        (
+            instance_of(type(None), **kwargs),
+            functools.partial(validator, **kwargs),
+        ),
+        arg,
+        **kwargs,
+    )
 
 
 any = value(dt.any)
@@ -280,7 +296,7 @@ multipolygon = value(dt.MultiPolygon)
 
 
 @validator
-def interval(arg, units=None):
+def interval(arg, units=None, **kwargs):
     arg = value(dt.Interval, arg)
     unit = arg.type().unit
     if units is not None and unit not in units:
@@ -290,7 +306,7 @@ def interval(arg, units=None):
 
 
 @validator
-def client(arg):
+def client(arg, **kwargs):
     from ibis.backends.base import BaseBackend
 
     return instance_of(BaseBackend, arg)

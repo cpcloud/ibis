@@ -60,7 +60,7 @@ class Argument:
     def optional(self):
         return self.default is not _undefined
 
-    def validate(self, value=_undefined, name=None):
+    def validate(self, value=_undefined, name=None, *, arguments=None):
         """
         Parameters
         ----------
@@ -85,7 +85,9 @@ class Argument:
                 name_msg = "unnamed argument"
             raise TypeError(f"Missing required value for {name_msg}")
 
-        return self.validator(value)
+        if arguments is None:
+            return self.validator(value)
+        return self.validator(value, arguments=arguments)
 
     __call__ = validate  # syntactic sugar
 
