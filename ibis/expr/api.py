@@ -1204,7 +1204,7 @@ def topk(arg, k, by=None):
     -------
     topk : TopK filter expression
     """
-    op = ops.TopK(arg, k, by=by)
+    op = ops.TopK(arg, k, by=by if by is not None else arg.count())
     return op.to_expr()
 
 
