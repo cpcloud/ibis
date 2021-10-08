@@ -16,9 +16,15 @@ _undefined = object()  # marker for missing argument
 class Argument:
     """Argument definition."""
 
-    __slots__ = 'validator', 'default', 'show'
+    __slots__ = 'validator', 'default', 'show', 'post_process'
 
-    def __init__(self, validator, default=_undefined, show=True):
+    def __init__(
+        self,
+        validator,
+        default=_undefined,
+        show=True,
+        post_process=None,
+    ):
         """Argument constructor
 
         Parameters
@@ -38,6 +44,7 @@ class Argument:
         """
         self.default = default
         self.show = show
+        self.post_process = post_process
         if isinstance(validator, type):
             self.validator = rlz.instance_of(validator)
         elif isinstance(validator, tuple):
@@ -48,7 +55,7 @@ class Argument:
         else:
             raise TypeError(
                 'Argument validator must be a callable, type or '
-                'tuple of types, given: {}'.format(validator)
+                f'tuple of types, given: {validator}'
             )
 
     def __eq__(self, other):
@@ -128,10 +135,25 @@ class TypeSignature(OrderedDict):
             # Parameter object corresponding to this argument, arg_value got
             # the value _undefined when bindings.apply_defaults() was called,
             # so the behavior of argument.validate here is correct.
-            value = argument.validate(arg_value, name=name)
+            value = argument.validate(
+                arg_value,
+                name=name,
+                arguments=bindings.arguments,
+            )
             result.append((name, value))
 
-        return result
+        post_processed = []
+        result_kwargs = dict(result)
+        for name, value in result:
+            argument = self[name]
+            post_process_fn = argument.post_process
+            if post_process_fn is not None:
+                final_value = post_process_fn(**result_kwargs)
+            else:
+                final_value = value
+            post_processed.append((name, final_value))
+
+        return post_processed
 
     __call__ = validate  # syntactic sugar
 
