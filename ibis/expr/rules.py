@@ -167,6 +167,11 @@ def isin(values, arg, **kwargs):
 
 
 @validator
+def enum_mapping(inner, variant, to, **kwargs):
+    inner(variant, **kwargs)
+    return to
+
+
 @validator
 def member_of(obj, arg, **kwargs):
     if isinstance(arg, ir.EnumValue):
