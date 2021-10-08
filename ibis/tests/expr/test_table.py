@@ -562,15 +562,21 @@ def test_filter_aggregate_partial_pushdown(table):
     assert False
 
 
-def test_aggregate_post_predicate(table):
+@pytest.mark.parametrize(
+    "case_fn",
+    [
+        pytest.param(lambda t: t.f.sum(), id="non_boolean"),
+        pytest.param(lambda t: t.f > 2, id="non_scalar"),
+    ],
+)
+def test_aggregate_post_predicate(table, case_fn):
     # Test invalid having clause
     metrics = [table.f.sum().name('total')]
     by = ['g']
+    having = [case_fn(table)]
 
-    invalid_having_cases = [table.f.sum(), table.f > 2]
-    for case in invalid_having_cases:
-        with pytest.raises(com.ExpressionError):
-            table.aggregate(metrics, by=by, having=[case])
+    with pytest.raises(com.IbisTypeError):
+        table.aggregate(metrics, by=by, having=having)
 
 
 def test_group_by_having_api(table):
