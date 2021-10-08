@@ -376,7 +376,7 @@ class TypeOf(UnaryOp):
 
 
 class Negate(UnaryOp):
-    arg = Arg(rlz.one_of((rlz.numeric(), rlz.interval())))
+    arg = Arg(rlz.one_of((rlz.numeric, rlz.interval)))
     output_type = rlz.typeof('arg')
 
 
