@@ -182,8 +182,6 @@ class Expr:
         else:
             return f(self, *args, **kwargs)
 
-    __call__ = pipe
-
     def op(self):
         return self._arg
 
