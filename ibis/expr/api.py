@@ -4035,7 +4035,7 @@ def _resolve_predicates(table, predicates):
     return resolved_predicates
 
 
-def aggregate(table, metrics=None, by=None, having=None, **kwds):
+def aggregate(table, metrics=None, by=None, having=None, **kwargs):
     """
     Aggregate a table with a given set of reductions, with grouping
     expressions, and post-aggregation filters.
@@ -4053,12 +4053,11 @@ def aggregate(table, metrics=None, by=None, having=None, **kwds):
     -------
     agg_expr : TableExpr
     """
-    if metrics is None:
-        metrics = []
-
-    for k, v in sorted(kwds.items()):
-        v = table._ensure_expr(v)
-        metrics.append(v.name(k))
+    metrics = [] if metrics is None else util.promote_list(metrics)
+    metrics.extend(
+        table._ensure_expr(expr).name(name)
+        for name, expr in sorted(kwargs.items(), key=operator.itemgetter(0))
+    )
 
     op = table.op().aggregate(table, metrics, by=by, having=having)
     return op.to_expr()
