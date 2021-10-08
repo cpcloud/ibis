@@ -1784,6 +1784,12 @@ class LeftAntiJoin(Join):
         return self.left.schema()
 
 
+class CrossJoin(Join):
+    def __init__(self, left, right, *rest):
+        right = functools.reduce(ir.TableExpr.cross_join, rest, right)
+        super().__init__(left, right, [])
+
+
 class MaterializedJoin(TableNode, HasSchema):
     join = Arg(ir.TableExpr)
 
@@ -1801,27 +1807,6 @@ class MaterializedJoin(TableNode, HasSchema):
 
     def blocks(self):
         return True
-
-
-class CrossJoin(InnerJoin):
-
-    """
-    Some databases have a CROSS JOIN operator, that may be preferential to use
-    over an INNER JOIN with no predicates.
-    """
-
-    def __init__(self, *args, **kwargs):
-        if 'prefixes' in kwargs:
-            raise NotImplementedError
-
-        if len(args) < 2:
-            raise com.IbisInputError('Must pass at least 2 tables')
-
-        left = args[0]
-        right = args[1]
-        for t in args[2:]:
-            right = right.cross_join(t)
-        super().__init__(left, right, [])
 
 
 class AsOfJoin(Join):
