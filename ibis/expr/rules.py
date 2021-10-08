@@ -519,6 +519,25 @@ def function_of(
 
 
 @validator
+def expr_list_of(inner, arg, *, min_length=0, **kwargs):
+    import ibis
+
+    if isinstance(arg, ir.ExprList):
+        return ibis.expr_list(
+            list(map(functools.partial(inner, **kwargs), arg.exprs()))
+        )
+
+    if not util.is_iterable(arg):
+        raise com.IbisTypeError('Argument must be a sequence')
+
+    if len(arg) < min_length:
+        raise com.IbisTypeError(
+            f'Arg must have at least {min_length} number of elements'
+        )
+    return ibis.expr_list(list(map(functools.partial(inner, **kwargs), arg)))
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
