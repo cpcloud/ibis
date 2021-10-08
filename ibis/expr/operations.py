@@ -323,7 +323,7 @@ class DatabaseTable(PhysicalTable):
 class SQLQueryResult(TableNode, HasSchema):
     """A table sourced from the result set of a select query"""
 
-    query = Arg(rlz.noop)
+    query = Arg(str)
     schema = Arg(sch.Schema)
     source = Arg(rlz.client)
 
