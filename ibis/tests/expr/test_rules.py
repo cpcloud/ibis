@@ -183,13 +183,17 @@ def test_invalid_member_of(obj, value, expected):
 @pytest.mark.parametrize(
     ('validator', 'values', 'expected'),
     [
-        (rlz.list_of(identity), (3, 2), ibis.sequence([3, 2])),
-        (rlz.list_of(rlz.integer), (3, 2), ibis.sequence([3, 2])),
-        (rlz.list_of(rlz.integer), (3, None), ibis.sequence([3, ibis.NA])),
-        (rlz.list_of(rlz.string), ('a',), ibis.sequence(['a'])),
-        (rlz.list_of(rlz.string), ['a', 'b'], ibis.sequence(['a', 'b'])),
+        (rlz.value_list_of(identity), (3, 2), ibis.sequence([3, 2])),
+        (rlz.value_list_of(rlz.integer), (3, 2), ibis.sequence([3, 2])),
+        (
+            rlz.value_list_of(rlz.integer),
+            (3, None),
+            ibis.sequence([3, ibis.NA]),
+        ),
+        (rlz.value_list_of(rlz.string), ('a',), ibis.sequence(['a'])),
+        (rlz.value_list_of(rlz.string), ['a', 'b'], ibis.sequence(['a', 'b'])),
         pytest.param(
-            rlz.list_of(rlz.list_of(rlz.string)),
+            rlz.value_list_of(rlz.value_list_of(rlz.string)),
             [[], ['a']],
             ibis.sequence([[], ['a']]),
             marks=pytest.mark.xfail(
@@ -197,7 +201,7 @@ def test_invalid_member_of(obj, value, expected):
             ),
         ),
         (
-            rlz.list_of(rlz.boolean, min_length=2),
+            rlz.value_list_of(rlz.boolean, min_length=2),
             [True, False],
             ibis.sequence([True, False]),
         ),
@@ -211,10 +215,10 @@ def test_valid_list_of(validator, values, expected):
 @pytest.mark.parametrize(
     ('validator', 'values'),
     [
-        (rlz.list_of(rlz.double, min_length=2), [1]),
-        (rlz.list_of(rlz.integer), 1.1),
-        (rlz.list_of(rlz.string), 'asd'),
-        (rlz.list_of(identity), 3),
+        (rlz.value_list_of(rlz.double, min_length=2), [1]),
+        (rlz.value_list_of(rlz.integer), 1.1),
+        (rlz.value_list_of(rlz.string), 'asd'),
+        (rlz.value_list_of(identity), 3),
     ],
 )
 def test_invalid_list_of(validator, values):
@@ -334,7 +338,7 @@ def test_array_of_invalid_input(rule, input):
     ('validator', 'input'),
     [
         (rlz.array_of(rlz.integer), [1, 2, 3]),
-        (rlz.list_of(rlz.integer), (3, 2)),
+        (rlz.value_list_of(rlz.integer), (3, 2)),
         (rlz.instance_of(int), 32),
     ],
 )
