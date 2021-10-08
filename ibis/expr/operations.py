@@ -2153,9 +2153,7 @@ class AggregateSelection:
     def _attempt_pushdown(self):
         metrics_valid, lowered_metrics = self._pushdown_exprs(self.metrics)
         by_valid, lowered_by = self._pushdown_exprs(self.by)
-        having_valid, lowered_having = self._pushdown_exprs(
-            self.having or None
-        )
+        having_valid, lowered_having = self._pushdown_exprs(self.having)
 
         if metrics_valid and by_valid and having_valid:
             return Aggregation(
@@ -2172,7 +2170,8 @@ class AggregateSelection:
     def _pushdown_exprs(self, exprs):
         import ibis.expr.analysis as L
 
-        if exprs is None:
+        # exit early if there's nothing to push down
+        if not exprs:
             return True, []
 
         resolved = self.op.table._resolve(exprs)
