@@ -472,6 +472,15 @@ def table(arg, *, schema=None, **kwargs):
 
 
 @validator
+def column_from(name, column, *, arguments):
+    if not isinstance(column, (str, int)):
+        raise com.IbisTypeError(
+            f"value must be an int or str, got {type(column).__name__}"
+        )
+    return arguments[name][column]
+
+
+@validator
 def function_of(
     argument,
     fn,
