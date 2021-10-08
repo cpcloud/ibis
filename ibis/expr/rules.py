@@ -123,6 +123,18 @@ def list_of(inner, arg, *, min_length=0, flatten=False, **kwargs):
 
 
 @validator
+def tuple_of(inner, arg, *, min_length=0, **kwargs):
+    if not util.is_iterable(arg):
+        raise com.IbisTypeError('Argument must be a sequence')
+
+    if len(arg) < min_length:
+        raise com.IbisTypeError(
+            f'Arg must have at least {min_length} number of elements'
+        )
+    return tuple(map(inner(**kwargs), arg))
+
+
+@validator
 def all_of(inners, arg, **kwargs):
     """All of the inner validators must pass.
 
