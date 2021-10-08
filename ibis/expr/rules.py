@@ -596,6 +596,11 @@ def named_literal_expression(value, **kwargs):
 
 
 @validator
+def pair(inner_left, inner_right, a, b, **kwargs):
+    return inner_left(a, **kwargs), inner_right(b, **kwargs)
+
+
+@validator
 def analytic(arg, **kwargs):
     from ibis.expr.analysis import is_analytic
 
