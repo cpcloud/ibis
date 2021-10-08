@@ -288,7 +288,7 @@ def test_invalid_column_or_scalar(validator, value, expected):
     ],
 )
 def test_table_with_schema(table):
-    validator = rlz.table([('group', dt.int64), ('value', dt.double)])
+    validator = rlz.table(schema=[('group', dt.int64), ('value', dt.double)])
     assert validator(table) == table
 
 
@@ -296,7 +296,9 @@ def test_table_with_schema(table):
     'table', [ibis.table([('group', dt.int64), ('value', dt.timestamp)])]
 )
 def test_table_with_schema_invalid(table):
-    validator = rlz.table([('group', dt.double), ('value', dt.timestamp)])
+    validator = rlz.table(
+        schema=[('group', dt.double), ('value', dt.timestamp)]
+    )
     with pytest.raises(IbisTypeError):
         validator(table)
 

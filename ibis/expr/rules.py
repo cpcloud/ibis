@@ -436,12 +436,12 @@ def typeof(arg):
 
 
 @validator
-def table(schema, arg):
+def table(arg, *, schema=None, **kwargs):
     """A table argument.
 
     Parameters
     ----------
-    schema : Union[sch.Schema, List[Tuple[str, dt.DataType]]
+    schema : Union[sch.Schema, List[Tuple[str, dt.DataType], None]
         A validator for the table's columns. Only column subset validators are
         currently supported. Accepts any arguments that `sch.schema` accepts.
         See the example for usage.
@@ -456,14 +456,19 @@ def table(schema, arg):
     present it must be of the specified type. The table may have extra columns
     not specified in the schema.
     """
-    assert isinstance(arg, ir.TableExpr)
+    if not isinstance(arg, ir.TableExpr):
+        raise com.IbisTypeError(
+            f'Argument is not a table; got type {type(arg).__name__}'
+        )
 
-    if arg.schema() >= sch.schema(schema):
-        return arg
+    if schema is not None:
+        if arg.schema() >= sch.schema(schema):
+            return arg
 
-    raise com.IbisTypeError(
-        f'Argument is not a table with column subset of {schema}'
-    )
+        raise com.IbisTypeError(
+            f'Argument is not a table with column subset of {schema}'
+        )
+    return arg
 
 
 @validator
