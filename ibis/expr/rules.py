@@ -1,4 +1,3 @@
-import collections
 import enum
 import functools
 from contextlib import suppress
@@ -11,9 +10,9 @@ import ibis.expr.types as ir
 import ibis.util as util
 
 try:
-    from cytoolz import compose, curry
+    from cytoolz import compose, curry, identity
 except ImportError:
-    from toolz import compose, curry
+    from toolz import compose, curry, identity
 
 
 def highest_precedence_dtype(exprs):
@@ -101,6 +100,28 @@ def one_of(inners, arg, **kwargs):
     )
 
 
+def _flatten(iterable):
+    for item in iterable:
+        if util.is_iterable(item):
+            yield from _flatten(item)
+        else:
+            yield item
+
+
+@validator
+def list_of(inner, arg, *, min_length=0, flatten=False, **kwargs):
+    if not util.is_iterable(arg):
+        raise com.IbisTypeError('Argument must be a sequence')
+
+    if len(arg) < min_length:
+        raise com.IbisTypeError(
+            f'Arg must have at least {min_length} number of elements'
+        )
+
+    flatten_func = _flatten if flatten else identity
+    return list(flatten_func(map(functools.partial(inner, **kwargs), arg)))
+
+
 @validator
 def all_of(inners, arg, **kwargs):
     """All of the inner validators must pass.
@@ -150,17 +171,15 @@ def member_of(obj, arg, **kwargs):
 
 
 @validator
-def list_of(inner, arg, min_length=0):
-    if isinstance(arg, str) or not isinstance(
-        arg, (collections.abc.Sequence, ir.ListExpr)
-    ):
+def value_list_of(inner, arg, *, min_length=0, **kwargs):
+    if not util.is_iterable(arg):
         raise com.IbisTypeError('Argument must be a sequence')
 
     if len(arg) < min_length:
         raise com.IbisTypeError(
             f'Arg must have at least {min_length} number of elements'
         )
-    return ir.sequence(list(map(inner, arg)))
+    return ir.sequence(list(map(functools.partial(inner, **kwargs), arg)))
 
 
 @validator
