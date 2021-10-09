@@ -3045,9 +3045,18 @@ class StructField(ValueOp):
         return rlz.shape_like(self.arg, value_dtype)
 
 
+try:
+    import shapely
+except ImportError:
+    BaseGeometry = type(None)
+else:
+    BaseGeometry = shapely.geometry.base.BaseGeometry
+
+
 class Literal(ValueOp):
     value = Arg(
         (
+            BaseGeometry,
             bytes,
             datetime.date,
             datetime.datetime,
