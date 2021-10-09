@@ -2169,11 +2169,11 @@ def _maybe_convert_sort_keys(tables, exprs):
     exprs = util.promote_list(exprs)
     keys = [None] * len(exprs)
     unset_keys = set(range(len(exprs)))
-    for i, k in enumerate(exprs):
-        step = -1 if isinstance(k, (str, DeferredSortKey)) else 1
+    for i, key in enumerate(exprs):
+        step = -1 if isinstance(key, (str, DeferredSortKey)) else 1
         for table in tables[::step]:
             try:
-                sort_key = to_sort_key(table, k)
+                sort_key = to_sort_key(table, key)
             except Exception:
                 continue
             else:
