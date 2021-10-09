@@ -3055,27 +3055,34 @@ else:
 
 class Literal(ValueOp):
     value = Arg(
-        (
-            BaseGeometry,
-            bytes,
-            datetime.date,
-            datetime.datetime,
-            datetime.time,
-            datetime.timedelta,
-            dict,
-            enum.Enum,
-            float,
-            frozenset,
-            int,
-            list,
-            np.generic,
-            np.ndarray,
-            pd.Timedelta,
-            pd.Timestamp,
-            set,
-            str,
-            tuple,
-            type(None),
+        rlz.one_of(
+            (
+                rlz.instance_of(
+                    (
+                        BaseGeometry,
+                        bytes,
+                        datetime.date,
+                        datetime.datetime,
+                        datetime.time,
+                        datetime.timedelta,
+                        dict,
+                        enum.Enum,
+                        float,
+                        frozenset,
+                        int,
+                        list,
+                        np.generic,
+                        np.ndarray,
+                        pd.Timedelta,
+                        pd.Timestamp,
+                        set,
+                        str,
+                        tuple,
+                        type(None),
+                    )
+                ),
+                rlz.is_computable_input,
+            )
         )
     )
     dtype = Arg(rlz.datatype)

@@ -574,6 +574,21 @@ def literal(value, arg, **kwargs):
 
 
 @validator
+def is_computable_input(value, **kwargs):
+    from ibis.backends.pandas.core import (
+        is_computable_input as _is_computable_input,
+    )
+
+    if not _is_computable_input(value):
+        raise com.IbisTypeError(
+            f"object {value} is not a computable input; "
+            "did you register the type with "
+            "ibis.backends.pandas.core.is_computable_input?"
+        )
+    return value
+
+
+@validator
 def named_literal_expression(value, **kwargs):
     import ibis.expr.operations as ops
 
