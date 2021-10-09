@@ -3048,6 +3048,7 @@ class StructField(ValueOp):
 class Literal(ValueOp):
     value = Arg(
         (
+            bytes,
             int,
             str,
             float,
