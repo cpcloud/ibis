@@ -94,9 +94,9 @@ def one_of(inners, arg, **kwargs):
         with suppress(com.IbisTypeError, ValueError):
             return inner(arg, **kwargs)
 
-    rules_formatted = ', '.join(map(repr, inners))
     raise com.IbisTypeError(
-        f'Arg passes neither of the following rules: {rules_formatted}'
+        "argument passes none of the following rules: "
+        f"{', '.join(map(repr, inners))}"
     )
 
 
@@ -115,7 +115,7 @@ def list_of(inner, arg, *, min_length=0, flatten=False, **kwargs):
 
     if len(arg) < min_length:
         raise com.IbisTypeError(
-            f'Arg must have at least {min_length} number of elements'
+            f'list argument must have at least {min_length} number of elements'
         )
 
     flatten_func = _flatten if flatten else identity
@@ -129,7 +129,7 @@ def tuple_of(inner, arg, *, min_length=0, **kwargs):
 
     if len(arg) < min_length:
         raise com.IbisTypeError(
-            f'Arg must have at least {min_length} number of elements'
+            f'list argument must have at least {min_length} number of elements'
         )
     return tuple(map(inner(**kwargs), arg))
 
@@ -528,11 +528,12 @@ def expr_list_of(inner, arg, *, min_length=0, **kwargs):
         )
 
     if not util.is_iterable(arg):
-        raise com.IbisTypeError('Argument must be a sequence')
+        raise com.IbisTypeError('argument must be a sequence')
 
     if len(arg) < min_length:
         raise com.IbisTypeError(
-            f'Arg must have at least {min_length} number of elements'
+            'expression list must have at least '
+            f'{min_length} number of elements'
         )
     return ibis.expr_list(list(map(functools.partial(inner, **kwargs), arg)))
 
