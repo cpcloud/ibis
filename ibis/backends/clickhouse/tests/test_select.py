@@ -48,7 +48,7 @@ FROM {0}.`functional_alltypes`"""
 
 
 def test_isin_notin_in_select(con, db, alltypes, translate):
-    values = ['foo', 'bar']
+    values = {'foo', 'bar'}
     filtered = alltypes[alltypes.string_col.isin(values)]
     result = ibis.clickhouse.compile(filtered)
     expected = """SELECT *
