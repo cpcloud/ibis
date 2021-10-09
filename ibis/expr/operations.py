@@ -230,7 +230,10 @@ class TableNode(Node):
         return Selection(
             expr,
             [],
-            sort_keys=_maybe_convert_sort_keys([self, expr], sort_exprs),
+            sort_keys=_maybe_convert_sort_keys(
+                [self.to_expr(), expr],
+                sort_exprs,
+            ),
         )
 
     def is_ancestor(self, other):
