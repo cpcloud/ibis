@@ -509,8 +509,8 @@ def function_of(
     preprocess=identity,
     arguments,
 ):
-    if not callable(fn):
-        raise com.IbisTypeError("value for argument `fn` must be callable")
+    if not util.is_function(fn):
+        raise com.IbisTypeError('argument `fn` must be a function or lambda')
 
     return output_rule(
         fn(preprocess(arguments[argument])),
