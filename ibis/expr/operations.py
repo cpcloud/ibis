@@ -3065,6 +3065,7 @@ class Literal(ValueOp):
             np.generic,
             type(None),
             enum.Enum,
+            np.ndarray,
         )
     )
     dtype = Arg(rlz.datatype)
