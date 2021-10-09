@@ -2167,8 +2167,7 @@ class AggregateSelection:
 
 def _maybe_convert_sort_keys(tables, exprs):
     exprs = util.promote_list(exprs)
-    keys = [None] * len(exprs)
-    unset_keys = set(range(len(exprs)))
+    keys = exprs[:]
     for i, key in enumerate(exprs):
         step = -1 if isinstance(key, (str, DeferredSortKey)) else 1
         for table in tables[::step]:
@@ -2178,10 +2177,7 @@ def _maybe_convert_sort_keys(tables, exprs):
                 continue
             else:
                 keys[i] = sort_key
-                unset_keys.remove(i)
                 break
-    for k in unset_keys:
-        keys[k] = exprs[k]
     return keys
 
 
