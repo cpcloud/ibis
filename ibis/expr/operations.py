@@ -2280,6 +2280,7 @@ class Aggregation(TableNode, HasSchema):
             )
         ),
         default=[],
+        requires=["by"],
     )
 
     def _validate(self):
