@@ -30,15 +30,15 @@ class Argument:
 
         Parameters
         ----------
-        validator : Union[Callable[[arg], coerced], Type, Tuple[Type]]
+        validator : Callable[[arg], coerced] | type | tuple[type, ...]
             Function which handles validation and/or coercion of the given
             argument.
-        default : Union[Any, Callable[[], str]]
+        default : Any | Callable[[], T]
             In case of missing (None) value for validation this will be used.
             Note, that default value (except for None) must also pass the inner
             validator.
             If callable is passed, it will be executed just before the inner,
-            and itsreturn value will be treaded as default.
+            and its return value will be treated as the default.
         show : bool
             Whether to show this argument in an :class:`~ibis.expr.types.Expr`
             that contains it.
