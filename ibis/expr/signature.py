@@ -41,6 +41,9 @@ class Argument:
         show : bool
             Whether to show this argument in an :class:`~ibis.expr.types.Expr`
             that contains it.
+        post_process : Callable[[T, ...], R]
+            A function that will be called for every validated argument, with
+            all other validated arguments as input(s).
         """
         self.default = default
         self.show = show
