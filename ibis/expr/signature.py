@@ -70,6 +70,18 @@ class Argument:
     def optional(self):
         return self.default is not _undefined
 
+    @property
+    def default_value(self):
+        default = self.default
+
+        if default is None:
+            return None
+
+        if util.is_function(default):
+            return default()
+
+        return default
+
     def validate(self, value=_undefined, name=None, *, arguments=None):
         """
         Parameters
@@ -84,10 +96,7 @@ class Argument:
             if value is _undefined or value is None:
                 if self.default is None:
                     return None
-                elif util.is_function(self.default):
-                    value = self.default()
-                else:
-                    value = self.default
+                value = self.default_value
         elif value is _undefined:
             if name is not None:
                 name_msg = f"argument `{name}`"
