@@ -16,7 +16,7 @@ _undefined = object()  # marker for missing argument
 class Argument:
     """Argument definition."""
 
-    __slots__ = 'validator', 'default', 'show', 'post_process'
+    __slots__ = 'validator', 'default', 'show', 'post_process', 'requires'
 
     def __init__(
         self,
@@ -24,6 +24,7 @@ class Argument:
         default=_undefined,
         show=True,
         post_process=None,
+        requires=(),
     ):
         """Argument constructor
 
@@ -44,10 +45,15 @@ class Argument:
         post_process : Callable[[T, ...], R]
             A function that will be called for every validated argument, with
             all other validated arguments as input(s).
+        requires : Iterable[str]
+            An iterable of strings naming other arguments that are required to
+            be non-empty for this argument to be a value other than its
+            default.
         """
         self.default = default
         self.show = show
         self.post_process = post_process
+        self.requires = requires
         if isinstance(validator, type):
             self.validator = rlz.instance_of(validator)
         elif isinstance(validator, tuple):
@@ -158,12 +164,19 @@ class TypeSignature(OrderedDict):
         result_kwargs = dict(result)
         for name, value in result:
             argument = self[name]
+
             post_process_fn = argument.post_process
             if post_process_fn is not None:
                 final_value = post_process_fn(**result_kwargs)
             else:
                 final_value = value
-            post_processed.append((name, final_value))
+
+            if all(result_kwargs[req] for req in argument.requires):
+                val = final_value
+            else:
+                val = argument.default_value
+
+            post_processed.append((name, val))
 
         return post_processed
 
