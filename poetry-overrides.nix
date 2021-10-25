@@ -84,4 +84,13 @@ self: super:
       self.hatchling
     ];
   });
+
+  multiset = super.multiset.overridePythonAttrs (attrs: {
+    dontPreferSetupPy = true;
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ])
+      ++ [ self.setuptools-scm ];
+    propagatedBuildInputs = (attrs.propagatedBuildInputs or [ ])
+      ++ [ self.pytest-runner ];
+    checkInputs = [ self.pytestCheckHook ];
+  });
 }

@@ -62,6 +62,7 @@ pyspark = { version = ">=3,<4", optional = true }
 requests = { version = ">=2,<3", optional = true }
 Shapely = { version = ">=1.6,<1.8.1", optional = true }
 sqlalchemy = { version = ">=1.4,<2.0", optional = true }
+matchpy = { version = ">=0.5.4,<0.6", optional = true }
 
 [tool.poetry.dev-dependencies]
 black = ">=22.1.0,<23"
@@ -122,6 +123,7 @@ all = [
   "graphviz",
   "impyla",
   "lz4",
+  "matchpy",
   "psycopg2",
   "pyarrow",
   "pymysql",
@@ -142,6 +144,7 @@ postgres = ["psycopg2", "sqlalchemy"]
 pyspark = ["pyarrow", "pyspark"]
 sqlite = ["sqlalchemy"]
 visualization = ["graphviz"]
+optimize = ["matchpy"]
 
 [tool.poetry.plugins."ibis.backends"]
 clickhouse = "ibis.backends.clickhouse"
