@@ -64,4 +64,6 @@ pkgs.mkShell {
   ];
 
   PYTHONPATH = builtins.toPath ./.;
+  IMPALA_IMAGE_PREFIX = "apache/impala:4.0.0-";
+  IMPALA_LISTEN_ADDR = "0.0.0.0";
 }

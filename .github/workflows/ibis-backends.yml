@@ -306,8 +306,11 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
 
+      - name: create external network for impala
+        run: docker network create -d bridge impala
+
       - name: start impala and kudu containers
-        run: docker compose up -d impala kudu
+        run: docker compose up -d impalad
 
       - name: install python
         uses: actions/setup-python@v2

@@ -122,7 +122,7 @@ class IbisTestEnv:
 
     @property
     def hdfs_superuser(self):
-        return os.environ.get('IBIS_TEST_HDFS_SUPERUSER', 'hdfs')
+        return os.environ.get('IBIS_TEST_HDFS_SUPERUSER', 'root')
 
     @property
     def use_codegen(self):
@@ -136,7 +136,7 @@ class IbisTestEnv:
 
     @property
     def webhdfs_user(self):
-        return os.environ.get('IBIS_TEST_WEBHDFS_USER', 'hdfs')
+        return os.environ.get('IBIS_TEST_WEBHDFS_USER', 'root')
 
 
 @pytest.fixture

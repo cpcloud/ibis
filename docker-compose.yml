@@ -4,76 +4,6 @@ services:
     image: yandex/clickhouse-server:20-alpine
     ports:
       - 8123:8123
-      - 9000:9000
-    networks:
-      - clickhouse
-  impala:
-    depends_on:
-      - impala-postgres
-    environment:
-      PGPASSWORD: postgres
-    healthcheck:
-      interval: 30s
-      retries: 20
-      test:
-        - CMD-SHELL
-        - nc -z 127.0.0.1 21050 && nc -z 127.0.0.1 50070
-      timeout: 10s
-    hostname: localhost
-    image: ibisproject/impala:latest
-    ports:
-      - 9020:9020
-      - 50070:50070
-      - 50075:50075
-      - 8020:8020
-      - 8042:8042
-      - 9083:9083
-      - 21000:21000
-      - 21050:21050
-      - 25000:25000
-      - 25010:25010
-      - 25020:25020
-    networks:
-      - impala
-  impala-postgres:
-    user: postgres
-    hostname: postgres
-    environment:
-      POSTGRES_PASSWORD: postgres
-    healthcheck:
-      interval: 10s
-      retries: 3
-      test:
-        - CMD
-        - pg_isready
-      timeout: 5s
-    image: postgres:13.3-alpine
-    networks:
-      - impala
-  kudu:
-    cap_add:
-      - SYS_TIME
-    depends_on:
-      - kudu-tserver
-    environment:
-      KUDU_MASTER: "true"
-    image: ibisproject/kudu:latest
-    ports:
-      - 7051:7051
-      - 8051:8051
-    networks:
-      - impala
-  kudu-tserver:
-    cap_add:
-      - SYS_TIME
-    environment:
-      KUDU_MASTER: "false"
-    image: ibisproject/kudu:latest
-    ports:
-      - 7050:7050
-      - 8050:8050
-    networks:
-      - impala
   mysql:
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -109,11 +39,251 @@ services:
       timeout: 5s
     ports:
       - 5432:5432
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    restart: always
+    ports:
+      - 9868:9868
+      - 9870:9870
+      - 9000:9000
+      - 50070:9870
+    volumes:
+      - hadoop-namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
     networks:
-      - postgres
+      - ibis
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    hostname: localhost
+    restart: always
+    ports:
+      - 9864:9864
+      - 9866:9866
+      - 9867:9867
+    volumes:
+      - hadoop-datanode:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+      HDFS_CONF_dfs_datanode_data_dir: "file:///hadoop/dfs/data"
+    env_file:
+      - ./hadoop.env
+    healthcheck:
+      interval: 5s
+      retries: 20
+      test:
+        - CMD-SHELL
+        - nc -z localhost 9864 && nc -z localhost 9866 && nc -z localhost 9867
+    networks:
+      ibis:
+        aliases:
+          - datanode
+  hive-metastore:
+    image: ${IMPALA_IMAGE_PREFIX:-}impala_quickstart_hms
+    command: ["hms"]
+    volumes:
+      # Volume used to store Apache Derby database.
+      - impala-warehouse:/var/lib/hive
+      # Warehouse directory. HMS does file operations so needs access to the
+      # shared volume.
+      - impala-warehouse:/user/hive/warehouse
+      - ./impala_conf:/opt/hive/conf:ro
+    networks:
+      - ibis
+  statestored:
+    image: ${IMPALA_IMAGE_PREFIX:-}statestored
+    ports:
+      # Web debug UI
+      - "25010:25010"
+    command: ["-redirect_stdout_stderr=false", "-logtostderr", "-v=1"]
+    volumes:
+      - ./impala_conf:/opt/impala/conf:ro
+    healthcheck:
+      interval: 30s
+      retries: 20
+      test:
+        - CMD-SHELL
+        - nc -z 127.0.0.1 25010
+    networks:
+      - ibis
+  catalogd:
+    depends_on:
+      - statestored
+      - hive-metastore
+    image: ${IMPALA_IMAGE_PREFIX:-}catalogd
+    ports:
+      # Web debug UI
+      - "25020:25020"
+    command:
+      [
+        "-redirect_stdout_stderr=false",
+        "-logtostderr",
+        "-v=1",
+        "-hms_event_polling_interval_s=1",
+        "-invalidate_tables_timeout_s=999999",
+      ]
+    volumes:
+      # Warehouse directory. Catalog does file operations so needs access to the
+      # shared volume.
+      - impala-warehouse:/user/hive/warehouse
+      - ./impala_conf:/opt/impala/conf:ro
+    healthcheck:
+      interval: 30s
+      retries: 20
+      test:
+        - CMD-SHELL
+        - nc -z 127.0.0.1 25020
+    networks:
+      - ibis
+  impalad:
+    image: ${IMPALA_IMAGE_PREFIX:-}impalad_coord_exec
+    depends_on:
+      - statestored
+      - catalogd
+      - namenode
+      - datanode
+    ports:
+      # Beeswax endpoint (deprecated)
+      - "21000:21000"
+      # HS2 endpoint
+      - "21050:21050"
+      # Web debug UI
+      - "25000:25000"
+      # HS2 over HTTP endpoint.
+      - "28000:28000"
+    healthcheck:
+      interval: 30s
+      retries: 20
+      test:
+        - CMD-SHELL
+        - nc -z 127.0.0.1 21000 && nc -z 127.0.0.1 21050 && nc -z 127.0.0.1 25000 && nc -z 127.0.0.1 28000
+    command:
+      [
+        "-v=1",
+        "-redirect_stdout_stderr=false",
+        "-logtostderr",
+        "-kudu_master_hosts=kudu-master:7051",
+        "-mt_dop_auto_fallback=true",
+        "-default_query_options=mt_dop=4,default_file_format=parquet,default_transactional_type=insert_only",
+        "-mem_limit=4gb",
+      ]
+    environment:
+      # Keep the Java heap small to preserve memory for query execution.
+      - JAVA_TOOL_OPTIONS="-Xmx1g"
+    volumes:
+      - impala-warehouse:/user/hive/warehouse
+      - ./impala_conf:/opt/impala/conf:ro
+    networks:
+      - ibis
+  kudu-master:
+    image: apache/kudu
+    ports:
+      - "7051:7051"
+      - "8051:8051"
+    command: ["master"]
+    volumes:
+      - kudu-master:/var/lib/kudu
+    environment:
+      - >
+        MASTER_ARGS=--fs_wal_dir=/var/lib/kudu/master
+        --rpc_bind_addresses=0.0.0.0:7051
+        --rpc_advertised_addresses=0.0.0.0:7051
+        --webserver_port=8051
+        --webserver_advertised_addresses=0.0.0.0:8051
+        --webserver_doc_root=/opt/kudu/www
+        --stderrthreshold=0
+        --use_hybrid_clock=false
+        --memory_limit_hard_bytes=1073741824
+    networks:
+      - ibis
+  kudu-tserver-1:
+    image: apache/kudu
+    depends_on:
+      - kudu-master
+    ports:
+      - "7050:7050"
+      - "8050:8050"
+    command: ["tserver"]
+    volumes:
+      - kudu-tserver-1:/var/lib/kudu
+    environment:
+      - KUDU_MASTERS=kudu-master:7051
+      - >
+        TSERVER_ARGS=--fs_wal_dir=/var/lib/kudu/tserver
+        --rpc_bind_addresses=0.0.0.0:7050
+        --rpc_advertised_addresses=0.0.0.0:7050
+        --webserver_port=8050
+        --webserver_advertised_addresses=0.0.0.0:8050
+        --webserver_doc_root=/opt/kudu/www
+        --stderrthreshold=0
+        --use_hybrid_clock=false
+        --memory_limit_hard_bytes=1073741824
+    networks:
+      - ibis
+  kudu-tserver-2:
+    image: apache/kudu
+    depends_on:
+      - kudu-master
+    ports:
+      - "7150:7150"
+      - "8150:8150"
+    command: ["tserver"]
+    volumes:
+      - kudu-tserver-2:/var/lib/kudu
+    environment:
+      - KUDU_MASTERS=kudu-master:7051
+      - >
+        TSERVER_ARGS=--fs_wal_dir=/var/lib/kudu/tserver
+        --rpc_bind_addresses=0.0.0.0:7150
+        --rpc_advertised_addresses=0.0.0.0:7150
+        --webserver_port=8150
+        --webserver_advertised_addresses=0.0.0.0:8150
+        --webserver_doc_root=/opt/kudu/www
+        --stderrthreshold=0
+        --use_hybrid_clock=false
+        --memory_limit_hard_bytes=1073741824
+    networks:
+      - ibis
+  kudu-tserver-3:
+    image: apache/kudu
+    depends_on:
+      - kudu-master
+    ports:
+      - "7250:7250"
+      - "8250:8250"
+    command: ["tserver"]
+    volumes:
+      - kudu-tserver-3:/var/lib/kudu
+    environment:
+      - KUDU_MASTERS=kudu-master:7051
+      - >
+        TSERVER_ARGS=--fs_wal_dir=/var/lib/kudu/tserver
+        --rpc_bind_addresses=0.0.0.0:7250
+        --rpc_advertised_addresses=0.0.0.0:7250
+        --webserver_port=8250
+        --webserver_advertised_addresses=0.0.0.0:8250
+        --webserver_doc_root=/opt/kudu/www
+        --stderrthreshold=0
+        --use_hybrid_clock=false
+        --memory_limit_hard_bytes=1073741824
+    networks:
+      - ibis
+
+volumes:
+  hadoop-namenode:
+  hadoop-datanode:
+  impala-hive-metastore:
+  impala-warehouse:
+  kudu-master:
+  kudu-tserver-1:
+  kudu-tserver-2:
+  kudu-tserver-3:
 
 networks:
-  impala:
+  postgres:
   mysql:
   clickhouse:
-  postgres:
+  ibis:
+    external: true

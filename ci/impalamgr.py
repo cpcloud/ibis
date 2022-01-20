@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import concurrent.futures
-import itertools
 import os
 from io import BytesIO
 from pathlib import Path
@@ -105,7 +103,7 @@ def create_test_database(con):
     if con.exists_database(ENV.test_data_db):
         con.drop_database(ENV.test_data_db, force=True)
     con.create_database(ENV.test_data_db)
-    logger.info('Created database %s', ENV.test_data_db)
+    logger.info(f'Created database {ENV.test_data_db}')
 
     con.create_table(
         'alltypes',
@@ -124,85 +122,88 @@ def create_test_database(con):
         ),
         database=ENV.test_data_db,
     )
-    logger.info('Created empty table %s.`alltypes`', ENV.test_data_db)
+    logger.info(f'Created empty table {ENV.test_data_db}.`alltypes`')
 
 
-def create_parquet_tables(con, executor):
+PARQUET_TABLES = {
+    'functional_alltypes': ibis.schema(
+        [
+            ('id', 'int32'),
+            ('bool_col', 'boolean'),
+            ('tinyint_col', 'int8'),
+            ('smallint_col', 'int16'),
+            ('int_col', 'int32'),
+            ('bigint_col', 'int64'),
+            ('float_col', 'float'),
+            ('double_col', 'double'),
+            ('date_string_col', 'string'),
+            ('string_col', 'string'),
+            ('timestamp_col', 'timestamp'),
+            ('year', 'int32'),
+            ('month', 'int32'),
+        ]
+    ),
+    'tpch_region': ibis.schema(
+        [
+            ('r_regionkey', 'int16'),
+            ('r_name', 'string'),
+            ('r_comment', 'string'),
+        ]
+    ),
+}
+
+AVRO_TABLES = {
+    'tpch_region_avro': {
+        'type': 'record',
+        'name': 'a',
+        'fields': [
+            {'name': 'R_REGIONKEY', 'type': ['null', 'int']},
+            {'name': 'R_NAME', 'type': ['null', 'string']},
+            {'name': 'R_COMMENT', 'type': ['null', 'string']},
+        ],
+    }
+}
+
+
+def compute_stats(table):
+    logger.info(f'Computing stats for {table.op().name}')
+    table.compute_stats()
+
+
+def create_parquet_tables(con):
     def create_table(table_name):
-        logger.info('Creating %s', table_name)
-        schema = schemas.get(table_name)
+        logger.info(f'Creating {table_name}')
         path = os.path.join(ENV.test_data_dir, 'parquet', table_name)
         table = con.parquet_file(
             path,
-            schema=schema,
+            schema=PARQUET_TABLES.get(table_name),
             name=table_name,
             database=ENV.test_data_db,
             persist=True,
         )
-        return table
+        compute_stats(table)
 
     parquet_files = con.hdfs.ls(os.path.join(ENV.test_data_dir, 'parquet'))
-    schemas = {
-        'functional_alltypes': ibis.schema(
-            [
-                ('id', 'int32'),
-                ('bool_col', 'boolean'),
-                ('tinyint_col', 'int8'),
-                ('smallint_col', 'int16'),
-                ('int_col', 'int32'),
-                ('bigint_col', 'int64'),
-                ('float_col', 'float'),
-                ('double_col', 'double'),
-                ('date_string_col', 'string'),
-                ('string_col', 'string'),
-                ('timestamp_col', 'timestamp'),
-                ('year', 'int32'),
-                ('month', 'int32'),
-            ]
-        ),
-        'tpch_region': ibis.schema(
-            [
-                ('r_regionkey', 'int16'),
-                ('r_name', 'string'),
-                ('r_comment', 'string'),
-            ]
-        ),
-    }
-    return (
-        executor.submit(create_table, table_name)
-        for table_name in parquet_files
-    )
+    for table_name in parquet_files:
+        create_table(table_name)
 
 
 def create_avro_tables(con, executor):
     def create_table(table_name):
-        logger.info('Creating %s', table_name)
-        schema = schemas[table_name]
+        logger.info(f'Creating {table_name}')
         path = os.path.join(ENV.test_data_dir, 'avro', table_name)
         table = con.avro_file(
             path,
-            schema,
+            schema=AVRO_TABLES[table_name],
             name=table_name,
             database=ENV.test_data_db,
             persist=True,
         )
-        return table
+        compute_stats(table)
 
     avro_files = con.hdfs.ls(os.path.join(ENV.test_data_dir, 'avro'))
-    schemas = {
-        'tpch_region_avro': {
-            'type': 'record',
-            'name': 'a',
-            'fields': [
-                {'name': 'R_REGIONKEY', 'type': ['null', 'int']},
-                {'name': 'R_NAME', 'type': ['null', 'string']},
-                {'name': 'R_COMMENT', 'type': ['null', 'string']},
-            ],
-        }
-    }
-    return (
-        executor.submit(create_table, table_name) for table_name in avro_files
-    )
+    for table_name in avro_files:
+        create_table(table_name)
 
 
 def build_udfs():
@@ -218,7 +219,7 @@ def upload_udfs(con):
     ibis_home_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     build_dir = os.path.join(ibis_home_dir, 'ci', 'udf', 'build')
     bitcode_dir = os.path.join(ENV.test_data_dir, 'udf')
-    logger.info('Uploading UDFs to %s', bitcode_dir)
+    logger.info(f'Uploading UDFs to {bitcode_dir}')
     if con.hdfs.exists(bitcode_dir):
         con.hdfs.rmdir(bitcode_dir)
     con.hdfs.put(bitcode_dir, build_dir, verbose=True)
@@ -227,7 +228,7 @@ def upload_udfs(con):
 # ==========================================
 
 
-@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.group()
 def main():
     """Manage impala test data for Ibis."""
 
@@ -248,7 +249,9 @@ def main():
     default=DATA_DIR,
 )
 @click.option(
-    '--overwrite', is_flag=True, help='Forces overwriting of data/UDFs'
+    '--overwrite/--no-overwrite',
+    default=True,
+    help='Forces overwriting of data/UDFs',
 )
 def load(data, udf, data_dir, overwrite):
     """Load Ibis test data and build/upload UDFs"""
@@ -298,49 +301,8 @@ def load_impala_data(con, data_dir, overwrite=False):
         logger.info('Creating Ibis test data database')
         create_test_database(con)
 
-        def compute_stats(table):
-            logger.info('Computing stats for %s', table.op().name)
-            table.compute_stats()
-
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            parquet_tables = create_parquet_tables(con, executor)
-            avro_tables = create_avro_tables(con, executor)
-            completed_futures = concurrent.futures.as_completed(
-                itertools.chain(parquet_tables, avro_tables)
-            )
-            results = [future.result() for future in completed_futures]
-            list(executor.map(compute_stats, results))
-
-
-@main.command()
-@click.option(
-    '--test-data',
-    is_flag=True,
-    help='Cleanup Ibis test data, test database, and also the test UDFs if '
-    'they are stored in the test data directory/database',
-)
-@click.option('--udfs', is_flag=True, help='Cleanup Ibis test UDFs only')
-@click.option(
-    '--tmp-data', is_flag=True, help='Cleanup Ibis temporary HDFS directory'
-)
-@click.option('--tmp-db', is_flag=True, help='Cleanup Ibis temporary database')
-def cleanup(test_data, udfs, tmp_data, tmp_db):
-    """Cleanup Ibis test data and UDFs"""
-    con = make_ibis_client(ENV)
-
-    if udfs:
-        # this comes before test_data bc the latter clobbers this too
-        con.hdfs.rmdir(os.path.join(ENV.test_data_dir, 'udf'))
-
-    if test_data:
-        con.drop_database(ENV.test_data_db, force=True)
-        con.hdfs.rmdir(ENV.test_data_dir)
-
-    if tmp_data:
-        con.hdfs.rmdir(ENV.tmp_dir)
-
-    if tmp_db:
-        con.drop_database(ENV.tmp_db, force=True)
+        create_parquet_tables(con)
+        create_avro_tables(con)
 
 
 if __name__ == '__main__':
