@@ -330,24 +330,20 @@ OR_RULES = (
         Pattern(Or(exprs1, null, exprs0)),
         lambda exprs1, exprs0: Or(*exprs1, *exprs0),
     ),
-    ReplacementRule(
-        Pattern(Or(exprs0, true, exprs1)),
-        lambda **_: true,
-    ),
-    ReplacementRule(
-        Pattern(Or(exprs1, true, exprs0)),
-        lambda **_: true,
-    ),
+    ReplacementRule(Pattern(Or(exprs0, true, exprs1)), lambda **_: true),
+    ReplacementRule(Pattern(Or(exprs1, true, exprs0)), lambda **_: true),
 )
 
 COMPARISON_RULES = (
     # a > b => b < a
     ReplacementRule(
-        Pattern(Gt(expr1, expr2)), lambda expr1, expr2: Lt(expr2, expr1)
+        Pattern(Gt(expr1, expr2)),
+        lambda expr1, expr2: Lt(expr2, expr1),
     ),
     # a >= b => b <= a
     ReplacementRule(
-        Pattern(Ge(expr1, expr2)), lambda expr1, expr2: Le(expr2, expr1)
+        Pattern(Ge(expr1, expr2)),
+        lambda expr1, expr2: Le(expr2, expr1),
     ),
 )
 
