@@ -121,17 +121,14 @@ def test_project_with_add(t, a, b, c, benchmark):
 def test_select_project(t, a, b, c, d, benchmark):
     expr = Project(Select(Read(t), Gt(c, d)), Exprs(a, b))
     result = optimize(expr)
-    assert result == Project(
-        OptimizedRead(t, Refs(a, b), Gt(c, d)),
-        Exprs(a, b),
-    )
+    assert result == OptimizedRead(t, Refs(a, b), Lt(d, c))
     benchmark(optimize, expr)
 
 
 def test_select_select(t, b, c, benchmark):
     expr = Select(Select(Read(t), Gt(b, c)), Lt(c, b))
     result = optimize(expr)
-    assert result == SelectedRead(t, Gt(b, c))
+    assert result == SelectedRead(t, Lt(c, b))
     benchmark(optimize, expr)
 
 
