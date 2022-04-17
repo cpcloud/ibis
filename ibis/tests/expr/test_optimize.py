@@ -1,5 +1,6 @@
 import pytest
 from matchpy import Symbol
+from pytest import param
 
 from ibis.expr.optimize import (
     Add,
@@ -79,52 +80,59 @@ def d(t):
     return Ref(t, Symbol("d"))
 
 
-def test_project_read(t, a, b, c):
+def test_project_read(t, a, b, c, benchmark):
     expr = Project(Read(t), Exprs(a, b, c))
     result = optimize(expr)
     assert result == ProjectedRead(t, Refs(a, b, c))
+    benchmark(optimize, expr)
 
 
-def test_reproject_refs(t, a, b, c):
+def test_reproject_refs(t, a, b, c, benchmark):
     expr = Project(Project(Read(t), Refs(a, b, c)), Refs(a, b))
     result = optimize(expr)
     assert result == ProjectedRead(t, Refs(a, b))
+    benchmark(optimize, expr)
 
 
-def test_reproject_exprs(t, a, b, c):
+def test_reproject_exprs(t, a, b, c, benchmark):
     expr = Project(Project(Read(t), Exprs(a, b, c)), Exprs(a, b))
     result = optimize(expr)
     assert result == ProjectedRead(t, Refs(a, b))
+    benchmark(optimize, expr)
 
 
-def test_reproject_identical(t, a, b):
+def test_reproject_identical(t, a, b, benchmark):
     expr = Project(Project(Read(t), Exprs(a, b)), Exprs(a, b))
     result = optimize(expr)
     expected = ProjectedRead(t, Refs(a, b))
     assert result == expected
+    benchmark(optimize, expr)
 
 
-def test_project_with_add(t, a, b, c):
+def test_project_with_add(t, a, b, c, benchmark):
     expr = Project(Read(t), Exprs(a, b, Add(a, b, c)))
     result = optimize(expr)
     assert result == Project(
         ProjectedRead(t, Refs(a, b, c)), Exprs(a, b, Add(a, b, c))
     )
+    benchmark(optimize, expr)
 
 
-def test_select_project(t, a, b, c, d):
+def test_select_project(t, a, b, c, d, benchmark):
     expr = Project(Select(Read(t), Gt(c, d)), Exprs(a, b))
     result = optimize(expr)
     assert result == Project(
         OptimizedRead(t, Refs(a, b), Gt(c, d)),
         Exprs(a, b),
     )
+    benchmark(optimize, expr)
 
 
-def test_select_select(t, a, b, c):
+def test_select_select(t, b, c, benchmark):
     expr = Select(Select(Read(t), Gt(b, c)), Lt(c, b))
     result = optimize(expr)
     assert result == SelectedRead(t, Gt(b, c))
+    benchmark(optimize, expr)
 
 
 @pytest.mark.parametrize(
@@ -151,9 +159,10 @@ def test_select_select(t, a, b, c):
         (Not(Ne(Symbol("a"), Symbol("b"))), Eq(Symbol("a"), Symbol("b"))),
     ],
 )
-def test_logical(expr, expected):
+def test_logical(expr, expected, benchmark):
     result = optimize(expr)
     assert result == expected
+    benchmark(optimize, expr)
 
 
 @pytest.mark.parametrize(
@@ -191,12 +200,13 @@ def test_logical(expr, expected):
         ),
     ],
 )
-def test_constant_fold(expr, expected):
+def test_constant_fold(expr, expected, benchmark):
     result = optimize(expr)
     assert result == expected
+    benchmark(optimize, expr)
 
 
-def test_select_join(t, s, t_a, t_b, s_c, s_d):
+def test_select_join(t, s, t_a, t_b, s_c, s_d, benchmark):
     rel1 = Project(Read(t), Exprs(t_a, t_b))
     rel2 = Project(Read(s), Exprs(s_c, s_d))
     expr = Join(
@@ -228,9 +238,10 @@ def test_select_join(t, s, t_a, t_b, s_c, s_d):
         true,
     )
     assert result == expected
+    benchmark(optimize, expr)
 
 
-def test_select_join_cross_predicate(t, s, t_a, t_b, s_c, s_d):
+def test_select_join_cross_predicate(t, s, t_a, t_b, s_c, s_d, benchmark):
     rel1 = Project(Read(t), Exprs(t_a, t_b))
     rel2 = Project(Read(s), Exprs(s_c, s_d))
     expr = Join(
@@ -245,77 +256,98 @@ def test_select_join_cross_predicate(t, s, t_a, t_b, s_c, s_d):
         And(Eq(s_c, t_a), Eq(s_d, t_b)),
     )
     assert result == expected
+    benchmark(optimize, expr)
 
 
-ands = pytest.mark.parametrize(
-    ("expr", "expected"),
-    [
-        (And(), true),
-        (And(true), true),
-        (And(false), false),
-        (And(null), null),
-        (And(false, false), false),
-        (And(false, null), false),
-        (And(false, true), false),
-        (And(true, true), true),
-        (And(true, null), null),
-        (And(true, false), false),
-        (And(null, true), null),
-        (And(null, null), null),
-        (And(null, false), false),
-        (And(Symbol("a"), Symbol("a")), Symbol("a")),
-        (And(Symbol("a"), true, Symbol("b")), And(Symbol("a"), Symbol("b"))),
-        (And(Symbol("a"), false, Symbol("b")), false),
-        (
-            And(Symbol("a"), null, Symbol("b")),
-            And(null, Symbol("a"), Symbol("b")),
-        ),
-        (And(Symbol("a"), null, Symbol("b"), false, Symbol("c")), false),
-        (And(Symbol("a"), false, Symbol("b"), false, Symbol("c")), false),
-        (And(Symbol("a"), false), false),
-        (And(false, Symbol("a")), false),
-        (And(Symbol("a"), true), Symbol("a")),
-        (And(true, Symbol("a")), Symbol("a")),
-    ],
-)
+ands = [
+    param(And(), true, id="and_empty"),
+    param(And(true), true, id="and_true"),
+    param(And(false), false, id="and_false"),
+    param(And(null), null, id="and_null"),
+    param(And(false, false), false, id="and_false_false"),
+    param(And(false, null), false, id="and_false_null"),
+    param(And(false, true), false, id="and_false_true"),
+    param(And(true, true), true, id="and_true_true"),
+    param(And(true, null), null, id="and_true_null"),
+    param(And(true, false), false, id="and_true_false"),
+    param(And(null, true), null, id="and_null_true"),
+    param(And(null, null), null, id="and_null_null"),
+    param(And(null, false), false, id="and_null_false"),
+    param(And(Symbol("a"), Symbol("a")), Symbol("a"), id="and_a"),
+    param(
+        And(Symbol("a"), true, Symbol("b")),
+        And(Symbol("a"), Symbol("b")),
+        id="and_a_b",
+    ),
+    param(And(Symbol("a"), false, Symbol("b")), false, id="and_a_false_b"),
+    param(And(Symbol("a"), null, Symbol("b")), null, id="and_a_null_b"),
+    param(
+        And(Symbol("a"), null, Symbol("b"), false, Symbol("c")),
+        false,
+        id="and_a_null_b_false_c",
+    ),
+    param(
+        And(Symbol("a"), false, Symbol("b"), false, Symbol("c")),
+        false,
+        id="and_a_false_b_false_c",
+    ),
+    param(And(Symbol("a"), false), false, id="and_a_false"),
+    param(And(false, Symbol("a")), false, id="and_false_a"),
+    param(And(Symbol("a"), true), Symbol("a"), id="and_a_true"),
+    param(And(true, Symbol("a")), Symbol("a"), id="and_true_a"),
+]
 
 
-ors = pytest.mark.parametrize(
-    ("expr", "expected"),
-    [
-        (Or(), false),
-        (Or(true), true),
-        (Or(false), false),
-        (Or(null), null),
-        (Or(false, false), false),
-        (Or(false, null), null),
-        (Or(false, true), true),
-        (Or(true, true), true),
-        (Or(true, null), true),
-        (Or(true, false), true),
-        (Or(null, true), true),
-        (Or(null, null), null),
-        (Or(null, false), null),
-        (Or(Symbol("a"), Symbol("a")), Symbol("a")),
-        (Or(Symbol("a"), Symbol("b")), Or(Symbol("a"), Symbol("b"))),
-        (Or(Symbol("a"), false, Symbol("b")), Or(Symbol("a"), Symbol("b"))),
-        (Or(Symbol("a"), true, Symbol("b")), true),
-        (
-            Or(Symbol("a"), null, Symbol("b")),
-            Or(null, Symbol("a"), Symbol("b")),
-        ),
-        (Or(Symbol("a"), null, Symbol("b"), true, Symbol("c")), true),
-        (Or(Symbol("a"), false, Symbol("b"), true, Symbol("c")), true),
-        (Or(Symbol("a"), true), true),
-        (Or(true, Symbol("a")), true),
-        (Or(Symbol("a"), false), Symbol("a")),
-        (Or(false, Symbol("a")), Symbol("a")),
-    ],
-)
+ors = [
+    param(Or(), false, id="or_empty"),
+    param(Or(true), true, id="or_true"),
+    param(Or(false), false, id="or_false"),
+    param(Or(null), null, id="or_null"),
+    param(Or(false, false), false, id="or_false_false"),
+    param(Or(false, null), null, id="or_false_null"),
+    param(Or(false, true), true, id="or_false_true"),
+    param(Or(true, true), true, id="or_true_true"),
+    param(Or(true, null), true, id="or_true_null"),
+    param(Or(true, false), true, id="or_true_false"),
+    param(Or(null, true), true, id="or_null_true"),
+    param(Or(null, null), null, id="or_null_null"),
+    param(Or(null, false), null, id="or_null_false"),
+    param(Or(Symbol("a"), Symbol("a")), Symbol("a"), id="or_a_a"),
+    param(
+        Or(Symbol("a"), Symbol("b")),
+        Or(Symbol("a"), Symbol("b")),
+        id="or_a_b",
+    ),
+    param(
+        Or(Symbol("a"), false, Symbol("b")),
+        Or(Symbol("a"), Symbol("b")),
+        id="or_a_false_b",
+    ),
+    param(Or(Symbol("a"), true, Symbol("b")), true, id="or_a_true_b"),
+    param(
+        Or(Symbol("a"), null, Symbol("b")),
+        Or(Symbol("a"), Symbol("b")),
+        id="or_a_null_b",
+    ),
+    param(
+        Or(Symbol("a"), null, Symbol("b"), true, Symbol("c")),
+        true,
+        id="or_a_null_b_true_c",
+    ),
+    param(
+        Or(Symbol("a"), false, Symbol("b"), true, Symbol("c")),
+        true,
+        id="or_a_false_b_true_c",
+    ),
+    param(Or(Symbol("a"), true), true, id="or_a_true"),
+    param(Or(true, Symbol("a")), true, id="or_true_a"),
+    param(Or(Symbol("a"), false), Symbol("a"), id="or_a_false"),
+    param(Or(false, Symbol("a")), Symbol("a"), id="or_false_a"),
+]
 
 
-@ands
-@ors
-def test_boolean_ops(expr, expected):
+@pytest.mark.parametrize(("expr", "expected"), ands + ors)
+def test_boolean_ops(expr, expected, benchmark):
     result = optimize(expr)
     assert result == expected
+    benchmark(optimize, expr)
