@@ -359,7 +359,7 @@ LOGICAL_RULES = (
         lambda expr1, expr2: Ne(expr1, expr2),
     ),
     # not (not a) => a
-    ReplacementRule(Pattern(Not(Not(expr))), lambda: expr),
+    ReplacementRule(Pattern(Not(Not(expr))), lambda expr: expr),
     # not True => False
     ReplacementRule(Pattern(Not(true)), lambda: false),
     # not False => True
