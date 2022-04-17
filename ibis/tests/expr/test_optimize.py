@@ -208,13 +208,14 @@ def test_constant_fold(expr, expected, benchmark):
 
 
 def test_select_join(t, s, t_a, t_b, s_c, s_d, benchmark):
-    rel1 = Project(Read(t), Exprs(t_a, t_b))
+    a_plus_1 = Add(t_a, IntLiteral(1))
+    rel1 = Project(Read(t), Exprs(a_plus_1, t_b))
     rel2 = Project(Read(s), Exprs(s_c, s_d))
     expr = Join(
         rel1,
         rel2,
         And(
-            Eq(t_a, IntLiteral(1)),
+            Eq(a_plus_1, IntLiteral(1)),
             Eq(t_b, IntLiteral(2)),
             Eq(s_c, IntLiteral(1)),
             Eq(s_d, IntLiteral(2)),
@@ -222,19 +223,18 @@ def test_select_join(t, s, t_a, t_b, s_c, s_d, benchmark):
     )
     result = optimize(expr)
     expected = Join(
-        Select(
-            rel1,
-            And(
-                Eq(t_a, IntLiteral(1)),
-                Eq(t_b, IntLiteral(2)),
+        Project(
+            OptimizedRead(
+                t,
+                Refs(t_a, t_b),
+                And(Eq(IntLiteral(1), a_plus_1), Eq(IntLiteral(2), t_b)),
             ),
+            Exprs(a_plus_1, t_b),
         ),
-        Select(
-            rel2,
-            And(
-                Eq(s_c, IntLiteral(1)),
-                Eq(s_d, IntLiteral(2)),
-            ),
+        OptimizedRead(
+            s,
+            Refs(s_c, s_d),
+            And(Eq(IntLiteral(1), s_c), Eq(IntLiteral(2), s_d)),
         ),
         true,
     )
