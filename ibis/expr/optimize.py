@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import Generic, Iterable, SupportsFloat, SupportsInt, TypeVar
+from typing import Any, Generic, Iterable, SupportsFloat, SupportsInt, TypeVar
 
 import matchpy
 import toolz
@@ -14,43 +14,44 @@ from matchpy import (
     Symbol,
     Wildcard,
 )
+from matchpy.matching.many_to_one import ManyToOneReplacer
 
 T = TypeVar("T")
 
 
 class Literal(Symbol, Generic[T]):
-    def __init__(self, value: T) -> None:
-        super().__init__(str(value))
+    def __init__(self, value: T, **kwargs: Any) -> None:
+        super().__init__(str(value), **kwargs)
         self.value = value
 
 
 class IntLiteral(Literal[int]):
-    def __init__(self, value: SupportsInt) -> None:
-        super().__init__(int(value))
+    def __init__(self, value: SupportsInt, **kwargs: Any) -> None:
+        super().__init__(int(value), **kwargs)
 
     def __int__(self) -> int:
         return self.value
 
 
 class FloatLiteral(Literal[float]):
-    def __init__(self, value: SupportsFloat) -> None:
-        super().__init__(float(value))
+    def __init__(self, value: SupportsFloat, **kwargs: Any) -> None:
+        super().__init__(float(value), **kwargs)
 
     def __float__(self) -> float:
         return self.value
 
 
 class BoolLiteral(Literal[bool]):
-    def __init__(self, value: bool) -> None:
-        super().__init__(value)
+    def __init__(self, value: bool, **kwargs: Any) -> None:
+        super().__init__(value, **kwargs)
 
     def __bool__(self) -> bool:
         return self.value
 
 
 class NullLiteral(Literal[None]):
-    def __init__(self) -> None:
-        super().__init__(None)
+    def __init__(self, value: None = None, **kwargs: Any) -> None:
+        super().__init__(value, **kwargs)
 
 
 true = BoolLiteral(True)
@@ -282,6 +283,14 @@ AND_RULES = (
         lambda **_: false,
     ),
     ReplacementRule(
+        Pattern(And(exprs0, null, exprs1)),
+        lambda **_: null,
+    ),
+    ReplacementRule(
+        Pattern(And(exprs1, null, exprs0)),
+        lambda **_: null,
+    ),
+    ReplacementRule(
         Pattern(And(exprs1, expr, exprs00, expr, exprs0)),
         lambda exprs1, expr, exprs00, exprs0: And(
             *exprs1,
@@ -311,6 +320,14 @@ OR_RULES = (
     ),
     ReplacementRule(
         Pattern(Or(exprs1, false, exprs0)),
+        lambda exprs1, exprs0: Or(*exprs1, *exprs0),
+    ),
+    ReplacementRule(
+        Pattern(Or(exprs0, null, exprs1)),
+        lambda exprs0, exprs1: Or(*exprs0, *exprs1),
+    ),
+    ReplacementRule(
+        Pattern(Or(exprs1, null, exprs0)),
         lambda exprs1, exprs0: Or(*exprs1, *exprs0),
     ),
     ReplacementRule(
@@ -720,6 +737,8 @@ RULES = (
     + RELATION_RULES
 )
 
+_REPLACER = ManyToOneReplacer(*RULES)
+
 
 def find_refs(
     refs,
@@ -738,4 +757,4 @@ def optimize(
     rules: Iterable[ReplacementRule] = RULES,
 ) -> matchpy.Expression:
     """Optimize an expression."""
-    return matchpy.replace_all(expr, rules)
+    return _REPLACER.replace(expr)
