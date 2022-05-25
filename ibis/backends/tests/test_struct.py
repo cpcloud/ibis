@@ -15,8 +15,9 @@ pytestmark = [
 ]
 
 
-@pytest.mark.notimpl(["dask", "snowflake"])
 @pytest.mark.parametrize("field", ["a", "b", "c"])
+@pytest.mark.notyet(["impala"])
+@pytest.mark.notimpl(["dask", "datafusion", "snowflake"])
 def test_single_field(backend, struct, struct_df, field):
     expr = struct.abc[field]
     result = expr.execute().sort_values().reset_index(drop=True)
@@ -31,7 +32,6 @@ def test_single_field(backend, struct, struct_df, field):
     backend.assert_series_equal(result, expected)
 
 
-@pytest.mark.notimpl(["dask"])
 def test_all_fields(struct, struct_df):
     result = struct.abc.execute()
     expected = struct_df.abc
@@ -51,7 +51,7 @@ _STRUCT_LITERAL = ibis.struct(
 _NULL_STRUCT_LITERAL = ibis.NA.cast("struct<a: int64, b: string, c: float64>")
 
 
-@pytest.mark.notimpl(["postgres", "bigquery"])
+@pytest.mark.notimpl(["postgres"])
 @pytest.mark.parametrize("field", ["a", "b", "c"])
 def test_literal(con, field):
     query = _STRUCT_LITERAL[field]
@@ -75,7 +75,7 @@ def test_null_literal(con, field):
     tm.assert_series_equal(result, expected)
 
 
-@pytest.mark.notimpl(["dask", "pandas", "postgres", "snowflake"])
+@pytest.mark.notimpl(["dask", "pandas", "snowflake"])
 def test_struct_column(alltypes, df):
     t = alltypes
     expr = ibis.struct(dict(a=t.string_col, b=1, c=t.bigint_col)).name("s")

@@ -3,18 +3,66 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Iterable, Literal
+from typing import Iterable, Literal
 
 import sqlalchemy as sa
+import toolz
+from psycopg2.extensions import AsIs, register_adapter
 
+import ibis.expr.datatypes as dt
 from ibis import util
 from ibis.backends.base.sql.alchemy import BaseAlchemyBackend
+from ibis.backends.base.sql.alchemy.datatypes import to_sqla_type
 from ibis.backends.postgres.compiler import PostgreSQLCompiler
 from ibis.backends.postgres.datatypes import _get_type
 from ibis.backends.postgres.udf import udf as _udf
 
-if TYPE_CHECKING:
-    import ibis.expr.datatypes as dt
+_COMPOSITE_TYPES_SQL = """\
+WITH types AS (
+  SELECT
+    n.nspname,
+    pg_catalog.format_type (t.oid, NULL) AS obj_name
+  FROM pg_catalog.pg_type t
+  INNER JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+  WHERE (t.typrelid = 0
+         OR (SELECT c.relkind = 'c'
+             FROM pg_catalog.pg_class c
+             WHERE c.oid = t.typrelid))
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_type el
+      WHERE el.oid = t.typelem
+        AND el.typarray = t.oid
+    )
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    AND n.nspname !~ '^pg_toast'
+)
+SELECT
+  pg_catalog.format_type(t.oid, NULL) AS name,
+  array_agg(CAST(a.attname AS TEXT) ORDER BY a.attnum) AS columns,
+  array_agg(pg_catalog.format_type(a.atttypid, a.atttypmod) ORDER BY a.attnum) AS types,
+  array_agg(NOT a.attnotnull ORDER BY a.attnum) AS nullables
+FROM pg_catalog.pg_attribute a
+INNER JOIN pg_catalog.pg_type t ON a.attrelid = t.typrelid
+INNER JOIN pg_catalog.pg_namespace n ON (n.oid = t.typnamespace)
+INNER JOIN types
+  ON types.nspname = n.nspname
+    AND types.obj_name = pg_catalog.format_type(t.oid, NULL)
+WHERE a.attnum > 0
+  AND NOT a.attisdropped
+GROUP BY 1"""
+
+_TYPE_INFO_SQL = """\
+SELECT
+  attname,
+  format_type(atttypid, atttypmod) AS type
+FROM pg_attribute
+WHERE attrelid = CAST(:raw_name AS regclass)
+  AND attnum > 0
+  AND NOT attisdropped
+ORDER BY attnum"""
+
+register_adapter(util.frozendict, lambda fd: AsIs(dict(fd)))
 
 
 class Backend(BaseAlchemyBackend):
@@ -104,6 +152,12 @@ class Backend(BaseAlchemyBackend):
         )
         self.database_name = alchemy_url.database
         super().do_connect(sa.create_engine(alchemy_url))
+        self._composite_types = self._get_composite_types()
+
+        @sa.event.listens_for(self.meta, "column_reflect")
+        def map_composite_types(inspector, tablename, column_info):
+            if (new_type := self._composite_types.get(column_info["name"])) is not None:
+                column_info["type"] = new_type
 
     def list_databases(self, like=None):
         with self.begin() as con:
@@ -176,22 +230,43 @@ class Backend(BaseAlchemyBackend):
     def _metadata(self, query: str) -> Iterable[tuple[str, dt.DataType]]:
         raw_name = util.guid()
         name = self._quote(raw_name)
-        type_info_sql = """\
-SELECT
-  attname,
-  format_type(atttypid, atttypmod) AS type
-FROM pg_attribute
-WHERE attrelid = CAST(:raw_name AS regclass)
-  AND attnum > 0
-  AND NOT attisdropped
-ORDER BY attnum"""
         with self.begin() as con:
             con.execute(sa.text(f"CREATE TEMPORARY VIEW {name} AS {query}"))
             type_info = con.execute(
-                sa.text(type_info_sql).bindparams(raw_name=raw_name)
+                sa.text(_TYPE_INFO_SQL).bindparams(raw_name=raw_name)
             )
             yield from ((col, _get_type(typestr)) for col, typestr in type_info)
             con.execute(sa.text(f"DROP VIEW IF EXISTS {name}"))
+
+    def _get_composite_types(self) -> dt.DataType | None:
+        import psycopg2.extras
+
+        composite_types = {}
+
+        with self.begin() as con:
+            mappings = con.exec_driver_sql(_COMPOSITE_TYPES_SQL).mappings().fetchall()
+            for (
+                name,
+                columns,
+                types,
+                nullables,
+            ) in toolz.pluck(["name", "columns", "types", "nullables"], mappings):
+                try:
+                    psycopg2.extras.register_composite(
+                        name, con.connection.connection, globally=True
+                    )
+                except psycopg2.ProgrammingError:
+                    pass
+                else:
+                    composite_types[name] = to_sqla_type(
+                        dt.Struct.from_tuples(
+                            (field, _get_type(field_type)(nullable=nullable))
+                            for field, field_type, nullable in zip(
+                                columns, types, nullables
+                            )
+                        )
+                    )
+        return composite_types
 
     def _get_temp_view_definition(
         self, name: str, definition: sa.sql.compiler.Compiled

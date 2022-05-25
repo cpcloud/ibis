@@ -61,6 +61,35 @@ class TestConf(PandasTest):
                 ),
                 'diamonds': dd.from_pandas(
                     pd.read_csv(str(data_directory / 'diamonds.csv')),
+                'json_t': dd.from_pandas(
+                    pd.DataFrame(
+                        {
+                            "js": [
+                                '{"a": [1,2,3,4], "b": 1}',
+                                '{"a":null,"b":2}',
+                                '{"a":"foo", "c":null}',
+                                "null",
+                                "[42,47,55]",
+                                "[]",
+                            ]
+                        },
+                    ),
+                    npartitions=NPARTITIONS,
+                ),
+                'struct': dd.from_pandas(
+                    pd.DataFrame(
+                        {
+                            'abc': [
+                                {'a': 1.0, 'b': 'banana', 'c': 2},
+                                {'a': 2.0, 'b': 'apple', 'c': 3},
+                                {'a': 3.0, 'b': 'orange', 'c': 4},
+                                {'a': pd.NA, 'b': 'banana', 'c': 2},
+                                {'a': 2.0, 'b': pd.NA, 'c': 3},
+                                pd.NA,
+                                {'a': 3.0, 'b': 'orange', 'c': pd.NA},
+                            ]
+                        }
+                    ),
                     npartitions=NPARTITIONS,
                 ),
                 'json_t': dd.from_pandas(

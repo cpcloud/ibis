@@ -257,6 +257,7 @@ filterwarnings = [
   "ignore:Class (_regex_extract|_array_search|ST_.*) will not make use of SQL compilation caching:",
   'ignore:Dialect .+ will not make use of SQL compilation caching:',
   "ignore:UserDefinedType .* will not produce a cache key because:",
+  "ignore:Did not recognize type:",
   # duckdb-engine
   'ignore:The URL\.__to_string__ method is deprecated:',
   # ibis

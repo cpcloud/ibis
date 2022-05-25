@@ -11,6 +11,8 @@ import warnings
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql as pg
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.expression import FunctionElement
 
 import ibis.common.exceptions as com
 import ibis.common.geospatial as geo
@@ -33,6 +35,8 @@ from ibis.backends.base.sql.alchemy.registry import (
     geospatial_functions,
     get_col,
 )
+from ibis.backends.base.sql.alchemy.datatypes import StructType, to_sqla_type
+from ibis.backends.base.sql.alchemy.registry import _bitwise_op
 
 operation_registry = sqlalchemy_operation_registry.copy()
 operation_registry.update(sqlalchemy_window_functions_registry)
@@ -396,13 +400,13 @@ def _literal(t, op):
     elif dtype.is_geospatial():
         # inline_metadata ex: 'SRID=4326;POINT( ... )'
         return sa.literal_column(geo.translate_literal(op, inline_metadata=True))
-    elif isinstance(value, tuple):
+    elif dtype.is_array():
         return sa.literal_column(
             str(pg.array(value).compile(compile_kwargs=dict(literal_binds=True))),
             type_=t.get_sqla_type(dtype),
         )
     else:
-        return sa.literal(value)
+        return sa.literal(value, type_=to_sqla_type(dtype))
 
 
 def _string_agg(t, op):
@@ -467,6 +471,30 @@ def _binary_variance_reduction(func):
         return result
 
     return variance_compiler
+
+
+class _StructField(FunctionElement):
+    inherit_cache = True
+
+    def __init__(self, base, field, type_):
+        super().__init__(base, type_=sa.types.to_instance(type_))
+        self.field = field
+
+
+@compiles(_StructField, "postgresql")
+def _compile_pgelem(expr, compiler, **kw):
+    return f"({compiler.process(expr.clauses, **kw)}).{expr.field}"
+
+
+def _struct_field(t, op):
+    return _StructField(
+        t.translate(op.arg), op.field, type_=t.get_sqla_type(op.output_dtype)
+    )
+
+
+def _struct_column(t, op: ops.StructColumn):
+    type_ = t.get_sqla_type(op.output_dtype)
+    return sa.func.row(*map(t.translate, op.values), type_=type_)
 
 
 operation_registry.update(
@@ -585,5 +613,7 @@ operation_registry.update(
         ops.TimestampNow: lambda t, op: sa.literal_column(
             "CURRENT_TIMESTAMP", type_=t.get_sqla_type(op.output_dtype)
         ),
+        ops.StructField: _struct_field,
+        ops.StructColumn: _struct_column,
     }
 )

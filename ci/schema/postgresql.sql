@@ -204,3 +204,23 @@ INSERT INTO win VALUES
     ('a', 2, 0),
     ('a', 3, 1),
     ('a', 4, 1);
+
+DROP TYPE IF EXISTS abc CASCADE;
+
+CREATE TYPE abc AS (
+    a DOUBLE PRECISION,
+    b TEXT,
+    c BIGINT
+);
+
+DROP TABLE IF EXISTS struct CASCADE;
+CREATE TABLE IF NOT EXISTS struct (abc abc);
+
+INSERT INTO struct VALUES
+    (ROW(1.0, 'banana', 2)),
+    (ROW(2.0, 'apple', 3)),
+    (ROW(3.0, 'orange', 4)),
+    (ROW(NULL, 'banana', 2)),
+    (ROW(2.0, NULL, 3)),
+    (NULL),
+    (ROW(3.0, 'orange', NULL));

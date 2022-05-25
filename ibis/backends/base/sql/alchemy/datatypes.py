@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Iterable
+import functools
+from typing import Iterable, Mapping
 
 import sqlalchemy as sa
 from multipledispatch import Dispatcher
@@ -12,7 +13,7 @@ from sqlalchemy.dialects.sqlite.base import SQLiteDialect
 from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.types import UserDefinedType
+from sqlalchemy.types import TypeDecorator, UserDefinedType
 
 import ibis.expr.datatypes as dt
 import ibis.expr.schema as sch
@@ -35,9 +36,13 @@ def compiles_array(element, compiler, **kw):
 class StructType(UserDefinedType):
     def __init__(
         self,
-        pairs: Iterable[tuple[str, sa.types.TypeEngine]],
+        pairs: Mapping[str, sa.types.TypeEngine],
     ):
-        self.pairs = [(name, sa.types.to_instance(type)) for name, type in pairs]
+        try:
+            pairs = pairs.items()
+        except AttributeError:
+            pass
+        self.pairs = {name: sa.types.to_instance(type) for name, type in pairs}
 
 
 @compiles(StructType, "default")
