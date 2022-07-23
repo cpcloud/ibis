@@ -78,7 +78,7 @@ class Node(Annotable, Comparable):
     # TODO(kszucs): remove this method entirely
     def flat_args(self):
         for arg in self.args:
-            if not isinstance(arg, Schema) and is_iterable(arg):
+            if not isinstance(arg, (Schema, Node)) and is_iterable(arg):
                 yield from arg
             else:
                 yield arg
