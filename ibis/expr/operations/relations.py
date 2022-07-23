@@ -29,7 +29,8 @@ def genname():
 @public
 class TableNode(Node):
     def sort_by(self, sort_exprs):
-        return Selection(self, [], sort_keys=sort_exprs)
+        keys = rlz.tuple_of(rlz.sort_key_from(self), sort_exprs)
+        return SortBy(self, keys)
 
     @property
     @abstractmethod
@@ -289,6 +290,7 @@ class SelfReference(TableNode):
         return self.table.schema
 
 
+@public
 class Projection(TableNode):
     table = rlz.table
     selections = rlz.tuple_of(
@@ -301,6 +303,107 @@ class Projection(TableNode):
             )
         )
     )
+
+    @immutable_property
+    def schema(self):
+        schema_dict = {}
+
+        for sel in self.selections:
+            if isinstance(sel, Value):
+                schema_dict[sel.resolve_name()] = sel.output_dtype
+            elif isinstance(sel, TableNode):
+                schema_dict.update(sel.schema.items())
+
+        return sch.schema(schema_dict)
+
+
+@public
+class Filter(TableNode):
+    table = rlz.table
+    predicates = rlz.tuple_of(rlz.boolean)
+
+    def __init__(self, table, predicates, **kwargs):
+        import ibis.expr.operations as ops
+        from ibis.expr.analysis import shares_some_roots
+
+        for predicate in predicates:
+            if not isinstance(
+                predicate, ops.Literal
+            ) and not shares_some_roots(predicate, table):
+                raise com.RelationError(
+                    "Predicate doesn't share any roots with table"
+                )
+
+        super().__init__(table=table, predicates=predicates, **kwargs)
+
+    @immutable_property
+    def schema(self):
+        return self.table.schema
+
+
+@public
+class SortBy(TableNode):
+    table = rlz.table
+    sort_keys = rlz.tuple_of(rlz.sort_key_from("table"))
+
+    def __init__(self, table, sort_keys, **kwargs):
+        from ibis.expr.analysis import shares_all_roots
+
+        if not shares_all_roots(sort_keys, table):
+            raise com.RelationError(
+                "Sort keys don't fully originate from "
+                "dependencies of the table expression."
+            )
+
+        super().__init__(table=table, sort_keys=sort_keys, **kwargs)
+
+    @immutable_property
+    def schema(self):
+        return self.table.schema
+
+
+@public
+class Selection(TableNode):
+    selections = rlz.tuple_of(
+        rlz.one_of(
+            (
+                rlz.table,
+                rlz.column_from("table"),
+                rlz.function_of("table"),
+                rlz.any,
+            )
+        )
+    )
+    predicates = rlz.optional(rlz.tuple_of(rlz.boolean), default=())
+    sort_keys = rlz.optional(
+        rlz.tuple_of(rlz.sort_key_from("table")), default=()
+    )
+
+    def __init__(self, table, selections, predicates, sort_keys, **kwargs):
+        import ibis.expr.operations as ops
+        from ibis.expr.analysis import shares_all_roots, shares_some_roots
+
+        if not shares_all_roots(selections + sort_keys, table):
+            raise com.RelationError(
+                "Selection expressions don't fully originate from "
+                "dependencies of the table expression."
+            )
+
+        for predicate in predicates:
+            if not isinstance(
+                predicate, ops.Literal
+            ) and not shares_some_roots(predicate, table):
+                raise com.RelationError(
+                    "Predicate doesn't share any roots with table"
+                )
+
+        super().__init__(
+            table=table,
+            selections=selections,
+            predicates=predicates,
+            sort_keys=sort_keys,
+            **kwargs,
+        )
 
     @immutable_property
     def schema(self):
@@ -325,53 +428,6 @@ class Projection(TableNode):
 
 
 @public
-class Selection(Projection):
-    predicates = rlz.optional(rlz.tuple_of(rlz.boolean), default=())
-    sort_keys = rlz.optional(
-        rlz.tuple_of(rlz.sort_key_from("table")), default=()
-    )
-
-    def __init__(self, table, selections, predicates, sort_keys, **kwargs):
-        from ibis.expr.analysis import shares_all_roots, shares_some_roots
-
-        if not shares_all_roots(selections + sort_keys, table):
-            raise com.RelationError(
-                "Selection expressions don't fully originate from "
-                "dependencies of the table expression."
-            )
-
-        for predicate in predicates:
-            if not shares_some_roots(predicate, table):
-                raise com.RelationError(
-                    "Predicate doesn't share any roots with table"
-                )
-
-        super().__init__(
-            table=table,
-            selections=selections,
-            predicates=predicates,
-            sort_keys=sort_keys,
-            **kwargs,
-        )
-
-    def sort_by(self, sort_exprs):
-        from ibis.expr.analysis import shares_all_roots
-
-        keys = rlz.tuple_of(rlz.sort_key_from(self), sort_exprs)
-
-        if not self.selections:
-            if shares_all_roots(keys, self.table):
-                return Selection(
-                    self.table,
-                    self.selections,
-                    predicates=self.predicates,
-                    sort_keys=self.sort_keys + keys,
-                )
-
-        return Selection(self, [], sort_keys=keys)
-
-
-@public
 class Aggregation(TableNode):
 
     """
@@ -384,6 +440,18 @@ class Aggregation(TableNode):
     """
 
     table = rlz.table
+    by = rlz.optional(
+        rlz.tuple_of(
+            rlz.one_of(
+                (
+                    rlz.function_of("table"),
+                    rlz.column_from("table"),
+                    rlz.column(rlz.any),
+                )
+            )
+        ),
+        default=(),
+    )
     metrics = rlz.optional(
         rlz.tuple_of(
             rlz.one_of(
@@ -403,18 +471,6 @@ class Aggregation(TableNode):
         ),
         default=(),
     )
-    by = rlz.optional(
-        rlz.tuple_of(
-            rlz.one_of(
-                (
-                    rlz.function_of("table"),
-                    rlz.column_from("table"),
-                    rlz.column(rlz.any),
-                )
-            )
-        ),
-        default=(),
-    )
     having = rlz.optional(
         rlz.tuple_of(
             rlz.one_of(
@@ -428,66 +484,25 @@ class Aggregation(TableNode):
         ),
         default=(),
     )
-    predicates = rlz.optional(rlz.tuple_of(rlz.boolean), default=())
-    sort_keys = rlz.optional(
-        rlz.tuple_of(rlz.sort_key_from("table")), default=()
-    )
 
-    def __init__(self, table, metrics, by, having, predicates, sort_keys):
-        from ibis.expr.analysis import shares_all_roots, shares_some_roots
+    def __init__(self, table, by, metrics, having):
+        from ibis.expr.analysis import shares_all_roots
 
         # All non-scalar refs originate from the input table
-        if not shares_all_roots(metrics + by + having + sort_keys, table):
+        if not shares_all_roots(by + metrics + having, table):
             raise com.RelationError(
                 "Selection expressions don't fully originate from "
                 "dependencies of the table expression."
             )
 
-        # invariant due to Aggregation and AggregateSelection requiring a valid
-        # Selection
-        assert all(
-            shares_some_roots(predicate, table) for predicate in predicates
-        )
-
-        if not by:
-            sort_keys = tuple()
-
-        super().__init__(
-            table=table,
-            metrics=metrics,
-            by=by,
-            having=having,
-            predicates=predicates,
-            sort_keys=sort_keys,
-        )
+        super().__init__(table=table, metrics=metrics, by=by, having=having)
 
     @immutable_property
-    def schema(self):
-        names = []
-        types = []
-
-        for e in self.by + self.metrics:
-            names.append(e.resolve_name())
-            types.append(e.output_dtype)
-
-        return sch.Schema(names, types)
-
-    def sort_by(self, sort_exprs):
-        from ibis.expr.analysis import shares_all_roots
-
-        keys = rlz.tuple_of(rlz.sort_key_from(self), sort_exprs)
-
-        if shares_all_roots(keys, self.table):
-            return Aggregation(
-                self.table,
-                self.metrics,
-                by=self.by,
-                having=self.having,
-                predicates=self.predicates,
-                sort_keys=self.sort_keys + keys,
-            )
-
-        return Selection(self, [], sort_keys=keys)
+    def schema(self) -> sch.Schema:
+        return sch.Schema.from_tuples(
+            (expr.resolve_name(), expr.output_dtype)
+            for expr in self.by + self.metrics
+        )
 
 
 @public

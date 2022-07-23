@@ -397,6 +397,48 @@ def _fmt_table_op_selection(
 
 
 @fmt_table_op.register
+def _fmt_table_op_projection(
+    op: ops.Projection, *, aliases: Aliases, **_: Any
+) -> str:
+    top = f"{op.__class__.__name__}[{aliases[op.table]}]"
+    raw_parts = fmt_fields(
+        op,
+        dict(
+            selections=functools.partial(
+                fmt_selection_column,
+                maxlen=selection_maxlen(op.selections),
+            )
+        ),
+        aliases=aliases,
+    )
+    return f"{top}\n{raw_parts}"
+
+
+@fmt_table_op.register
+def _fmt_table_op_filter(op: ops.Filter, *, aliases: Aliases, **_: Any) -> str:
+    top = f"{op.__class__.__name__}[{aliases[op.table]}]"
+    raw_parts = fmt_fields(
+        op,
+        dict(predicates=fmt_value),
+        aliases=aliases,
+    )
+    return f"{top}\n{raw_parts}"
+
+
+@fmt_table_op.register
+def _fmt_table_op_sort_by(
+    op: ops.SortBy, *, aliases: Aliases, **_: Any
+) -> str:
+    top = f"{op.__class__.__name__}[{aliases[op.table]}]"
+    raw_parts = fmt_fields(
+        op,
+        dict(sort_keys=fmt_value),
+        aliases=aliases,
+    )
+    return f"{top}\n{raw_parts}"
+
+
+@fmt_table_op.register
 def _fmt_table_op_aggregation(
     op: ops.Aggregation, *, aliases: Aliases, **_: Any
 ) -> str:
