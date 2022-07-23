@@ -80,4 +80,12 @@ in
     '';
     SETUPTOOLS_SCM_PRETEND_VERSION = version;
   });
+
+  multiset = super.multiset.overrideAttrs (attrs: {
+    nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.pytest-runner ];
+  });
+
+  matchpy = super.matchpy.overrideAttrs (attrs: {
+    nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.pytest-runner ];
+  });
 }
