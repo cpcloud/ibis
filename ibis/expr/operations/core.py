@@ -134,6 +134,9 @@ class Alias(Value):
     def resolve_name(self):
         return self.name
 
+    def __iter__(self):
+        return iter(())
+
 
 @public
 class Unary(Value):

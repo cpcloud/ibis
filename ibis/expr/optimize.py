@@ -1,30 +1,34 @@
 from __future__ import annotations
 
+import itertools
+
 from matchpy import CustomConstraint, Operation, Pattern, Wildcard, replace_all
 
 import ibis.expr.analysis as an
+import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 
-_ = Wildcard.dot()
+_ = Wildcard.dot('_')
 dtype = Wildcard.dot("dtype")
 x = Wildcard.dot('x')
 y = Wildcard.dot('y')
+operand = Wildcard.dot('operand')
 
 left = Wildcard.dot('left')
 right = Wildcard.dot('right')
 
 table = Wildcard.dot('table')
 
-selections = Wildcard.dot('selections')
-sels1 = Wildcard.dot('sels1')
-sels2 = Wildcard.dot('sels2')
+selections = Wildcard.plus('selections')
+sels1 = Wildcard.plus('sels1')
+sels2 = Wildcard.plus('sels2')
 
-predicates = Wildcard.dot('predicates')
-preds1 = Wildcard.dot('preds1')
-preds2 = Wildcard.dot('preds2')
+predicates = Wildcard.plus('predicates')
+preds1 = Wildcard.plus('preds1')
+preds2 = Wildcard.plus('preds2')
 
-sort_keys = Wildcard.dot('sort_keys')
+sort_keys = Wildcard.plus('sort_keys')
 
 exprs00 = Wildcard.star("exprs00")
 exprs01 = Wildcard.star("exprs01")
@@ -153,29 +157,24 @@ def rule(pattern: Operation | Pattern, *constraints):
     return wrapper
 
 
-@rule(ops.Projection.pattern(table, ()))
-@rule(ops.Filter.pattern(table, ()))
-@rule(ops.SortBy.pattern(table, ()))
-def _empty_project(table):
-    return table
-
-
-#  @rule(
-#      ops.Filter.pattern(
-#          table,
-#          predicates=(exprs00, ops.Equals.pattern(x, x), exprs01),
-#      ),
-#      lambda x: not isinstance(x.output_dtype, dt.Floating),
-#  )
-#  @rule(ops.Filter.pattern(table, predicates=(exprs00, true, exprs01)))
-#  def _useless_predicate(table, exprs00, exprs01, **_):
-#      # empty selections are a no-op on a projection
-#      # all columns from the child are projected
-#      return ops.Filter(table=table, predicates=(*exprs00, *exprs01))
+@rule(
+    ops.Filter.pattern(
+        table,
+        predicates=(exprs00, ops.Equals.pattern(operand, operand), exprs01),
+    ),
+    lambda operand: not isinstance(operand.output_dtype, dt.Floating),
+)
+@rule(ops.Filter.pattern(table, predicates=(exprs00, true, exprs01)))
+def _useless_predicate(table, exprs00, exprs01, **_):
+    # empty selections are a no-op on a projection
+    # all columns from the child are projected
+    return ops.Filter(table=table, predicates=(*exprs00, *exprs01))
 
 
 @rule(ops.Filter.pattern(ops.Filter.pattern(table, preds1), preds2))
 def _compose_filters(table, preds1, preds2):
+    preds1 = tuple(itertools.chain.from_iterable(preds1))
+    preds2 = tuple(itertools.chain.from_iterable(preds2))
     return ops.Filter(
         table=table,
         predicates=(
@@ -190,37 +189,51 @@ def _compose_filters(table, preds1, preds2):
     )
 
 
+def _is_projection_subset(table, sels1, sels2):
+    sels1 = tuple(itertools.chain.from_iterable(sels1))
+    sels2 = tuple(itertools.chain.from_iterable(sels2))
+    sub = frozenset(
+        an.sub_for(sel, {child: table for child in children})
+        for sel, children in zip(
+            sels2,
+            map(an.find_immediate_parent_tables, sels2),
+        )
+    )
+    breakpoint()
+    return sub.issubset(sels1)
+
+
 @rule(
     ops.Projection.pattern(ops.Projection.pattern(table, sels1), sels2),
-    (
-        lambda table, sels1, sels2: frozenset(
-            an.sub_for(sel, {child: table for child in children})
-            for sel, children in zip(
-                *sels2, map(an.find_immediate_parent_tables, *sels2)
-            )
-        ).issubset(*sels1)
-    ),
+    _is_projection_subset,
 )
 def _compose_projections(table, sels2, **_):
+    sels2 = tuple(itertools.chain.from_iterable(sels2))
     new_sels = tuple(
         an.sub_for(sel, {child: table for child in children})
         for sel, children in zip(
-            *sels2, map(an.find_immediate_parent_tables, *sels2)
+            sels2,
+            map(an.find_immediate_parent_tables, sels2),
         )
     )
-    return ops.Projection(table=table, selections=new_sels)
+    return ops.Projection(table, new_sels)
 
 
-def cons(table, selections):
+@rule(ops.Projection.pattern(table, ()))
+@rule(ops.Filter.pattern(table, ()))
+@rule(ops.SortBy.pattern(table, ()))
+def _empty_rel(table):
+    return table
+
+
+def selections_are_table_columns(table, selections):
     ncolumns = len(table.schema)
+    selections = tuple(itertools.chain.from_iterable(selections))
     return (
         len(selections) == ncolumns
         and sum(
             (
-                isinstance(
-                    sel.arg if isinstance(sel, ops.Alias) else sel,
-                    ops.TableColumn,
-                )
+                isinstance(sel, ops.TableColumn)
                 and an.find_first_base_table(sel).equals(table)
             )
             for sel in selections
@@ -229,8 +242,8 @@ def cons(table, selections):
     )
 
 
-@rule(ops.Projection.pattern(table, selections), cons)
-def _collapse_projections(table, **_):
+@rule(ops.Projection.pattern(table, selections), selections_are_table_columns)
+def _collapse_projections(table, selections):
     return table
 
 
