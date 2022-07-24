@@ -260,8 +260,7 @@ def get_mutation_exprs(
             if overwriting_cols_to_expr.get(column, table[column]) is not None
         ] + non_overwriting_exprs
 
-    table_expr: ir.Expr = table
-    return [table_expr] + exprs
+    return exprs
 
 
 # TODO(kszucs): rewrite to receive and return an ops.Node
