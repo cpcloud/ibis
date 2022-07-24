@@ -2,6 +2,8 @@ import pytest
 from pytest import param
 
 import ibis
+import ibis.expr.types as ir
+from ibis import _
 from ibis.backends.base.sql.compiler import Compiler
 from ibis.tests.sql.conftest import get_query, to_sql
 from ibis.tests.util import assert_decompile_roundtrip
@@ -580,7 +582,7 @@ def test_filter_predicates(snapshot):
     expr = table
     for pred in predicates:
         filtered = expr.filter(pred(expr))
-        projected = filtered.projection([expr])
+        projected = filtered.select(expr)
         expr = projected
 
     snapshot.assert_match(to_sql(expr), "out.sql")

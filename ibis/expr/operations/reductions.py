@@ -13,10 +13,12 @@ from ibis.util import deprecated
 @public
 class Reduction(Value):
     output_shape = rlz.Shape.SCALAR
+    inlinable = False
 
 
 class Filterable(Value):
     where = rlz.optional(rlz.boolean)
+    inlinable = False
 
 
 @public

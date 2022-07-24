@@ -7,6 +7,7 @@ let
   pythonEnv = pkgs."ibisFullDevEnv${pythonShortVersion}";
 
   devDeps = with pkgs; [
+    git
     # terminal markdown rendering
     glow
     # used in the justfile

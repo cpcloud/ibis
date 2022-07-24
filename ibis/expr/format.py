@@ -30,6 +30,9 @@ class Alias:
     def __str__(self) -> str:
         return f"r{self.value}"
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({str(self)!r})"
+
 
 def fmt(expr: ir.Expr) -> str:
     """Format `expr`.
@@ -390,6 +393,42 @@ def _fmt_table_op_selection(op: ops.Selection, *, aliases: Aliases, **_: Any) ->
 
 
 @fmt_table_op.register
+def _fmt_table_op_projection(
+    op: ops.Projection, *, aliases: Aliases, **_: Any
+) -> str:
+    top = f"{op.__class__.__name__}[{aliases[op.table]}]"
+    fmt = functools.partial(
+        fmt_selection_column,
+        maxlen=selection_maxlen(op.selections),
+        aliases=aliases,
+    )
+    raw_parts = util.indent("\n".join(map(fmt, op.selections)), spaces=2)
+    return f"{top}\n{raw_parts}"
+
+
+@fmt_table_op.register
+def _fmt_table_op_filter(op: ops.Filter, *, aliases: Aliases, **_: Any) -> str:
+    top = f"{op.__class__.__name__}[{aliases[op.table]}]"
+    raw_parts = util.indent(
+        "\n".join(fmt_value(op, aliases=aliases) for op in op.predicates),
+        spaces=2,
+    )
+    return f"{top}\n{raw_parts}"
+
+
+@fmt_table_op.register
+def _fmt_table_op_sort_by(
+    op: ops.SortBy, *, aliases: Aliases, **_: Any
+) -> str:
+    top = f"{op.__class__.__name__}[{aliases[op.table]}]"
+    raw_parts = util.indent(
+        "\n".join(fmt_value(op, aliases=aliases) for op in op.sort_keys),
+        spaces=2,
+    )
+    return f"{top}\n{raw_parts}"
+
+
+@fmt_table_op.register
 def _fmt_table_op_aggregation(
     op: ops.Aggregation, *, aliases: Aliases, **_: Any
 ) -> str:
@@ -406,8 +445,6 @@ def _fmt_table_op_aggregation(
                 maxlen=selection_maxlen(op.by),
             ),
             having=fmt_value,
-            predicates=fmt_value,
-            sort_keys=fmt_value,
         ),
         aliases=aliases,
     )
@@ -459,11 +496,10 @@ def _fmt_selection_column_value_expr(
     node: ops.Value, *, aliases: Aliases, maxlen: int = 0
 ) -> str:
     name = f"{node.name}:"
-    # the additional 1 is for the colon
-    aligned_name = f"{name:<{maxlen + 1}}"
     value = fmt_value(node, aliases=aliases)
     dtype = type_info(node.output_dtype)
-    return f"{aligned_name} {value}{dtype}"
+    # the +1 is for the colon
+    return f"{name:<{maxlen + 1}} {value}{dtype}"
 
 
 @fmt_selection_column.register
@@ -547,8 +583,18 @@ def _fmt_value_expr(op: ops.Value, *, aliases: Aliases) -> str:
 
 @fmt_value.register
 def _fmt_value_binary_op(op: ops.Binary, *, aliases: Aliases) -> str:
+    left_needs_parens = not isinstance(op.left, (ops.Literal, ops.TableColumn))
     left = fmt_value(op.left, aliases=aliases)
+    if left_needs_parens:
+        left = f"({left})"
+
+    right_needs_parens = not isinstance(
+        op.right, (ops.Literal, ops.TableColumn)
+    )
     right = fmt_value(op.right, aliases=aliases)
+    if right_needs_parens:
+        right = f"({right})"
+
     try:
         op_char = _BIN_OP_CHARS[type(op)]
     except KeyError:
@@ -574,6 +620,11 @@ def _fmt_value_literal(op: ops.Literal, **_: Any) -> str:
 @fmt_value.register
 def _fmt_value_datatype(datatype: dt.DataType, **_: Any) -> str:
     return str(datatype)
+
+
+@fmt_value.register
+def _fmt_value_count_star(op: ops.CountStar, *, aliases: Aliases) -> str:
+    return f"{op.__class__.__name__}({aliases[op.arg]})"
 
 
 @fmt_value.register
@@ -620,10 +671,15 @@ def _fmt_value_scalar_parameter(op: ops.ScalarParameter, **_: Any) -> str:
 
 
 @fmt_value.register
-def _fmt_value_sort_key(op: ops.SortKey, *, aliases: Aliases) -> str:
+def _fmt_value_sort_asc(op: ops.SortAsc, *, aliases: Aliases) -> str:
     expr = fmt_value(op.expr, aliases=aliases)
-    prefix = "asc" if op.ascending else "desc"
-    return f"{prefix} {expr}"
+    return f"asc {expr}"
+
+
+@fmt_value.register
+def _fmt_value_sort_desc(op: ops.SortDesc, *, aliases: Aliases) -> str:
+    expr = fmt_value(op.expr, aliases=aliases)
+    return f"desc {expr}"
 
 
 @fmt_value.register
@@ -647,7 +703,19 @@ def _fmt_value_table_node(op: ops.TableNode, *, aliases: Aliases, **_: Any) -> s
 
 
 @fmt_value.register
-def _fmt_value_string_sql_like(op: ops.StringSQLLike, *, aliases: Aliases) -> str:
+def _fmt_value_join_node(op: ops.Join, *, aliases: Aliases, **_: Any) -> str:
+    """Format a join as value.
+
+    This function is called when a table is used in a value expression. An
+    example is `table.count()`.
+    """
+    return f"{aliases[op.left]} {type(op).__name__} {aliases[op.right]}"
+
+
+@fmt_value.register
+def _fmt_value_string_sql_like(
+    op: ops.StringSQLLike, *, aliases: Aliases
+) -> str:
     expr = fmt_value(op.arg, aliases=aliases)
     pattern = fmt_value(op.pattern, aliases=aliases)
     prefix = "I" * isinstance(op, ops.StringSQLILike)

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import itertools
 from abc import ABCMeta, abstractmethod
 from copy import copy
-from typing import Any
+from typing import Any, Mapping, Sequence
 from weakref import WeakValueDictionary
+
+import matchpy
 
 from ibis.common.annotations import Argument, Attribute, Signature
 from ibis.common.caching import WeakCache
@@ -96,11 +99,45 @@ class AnnotableMeta(BaseMeta):
         return super().__new__(metacls, clsname, bases, namespace, **kwargs)
 
 
+class Immutable(Base):
+    def __setattr__(self, name: str, _: Any) -> None:
+        raise TypeError(
+            f"Attribute {name!r} cannot be assigned to immutable instance of "
+            f"type {type(self)}"
+        )
+
+
+class Singleton(Base):
+    __instances__ = WeakValueDictionary()
+
+    @classmethod
+    def __create__(cls, *args, **kwargs) -> Singleton:
+        key = (cls, args, frozendict(kwargs))
+        try:
+            return cls.__instances__[key]
+        except KeyError:
+            instance = super().__create__(*args, **kwargs)
+            cls.__instances__[key] = instance
+            return instance
+
+
 class Annotable(Base, metaclass=AnnotableMeta):
     """Base class for objects with custom validation rules."""
 
     @classmethod
-    def __create__(cls, *args, **kwargs) -> Annotable:
+    def __create__(cls, *args, **kwargs):
+        kwargs.pop("variable_name", None)
+
+        if any(
+            isinstance(arg, matchpy.Expression)
+            for arg in itertools.chain(
+                args,
+                [v for v in kwargs.values() if not isinstance(v, tuple)],
+                *[v for v in kwargs.values() if isinstance(v, tuple)],
+            )
+        ):
+            return cls.pattern(*args, **kwargs)
+
         # construct the instance by passing the validated keyword arguments
         kwargs = cls.__signature__.validate(*args, **kwargs)
         return super().__create__(**kwargs)
@@ -166,27 +203,80 @@ class Annotable(Base, metaclass=AnnotableMeta):
         return this
 
 
-class Immutable(Base):
-    def __setattr__(self, name: str, _: Any) -> None:
-        raise TypeError(
-            f"Attribute {name!r} cannot be assigned to immutable instance of "
-            f"type {type(self)}"
+class _Operation(matchpy.Operation):
+    def __lshift__(self, other):
+        if isinstance(other, Matchable):
+            pattern = matchpy.Pattern(self)
+            return next(matchpy.match(other, pattern))
+        else:
+            return matchpy.substitute(self, other)
+
+    __rrshift__ = __lshift__
+
+
+class Matchable(Base):
+
+    __slots__ = ()
+
+    def __init_subclass__(
+        cls,
+        /,
+        name=None,
+        arity=False,
+        associative=False,
+        commutative=False,
+        one_identity=False,
+        infix=False,
+        unpacked_args_to_init=False,
+        **kwargs,
+    ):
+        # support python 3.10 pattern matching
+        cls.__match_args__ = cls.__argnames__
+        # integrate with matchpy by creating a matchpy specific operation
+        cls.__pattern__ = _Operation.new(
+            head=cls,
+            name=name or cls.__name__,
+            arity=arity or matchpy.Arity(len(cls.__argnames__), True),
+            associative=associative,
+            commutative=commutative,
+            one_identity=one_identity,
+            infix=infix,
         )
-
-
-class Singleton(Base):
-
-    __instances__ = WeakValueDictionary()
+        cls.__pattern__.unpacked_args_to_init = unpacked_args_to_init
+        # need to register the current class as a subclass of matchpy's
+        # Operation class, so that the operation class instandiated above
+        # can be matched agains an actual instance of the current class
 
     @classmethod
-    def __create__(cls, *args, **kwargs) -> Singleton:
-        key = (cls, args, frozendict(kwargs))
-        try:
-            return cls.__instances__[key]
-        except KeyError:
-            instance = super().__create__(*args, **kwargs)
-            cls.__instances__[key] = instance
-            return instance
+    def pattern(cls, *args, **kwargs):
+        params = cls.__signature__.apply(*args, **kwargs)
+        return cls.__pattern__(*params.values())
+
+    def __len__(self):
+        return len(self.__args__)
+
+    def __getitem__(self, key):
+        return self.__args__[key]
+
+    def __rshift__(self, args):
+        if isinstance(args, _Operation):
+            operation = args
+        elif isinstance(args, Sequence):
+            operation = self.pattern(*args)
+        elif isinstance(args, Mapping):
+            operation = self.pattern(**args)
+        else:
+            raise TypeError(f"Unable to construct a matchable pattern from `{args}`")
+        pattern = matchpy.Pattern(operation)
+        return next(matchpy.match(self, pattern))
+
+    __rlshift__ = __rshift__
+
+
+# need to register the current class as a subclass of matchpy's Operation class
+# so that the operation class instandiated above can be matched agains an
+# actual instance of the current class
+matchpy.Operation.register(Matchable)
 
 
 class Comparable(Base):
@@ -226,7 +316,7 @@ class Comparable(Base):
         return result
 
 
-class Concrete(Immutable, Comparable, Annotable, Traversable):
+class Concrete(Immutable, Comparable, Annotable, Traversable, Matchable):
     """Opinionated base class for immutable data classes."""
 
     __slots__ = ("__args__", "__children__", "__precomputed_hash__")

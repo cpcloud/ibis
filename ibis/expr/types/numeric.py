@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal, Sequence
 from public import public
 
 import ibis.expr.operations as ops
+from ibis import util
 from ibis.common.exceptions import IbisTypeError
 from ibis.expr.types.core import _binop
 from ibis.expr.types.generic import Column, Scalar, Value
@@ -554,9 +555,38 @@ class NumericColumn(Column, NumericValue):
         CategoryColumn
             Coded value expression
         """
-        return ops.Histogram(
-            self, nbins, binwidth, base, closed=closed, aux_hash=aux_hash
-        ).to_expr()
+        import ibis.expr.analysis as an
+
+        EPS = 1e-13
+
+        if binwidth is None or base is None:
+            self_op = self.op()
+
+            if aux_hash is None:
+                aux_hash = util.guid()[:6]
+
+            min_name = f"min_{aux_hash}"
+            max_name = f"max_{aux_hash}"
+
+            table = an.find_first_base_table(self_op)
+            minmax = ops.Aggregation(
+                table,
+                metrics=(
+                    ops.Alias(ops.Min(self_op), name=min_name),
+                    ops.Alias(ops.Max(self_op), name=max_name),
+                ),
+            )
+
+            if base is None:
+                base = ops.Subtract(minmax.metrics[0], EPS)
+
+            binwidth = ops.Divide(
+                ops.Subtract(minmax.metrics[1], base),
+                ops.Subtract(nbins, 1),
+            )
+
+        bucket = ops.Floor(ops.Divide(ops.Subtract(self, base), binwidth))
+        return bucket.to_expr()
 
     def summary(
         self,
@@ -786,6 +816,18 @@ class DecimalValue(NumericValue):
             The scale of the expression.
         """
         return ops.DecimalScale(self).to_expr()
+
+    def __add__(self, other):
+        return _binop(ops.DecimalAdd, self, other)
+
+    def __sub__(self, other):
+        return _binop(ops.DecimalSub, self, other)
+
+    def __mul__(self, other):
+        return _binop(ops.DecimalMul, self, other)
+
+    def __div__(self, other):
+        return _binop(ops.DecimalDiv, self, other)
 
 
 @public

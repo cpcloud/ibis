@@ -69,6 +69,8 @@ class TableArrayView(Value, Named):
 
     output_shape = rlz.Shape.COLUMNAR
 
+    inlinable = False
+
     @property
     def output_dtype(self):
         return self.table.schema[self.name]

@@ -181,4 +181,30 @@ in
     nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.setuptools ];
     buildInputs = attrs.buildInputs or [ ] ++ [ pkgs.libkrb5 ];
   });
+
+  multiset = super.multiset.overrideAttrs (attrs: {
+    nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.pytest-runner ];
+  });
+
+  matchpy = super.matchpy.overrideAttrs (attrs: {
+    nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.pytest-runner ];
+  });
+
+  flit-scm = self.buildPythonPackage rec {
+    pname = "flit-scm";
+    version = "1.7.0";
+    src = self.fetchPypi {
+      pname = "flit_scm";
+      inherit version;
+      sha256 = "sha256-lhvW+yTzG7p1MzwjQUX/+I5t4KkPwPfl58ed7Kafa7I=";
+    };
+
+    nativeBuildInputs = [ self.setuptools-scm self.flit-core ];
+    format = "pyproject";
+    SETUPTOOLS_SCM_PRETEND_VERSION = version;
+  };
+
+  exceptiongroup = super.exceptiongroup.overridePythonAttrs (attrs: {
+    nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.flit-scm ];
+  });
 }

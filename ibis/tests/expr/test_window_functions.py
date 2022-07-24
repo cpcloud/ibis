@@ -324,7 +324,7 @@ def test_combine_preserves_existing_window():
     w = ibis.cumulative_window(order_by=t.one)
     mut = t.group_by(t.three).mutate(four=t.two.sum().over(w))
 
-    assert mut.op().selections[1].arg.window.following == 0
+    assert mut.op().selections[3].arg.window.following == 0
 
 
 def test_quantile_shape():

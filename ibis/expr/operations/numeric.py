@@ -16,12 +16,12 @@ class NumericBinary(Binary):
 
 
 @public
-class Add(NumericBinary):
+class Add(NumericBinary, commutative=True, associative=True):
     output_dtype = rlz.numeric_like("args", operator.add)
 
 
 @public
-class Multiply(NumericBinary):
+class Multiply(NumericBinary, commutative=True, associative=True):
     output_dtype = rlz.numeric_like("args", operator.mul)
 
 
@@ -89,6 +89,7 @@ class NullIfZero(Unary):
 @public
 class IsNan(Unary):
     arg = rlz.floating
+
     output_dtype = dt.boolean
 
 
@@ -103,6 +104,7 @@ class Abs(Unary):
     """Absolute value."""
 
     arg = rlz.numeric
+
     output_dtype = rlz.dtype_like("arg")
 
 

@@ -1,4 +1,4 @@
-from ibis.common.grounds import Annotable
+from ibis.common.grounds import Annotable, Matchable
 from ibis.common.validators import instance_of
 
 IsAny = instance_of(object)
@@ -8,7 +8,7 @@ IsInt = instance_of(int)
 IsStr = instance_of(str)
 
 
-class Node(Annotable):
+class Node(Matchable):
     pass
 
 

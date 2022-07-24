@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import operator
 from collections import Counter
-from typing import Mapping
+from typing import Callable, Iterator, Mapping
 
 import toolz
 
@@ -11,7 +11,6 @@ import ibis.common.graph as g
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 from ibis import util
-from ibis.common.exceptions import IbisTypeError, IntegrityError
 from ibis.expr.rules import Shape
 from ibis.expr.window import window
 
@@ -105,11 +104,13 @@ def has_multiple_bases(node):
 
 
 def reduction_to_aggregation(node):
-    tables = find_immediate_parent_tables(node)
+    tables = set(find_immediate_parent_tables(node))
 
-    # TODO(kszucs): avoid the expression roundtrip
-    if len(tables) == 1:
-        (table,) = tables
+    # TODO(kszucs): remove to_expr() conversions
+    ntables = len(tables)
+    assert 0 <= ntables <= 1, ntables
+    if ntables == 1:
+        table = tables.pop()
         agg = table.to_expr().aggregate([node.to_expr()])
     else:
         agg = ScalarAggregate(node.to_expr()).get_result()
@@ -117,29 +118,33 @@ def reduction_to_aggregation(node):
     return agg
 
 
-def find_immediate_parent_tables(node):
-    """Find every first occurrence of a :class:`ibis.expr.types.Table` object
-    in `expr`.
+def find_immediate_parent_tables(node: ops.Node) -> Iterator[ops.TableNode]:
+    """Find every first occurrence of a :class:`ibis.expr.types.Table`
+    object in `expr`.
 
     Parameters
     ----------
-    expr : ir.Expr
+    node
+        An ibis node
 
-    Yields
+    Returns
     ------
-    e : ir.Expr
+    Iterator[TableNode]
+        Set of immediate child tables
 
     Notes
     -----
-    This function does not traverse into Table objects. This means that the
-    underlying PhysicalTable of a Selection will not be yielded, for example.
+    This function does not traverse into `TableNode` objects. This means that
+    the underlying `PhysicalTable` of a `Node` will not be yielded, for
+    example.
 
     Examples
     --------
-    >>> import ibis, toolz
+    >>> import toolz
+    >>> import ibis
     >>> t = ibis.table([('a', 'int64')], name='t')
     >>> expr = t.mutate(foo=t.a + 1)
-    >>> result = find_immediate_parent_tables(expr)
+    >>> result = toolz.count(find_immediate_parent_tables(expr))
     >>> len(result)
     1
     >>> result[0]
@@ -161,7 +166,18 @@ def find_immediate_parent_tables(node):
     return list(toolz.unique(g.traverse(finder, node)))
 
 
-def substitute(fn, node):
+def count_immediate_parent_tables(node: ops.Node) -> int:
+    """Count every first occurrence of a `TableNode` object in `node`."""
+    assert all(isinstance(arg, ops.Node) for arg in util.promote_list(node))
+
+    def finder(node):
+        halt = is_table = isinstance(node, ops.TableNode)
+        return not halt, is_table
+
+    return sum(g.traverse(finder, node))
+
+
+def substitute(fn: Callable[[ops.Node], bool], node: ops.Node) -> ops.Node:
     """Substitute expressions with other expressions."""
 
     assert isinstance(node, ops.Node), type(node)
@@ -267,160 +283,7 @@ def get_mutation_exprs(exprs: list[ir.Expr], table: ir.Table) -> list[ir.Expr | 
             if overwriting_cols_to_expr.get(column, table[column]) is not None
         ] + non_overwriting_exprs
 
-    table_expr: ir.Expr = table
-    return [table_expr] + exprs
-
-
-def apply_filter(op, predicates):
-    # This will attempt predicate pushdown in the cases where we can do it
-    # easily and safely, to make both cleaner SQL and fewer referential errors
-    # for users
-    assert isinstance(op, ops.Node)
-
-    if isinstance(op, ops.Selection):
-        return _filter_selection(op, predicates)
-    elif isinstance(op, ops.Aggregation):
-        # Potential fusion opportunity
-        # GH1344: We can't sub in things with correlated subqueries
-        simplified_predicates = tuple(
-            # Originally this line tried substituting op.table in for expr, but
-            # that is too aggressive in the presence of filters that occur
-            # after aggregations.
-            #
-            # See https://github.com/ibis-project/ibis/pull/3341 for details
-            sub_for(predicate, {op.table: op})
-            if not is_reduction(predicate)
-            else predicate
-            for predicate in predicates
-        )
-
-        if shares_all_roots(simplified_predicates, op.table):
-            return ops.Aggregation(
-                op.table,
-                op.metrics,
-                by=op.by,
-                having=op.having,
-                predicates=op.predicates + simplified_predicates,
-                sort_keys=op.sort_keys,
-            )
-
-    if not predicates:
-        return op
-    return ops.Selection(op, [], predicates)
-
-
-def _filter_selection(op, predicates):
-    # if any of the filter predicates have the parent expression among
-    # their roots, then pushdown (at least of that predicate) is not
-    # possible
-
-    # It's not unusual for the filter to reference the projection
-    # itself. If a predicate can be pushed down, in this case we must
-    # rewrite replacing the table refs with the roots internal to the
-    # projection we are referencing
-    #
-    # Assuming that the fields referenced by the filter predicate originate
-    # below the projection, we need to rewrite the predicate referencing
-    # the parent tables in the join being projected
-
-    # Potential fusion opportunity. The predicates may need to be
-    # rewritten in terms of the child table. This prevents the broken
-    # ref issue (described in more detail in #59)
-    try:
-        simplified_predicates = tuple(
-            sub_for(predicate, {op: op.table})
-            if not is_reduction(predicate)
-            else predicate
-            for predicate in predicates
-        )
-    except IntegrityError:
-        pass
-    else:
-        if shares_all_roots(simplified_predicates, op.table) and not any(
-            # we can't push down filters on unnest because unnest changes the
-            # shape and potential values of the data: unnest can potentially
-            # produce NULLs
-            #
-            # the getattr shenanigans is to handle Alias
-            isinstance(
-                sel.arg if isinstance(sel, ops.Alias) else sel,
-                ops.Unnest,
-            )
-            for sel in op.selections
-        ):
-            return ops.Selection(
-                op.table,
-                selections=op.selections,
-                predicates=op.predicates + simplified_predicates,
-                sort_keys=op.sort_keys,
-            )
-
-    can_pushdown = _can_pushdown(op, predicates)
-
-    if can_pushdown:
-        simplified_predicates = tuple(substitute_parents(x) for x in predicates)
-        fused_predicates = op.predicates + simplified_predicates
-        return ops.Selection(
-            op.table,
-            selections=op.selections,
-            predicates=fused_predicates,
-            sort_keys=op.sort_keys,
-        )
-    else:
-        return ops.Selection(op, selections=[], predicates=predicates)
-
-
-def _can_pushdown(op, predicates):
-    # Per issues discussed in #173
-    #
-    # The only case in which pushdown is possible is that all table columns
-    # referenced must meet all of the following (not that onerous in practice)
-    # criteria
-    #
-    # 1) Is a table column, not any other kind of expression
-    # 2) Is unaliased. So, if you project t3.foo AS bar, then filter on bar,
-    #    this cannot be pushed down (until we implement alias rewriting if
-    #    necessary)
-    # 3) Appears in the selections in the projection (either is part of one of
-    #    the entire tables or a single column selection)
-
-    for pred in predicates:
-        if isinstance(pred, ir.Expr):
-            pred = pred.op()
-        validator = _PushdownValidate(op, pred)
-        predicate_is_valid = validator.get_result()
-        if not predicate_is_valid:
-            return False
-    return True
-
-
-# TODO(kszucs): rewrite to only work with operation objects
-class _PushdownValidate:
-    def __init__(self, parent, predicate):
-        self.parent = parent
-        self.pred = predicate
-
-    def get_result(self):
-        assert isinstance(self.pred, ops.Node), type(self.pred)
-
-        def validate(node):
-            if isinstance(node, ops.TableColumn):
-                return g.proceed, self._validate_projection(node)
-            return g.proceed, None
-
-        return all(g.traverse(validate, self.pred))
-
-    def _validate_projection(self, node):
-        is_valid = False
-
-        for val in self.parent.selections:
-            if isinstance(val, ops.PhysicalTable) and node.name in val.schema:
-                is_valid = True
-            elif isinstance(val, ops.TableColumn) and node.name == val.name:
-                # Aliased table columns are no good
-                is_valid = val.table == node.table
-
-        return is_valid
+    return [table[column] for column in table.columns] + exprs
 
 
 # TODO(kszucs): rewrite to receive and return an ops.Node
@@ -506,121 +369,26 @@ def simplify_aggregation(agg):
     return agg
 
 
-class Projector:
-
-    """Analysis and validation of projection operation, taking advantage of
-    "projection fusion" opportunities where they exist, i.e. combining
-    compatible projections together rather than nesting them.
-
-    Translation / evaluation later will not attempt to do any further
-    fusion / simplification.
-    """
-
-    def __init__(self, parent, proj_exprs):
-        # TODO(kszucs): rewrite projector to work with operations exclusively
-        proj_exprs = util.promote_list(proj_exprs)
-        self.parent = parent
-        self.input_exprs = proj_exprs
-        self.resolved_exprs = [parent._ensure_expr(e) for e in proj_exprs]
-        self.clean_exprs = list(map(windowize_function, self.resolved_exprs))
-
-    def get_result(self):
-        roots = find_immediate_parent_tables(self.parent.op())
-        first_root = roots[0]
-
-        if len(roots) == 1 and isinstance(first_root, ops.Selection):
-            fused_op = self.try_fusion(first_root)
-            if fused_op is not None:
-                return fused_op
-
-        return ops.Selection(self.parent, self.clean_exprs)
-
-    def try_fusion(self, root):
-        assert self.parent.op() == root
-
-        root_table = root.table
-        root_table_expr = root_table.to_expr()
-        roots = find_immediate_parent_tables(root_table)
-        fused_exprs = []
-        clean_exprs = self.clean_exprs
-
-        if not isinstance(root_table, ops.Join):
-            try:
-                resolved = [
-                    root_table_expr._ensure_expr(expr) for expr in self.input_exprs
-                ]
-            except (AttributeError, IbisTypeError):
-                resolved = clean_exprs
-            else:
-                # if any expressions aren't exactly equivalent then don't try
-                # to fuse them
-                if any(
-                    not res_root_root.equals(res_root)
-                    for res_root_root, res_root in zip(resolved, clean_exprs)
-                ):
-                    return None
-        else:
-            # joins cannot be used to resolve expressions, but we still may be
-            # able to fuse columns from a projection off of a join. In that
-            # case, use the projection's input expressions as the columns with
-            # which to attempt fusion
-            resolved = clean_exprs
-
-        root_selections = root.selections
-        parent_op = self.parent.op()
-        for val in resolved:
-            # a * projection
-            if isinstance(val, ir.Table) and (
-                parent_op.equals(val.op())
-                # gross we share the same table root. Better way to
-                # detect?
-                or len(roots) == 1
-                and find_immediate_parent_tables(val.op())[0] == roots[0]
-            ):
-                have_root = False
-                for root_sel in root_selections:
-                    # Don't add the * projection twice
-                    if root_sel.equals(root_table):
-                        fused_exprs.append(root_table)
-                        have_root = True
-                        continue
-                    fused_exprs.append(root_sel)
-
-                # This was a filter, so implicitly a select *
-                if not have_root and not root_selections:
-                    fused_exprs = [root_table, *fused_exprs]
-            elif shares_all_roots(val.op(), root_table):
-                fused_exprs.append(val)
-            else:
-                return None
-
-        return ops.Selection(
-            root_table,
-            fused_exprs,
-            predicates=root.predicates,
-            sort_keys=root.sort_keys,
-        )
-
-
-def find_first_base_table(node):
-    def predicate(node):
-        if isinstance(node, ops.TableNode):
-            return g.halt, node
-        else:
-            return g.proceed, None
-
+def find_first_base_table(node: ops.Node) -> ops.Node | None:
     try:
-        return next(g.traverse(predicate, node))
+        return next(find_immediate_parent_tables(node))
     except StopIteration:
         return None
 
 
 def _find_projections(node):
-    if isinstance(node, ops.Selection):
-        # remove predicates and sort_keys, so that child tables are considered
-        # equivalent even if their predicates and sort_keys are not
-        return g.proceed, node._projection
-    elif isinstance(node, ops.SelfReference):
+    assert isinstance(node, ops.Node), type(node)
+
+    if isinstance(
+        node,
+        (
+            ops.Projection,
+            ops.Filter,
+            ops.SortBy,
+            ops.SelfReference,
+            ops.SetOp,
+        ),
+    ):
         return g.proceed, node
     elif isinstance(node, ops.Join):
         return g.proceed, None
@@ -640,48 +408,10 @@ def shares_all_roots(exprs, parents):
 def shares_some_roots(exprs, parents):
     # unique table dependencies of exprs and parents
     exprs_deps = set(g.traverse(_find_projections, exprs))
-    parents_deps = set(g.traverse(_find_projections, parents))
+    parents_deps = set(g.traverse(_find_projections, parents)) | set(
+        util.promote_list(parents)
+    )
     return bool(exprs_deps & parents_deps)
-
-
-def flatten_predicate(node):
-    """Yield the expressions corresponding to the `And` nodes of a predicate.
-
-    Parameters
-    ----------
-    expr : ir.BooleanColumn
-
-    Returns
-    -------
-    exprs : List[ir.BooleanColumn]
-
-    Examples
-    --------
-    >>> import ibis
-    >>> t = ibis.table([('a', 'int64'), ('b', 'string')], name='t')
-    >>> filt = (t.a == 1) & (t.b == 'foo')
-    >>> predicates = flatten_predicate(filt)
-    >>> len(predicates)
-    2
-    >>> predicates[0]
-    r0 := UnboundTable[t]
-      a int64
-      b string
-    r0.a == 1
-    >>> predicates[1]
-    r0 := UnboundTable[t]
-      a int64
-      b string
-    r0.b == 'foo'
-    """
-
-    def predicate(node):
-        if isinstance(node, ops.And):
-            return g.proceed, None
-        else:
-            return g.halt, node
-
-    return list(g.traverse(predicate, node))
 
 
 def is_analytic(node):
@@ -745,32 +475,34 @@ _ANY_OP_MAPPING = {
 }
 
 
-def find_predicates(node, flatten=True):
+def find_predicates(node):
     # TODO(kszucs): consider to remove flatten argument and compose with
     # flatten_predicates instead
-    def predicate(node):
+    assert isinstance(node, ops.Node), type(node)
+
+    def predicate(node: ops.Node):
         assert isinstance(node, ops.Node), type(node)
         if isinstance(node, ops.Value) and node.output_dtype.is_boolean():
-            if flatten and isinstance(node, ops.And):
-                return g.proceed, None
-            else:
-                return g.halt, node
+            return g.halt, node
         return g.proceed, None
 
-    return list(g.traverse(predicate, node))
+    return g.traverse(predicate, node)
 
 
-def find_subqueries(node: ops.Node) -> Counter:
+def find_subqueries(node: ops.Node) -> Counter[ops.Node, int]:
     counts = Counter()
 
-    def finder(node: ops.Node):
+    def finder(node: ops.Node) -> tuple[bool, ops.Node | None]:
         if isinstance(node, ops.Join):
             return [node.left, node.right], None
         elif isinstance(node, ops.PhysicalTable):
             return g.halt, None
         elif isinstance(node, ops.SelfReference):
             return g.proceed, None
-        elif isinstance(node, (ops.Selection, ops.Aggregation)):
+        elif isinstance(
+            node,
+            (ops.Projection, ops.Filter, ops.SortBy, ops.Aggregation),
+        ):
             counts[node] += 1
             return [node.table], None
         elif isinstance(node, ops.TableNode):
@@ -783,8 +515,7 @@ def find_subqueries(node: ops.Node) -> Counter:
 
     # keep duplicates so we can determine where an expression is used
     # more than once
-    list(g.traverse(finder, node, dedup=False))
-
+    counts.update(g.traverse(finder, node, dedup=False))
     return counts
 
 
@@ -792,13 +523,14 @@ def find_subqueries(node: ops.Node) -> Counter:
 def _make_any(expr, any_op_class: type[ops.Any] | type[ops.NotAny]):
     assert isinstance(expr, ir.Expr)
 
-    tables = find_immediate_parent_tables(expr.op())
-    predicates = find_predicates(expr.op(), flatten=True)
+    tables = frozenset(find_immediate_parent_tables(expr.op()))
+    predicates = find_predicates(expr.op())
 
     if len(tables) > 1:
-        op = _ANY_OP_MAPPING[any_op_class](
+        opclass = _ANY_OP_MAPPING[any_op_class]
+        op = opclass(
             tables=[t.to_expr() for t in tables],
-            predicates=predicates,
+            predicates=list(predicates),
         )
     else:
         op = any_op_class(expr)

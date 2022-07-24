@@ -27,7 +27,7 @@ def test_ast_with_projection_join_filter(con):
         result = joined[[table3, table2['value']]]
         return result
 
-    assert len(stmt.select_set) == 2
+    assert len(stmt.select_set) == 4
 
     # #790, make sure the filter stays put
     assert len(stmt.where) == 0

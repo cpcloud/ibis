@@ -459,7 +459,11 @@ def flatten_set_op(op):
         # `flatten` types are the same, and it works
         return toolz.concatv(
             flatten_set_op(op.left),  # type: ignore
-            [op.distinct],
+            [
+                isinstance(
+                    op, (ops.UnionAll, ops.IntersectionAll, ops.DifferenceAll)
+                )
+            ],
             flatten_set_op(op.right),  # type: ignore
         )
     return [op]
@@ -517,11 +521,11 @@ class Compiler:
 
         # TODO: any setup / teardown DDL statements will need to be done prior
         # to building the result set-generating statements.
-        if isinstance(node, ops.Union):
+        if isinstance(node, (ops.Union, ops.UnionAll)):
             query = cls._make_union(node, context)
-        elif isinstance(node, ops.Intersection):
+        elif isinstance(node, (ops.Intersection, ops.IntersectionAll)):
             query = cls._make_intersect(node, context)
-        elif isinstance(node, ops.Difference):
+        elif isinstance(node, (ops.Difference, ops.DifferenceAll)):
             query = cls._make_difference(node, context)
         else:
             query = cls.select_builder_class().to_select(

@@ -476,12 +476,10 @@ class Value(Expr):
         return _binop(ops.Less, self, other)
 
     def asc(self) -> ir.Value:
-        """Sort an expression ascending."""
-        return ops.SortKey(self, ascending=True).to_expr()
+        return ops.SortAsc(self).to_expr()
 
     def desc(self) -> ir.Value:
-        """Sort an expression descending."""
-        return ops.SortKey(self, ascending=False).to_expr()
+        return ops.SortDesc(self).to_expr()
 
     def to_projection(self) -> ir.Table:
         """Promote this value expression to a projection."""

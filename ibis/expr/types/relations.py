@@ -11,6 +11,7 @@ from typing import (
     Any,
     Callable,
     Iterable,
+    Iterator,
     Literal,
     Mapping,
     Sequence,
@@ -35,6 +36,27 @@ if TYPE_CHECKING:
 
 
 _ALIASES = (f"_ibis_view_{n:d}" for n in itertools.count())
+
+
+def _expand_tables(exprs: ir.Value | ir.Table) -> Iterator[ir.Value]:
+    names = set()
+    total = 0
+
+    for expr in exprs:
+        op = expr.op()
+        if not isinstance(op, ops.TableNode):
+            ncolumns = 1
+            names.add(op.name)
+            yield expr
+        else:
+            ncolumns = len(columns := op.schema.names)
+            names.update(columns)
+            yield from map(expr.__getitem__, columns)
+
+        total += ncolumns
+
+        if total > len(names):
+            raise ValueError("duplicate columns")
 
 
 def _regular_join_method(
@@ -228,7 +250,7 @@ class Table(Expr, JupyterMixin):
         Returns
         -------
         list[ir.Column]
-            List of column expressions
+            ops.NodeList of column expressions
         """
         return [self.get_column(x) for x in iterable]
 
@@ -353,8 +375,9 @@ class Table(Expr, JupyterMixin):
             The rows present in `self` that are not present in `tables`.
         """
         left = self
+        cls = ops.Difference if distinct else ops.DifferenceAll
         for right in tables:
-            left = ops.Difference(left, right, distinct=distinct)
+            left = cls(left, right)
         return left.to_expr()
 
     def aggregate(
@@ -497,8 +520,9 @@ class Table(Expr, JupyterMixin):
             A new table containing the union of all input tables.
         """
         left = self
+        cls = ops.Union if distinct else ops.UnionAll
         for right in tables:
-            left = ops.Union(left, right, distinct=distinct)
+            left = cls(left, right)
         return left.to_expr()
 
     def intersect(self, *tables: Table, distinct: bool = True) -> Table:
@@ -519,8 +543,9 @@ class Table(Expr, JupyterMixin):
             A new table containing the intersection of all input tables.
         """
         left = self
+        cls = ops.Intersection if distinct else ops.IntersectionAll
         for right in tables:
-            left = ops.Intersection(left, right, distinct=distinct)
+            left = cls(left, right)
         return left.to_expr()
 
     def to_array(self) -> ir.Column:
@@ -549,7 +574,7 @@ class Table(Expr, JupyterMixin):
         Parameters
         ----------
         exprs
-            List of named expressions to add as columns
+            ops.NodeList of named expressions to add as columns
         mutations
             Named expressions using keyword arguments
 
@@ -679,20 +704,20 @@ class Table(Expr, JupyterMixin):
           selections:
             demeaned_a: r0.a - Window(Mean(r0.a), window=Window(how='rows'))
         """
-        import ibis.expr.analysis as an
+        exprs = itertools.chain(
+            itertools.chain.from_iterable(map(util.promote_list, exprs)),
+            (self._ensure_expr(expr).name(name) for name, expr in named_exprs.items()),
+        )
 
         exprs = list(
-            itertools.chain(
-                itertools.chain.from_iterable(map(util.promote_list, exprs)),
-                (
-                    self._ensure_expr(expr).name(name)
-                    for name, expr in named_exprs.items()
-                ),
+            itertools.chain.from_iterable(
+                (expr,)
+                if not isinstance(expr, Table)
+                else (expr[col] for col in expr.columns)
+                for expr in exprs
             )
         )
-        op = an.Projector(self, exprs).get_result()
-
-        return op.to_expr()
+        return ops.Projection(self, exprs).to_expr()
 
     projection = select
 
@@ -792,7 +817,7 @@ class Table(Expr, JupyterMixin):
             an._rewrite_filter(pred.op() if isinstance(pred, Expr) else pred)
             for pred in resolved_predicates
         ]
-        return an.apply_filter(self.op(), predicates).to_expr()
+        return ops.Filter(self.op(), predicates).to_expr()
 
     def count(self, where: ir.BooleanValue | None = None) -> ir.IntegerScalar:
         """Compute the number of rows in the table.
@@ -1119,7 +1144,10 @@ class Table(Expr, JupyterMixin):
         }
 
         klass = _join_classes[how.lower()]
-        expr = klass(left, right, predicates).to_expr()
+
+        predicates = util.promote_list(predicates)
+        op = klass(left, right, predicates=predicates)
+        expr = op.to_expr()
 
         # semi/anti join only give access to the left table's fields, so
         # there's never overlap
@@ -1338,15 +1366,12 @@ class Table(Expr, JupyterMixin):
 def _resolve_predicates(
     table: Table, predicates
 ) -> tuple[list[ir.BooleanValue], list[tuple[ir.BooleanValue, ir.Table]]]:
-    import ibis.expr.analysis as an
     import ibis.expr.types as ir
 
     predicates = [
         ir.relations.bind_expr(table, pred).op()
         for pred in util.promote_list(predicates)
     ]
-    predicates = an.flatten_predicate(predicates)
-
     resolved_predicates = []
     for pred in predicates:
         if isinstance(pred, ops.logical._UnresolvedSubquery):

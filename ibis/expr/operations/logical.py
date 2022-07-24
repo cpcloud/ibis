@@ -16,7 +16,7 @@ from ibis.expr.operations.generic import _Negatable
 
 
 @public
-class LogicalBinary(Binary):
+class LogicalBinary(Binary, infix=True, commutative=True, associative=True):
     left = rlz.boolean
     right = rlz.boolean
 
@@ -70,12 +70,12 @@ class Comparison(Binary):
 
 
 @public
-class Equals(Comparison):
+class Equals(Comparison, commutative=True, infix=True):
     pass
 
 
 @public
-class NotEquals(Comparison):
+class NotEquals(Comparison, commutative=True, infix=True):
     pass
 
 
@@ -100,7 +100,7 @@ class Less(Comparison):
 
 
 @public
-class IdenticalTo(Comparison):
+class IdenticalTo(Comparison, commutative=True):
     pass
 
 

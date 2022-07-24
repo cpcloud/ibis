@@ -34,7 +34,7 @@ parsy = ">=1.3.0,<3"
 regex = ">=2021.7.6"
 rich = ">=12.4.4,<13"
 toolz = ">=0.11,<1"
-typing-extensions = ">=4.3.0,<5"
+matchpy = { git = "https://github.com/kszucs/matchpy.git", rev = "integration", branch = "integration" }
 clickhouse-cityhash = { version = ">=1.0.2,<2", optional = true }
 clickhouse-driver = { version = ">=0.1,<1", optional = true, extras = [
   "numpy"
@@ -112,6 +112,7 @@ pydocstyle = ">=6.1.1,<7"
 pytkdocs = { version = ">=0.15.0,<0.17.0", extras = ["numpy-style"] }
 requests = ">=2,<3"
 tomli = ">=2.0.1,<3"
+hypothesis = "^6.53.0"
 
 [tool.poetry.extras]
 clickhouse = ["clickhouse-driver", "clickhouse-cityhash", "lz4", "sqlglot"]

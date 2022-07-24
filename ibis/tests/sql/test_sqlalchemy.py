@@ -490,9 +490,18 @@ def test_cte_factor_distinct_but_equal(con, sa_alltypes, snapshot):
     t2 = sa_alltypes.alias('t2')
     t0 = sa.select([t2.c.g, F.sum(t2.c.f).label('metric')]).group_by(t2.c.g).cte('t0')
 
-    t1 = t0.alias('t1')
-    table_set = t0.join(t1, t0.c.g == t1.c.g)
-    stmt = sa.select([t0]).select_from(table_set)
+    t3 = t0.alias('t3')
+    t1 = (
+        sa.select(
+            t0.c.g.label("g_x"),
+            t0.c.metric.label("metric_x"),
+            t3.c.g.label("g_y"),
+            t3.c.metric.label("metric_y"),
+        )
+        .select_from(t0.join(t3, t0.c.g == t3.c.g))
+        .alias('t1')
+    )
+    stmt = sa.select(t1.c.g_x, t1.c.metric_x)
 
     _check(expr, stmt)
     snapshot.assert_match(to_sql(expr), "out.sql")

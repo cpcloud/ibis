@@ -142,7 +142,10 @@ def sort_key_from(table_ref, key, **kwargs):
         order = order.lower()
     order = map_to(is_ascending, order)
 
-    return ops.SortKey(key, ascending=order)
+    if order:
+        return ops.SortAsc(key)
+    else:
+        return ops.SortDesc(key)
 
 
 @rule
@@ -546,12 +549,14 @@ def non_negative_integer(arg, **kwargs):
 
 
 @rule
-def pair(inner_left, inner_right, arg, **kwargs):
+def eq_pair(inner_left, inner_right, arg, **kwargs):
+    import ibis.expr.operations as ops
+
     try:
         a, b = arg
     except TypeError:
         raise com.IbisTypeError(f"{arg} is not an iterable with two elements")
-    return inner_left(a[0], **kwargs), inner_right(b, **kwargs)
+    return ops.Equals(inner_left(a, **kwargs), inner_right(b, **kwargs))
 
 
 @rule

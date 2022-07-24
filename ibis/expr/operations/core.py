@@ -3,11 +3,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Sequence
 
+from matchpy import Arity
 from public import public
 
 import ibis.expr.rules as rlz
 from ibis.common.annotations import attribute
 from ibis.common.grounds import Concrete
+from ibis.common.validators import immutable_property
 from ibis.expr.rules import Shape
 from ibis.util import UnnamedMarker, deprecated
 
@@ -33,6 +35,15 @@ class Node(Concrete):
     def to_expr(self):
         ...
 
+    @property
+    def inlinable(self) -> bool:
+        import ibis.expr.operations as ops
+
+        return all(
+            getattr(arg, "inlinable", not isinstance(arg, ops.Node))
+            for arg in self.args
+        )
+
 
 @public
 class Named(ABC):
@@ -52,13 +63,14 @@ class Named(ABC):
 
 @public
 class Value(Node, Named):
-
     # TODO(kszucs): cover it with tests
     # TODO(kszucs): figure out how to represent not named arguments
     @property
     def name(self):
         args = ", ".join(arg.name for arg in self.__args__ if isinstance(arg, Named))
         return f"{self.__class__.__name__}({args})"
+
+    inlinable = True
 
     @property
     @abstractmethod
@@ -136,7 +148,12 @@ class Binary(Value):
 
 
 @public
-class NodeList(Node, Sequence[Node]):
+class NodeList(
+    Node,
+    Sequence[Node],
+    arity=Arity.variadic,
+    unpacked_args_to_init=True,
+):
     """Data structure for grouping arbitrary node objects."""
 
     # https://peps.python.org/pep-0653/#additions-to-the-object-model
@@ -145,6 +162,21 @@ class NodeList(Node, Sequence[Node]):
     # work on the pandas backend
 
     values = rlz.variadic(rlz.instance_of(Node))
+
+    @classmethod
+    def __create__(self, *args, **kwargs):
+        kwargs.pop("variable_name", None)
+        return super().__create__(values=args)
+
+    @classmethod
+    def pattern(cls, *args, **kwargs):
+        values = args + tuple(kwargs.pop("values", ()))
+        params = cls.__signature__.apply(values=values)
+        return cls.__pattern__(params["values"])
+
+    @property
+    def args(self):
+        return self.values
 
     def __len__(self):
         return len(self.values)
@@ -165,9 +197,18 @@ class NodeList(Node, Sequence[Node]):
 
         return ir.List(self)
 
+    def __lt__(self, other):
+        return self.values < other.values
+
+    @immutable_property
+    def foldable(self) -> bool:
+        import ibis.expr.operations as ops
+
+        return all(isinstance(value, ops.Literal) for value in self.values)
+
     @property
-    def args(self):
-        return self.values
+    def value(self):
+        return tuple(value.value for value in self.values)
 
 
 public(ValueOp=Value, UnaryOp=Unary, BinaryOp=Binary, ValueList=NodeList)

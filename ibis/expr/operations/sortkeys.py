@@ -11,7 +11,6 @@ class SortKey(Value):
     """A sort operation."""
 
     expr = rlz.any
-    ascending = rlz.optional(rlz.bool_, default=True)
 
     output_dtype = rlz.dtype_like("expr")
     output_shape = rlz.Shape.COLUMNAR
@@ -21,5 +20,15 @@ class SortKey(Value):
         return self.expr.name
 
     @property
-    def descending(self) -> bool:
-        return not self.ascending
+    def output_dtype(self):
+        return self.expr.output_dtype
+
+
+@public
+class SortAsc(SortKey):
+    pass
+
+
+@public
+class SortDesc(SortKey):
+    pass

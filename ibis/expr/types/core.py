@@ -51,6 +51,12 @@ class Expr(Immutable):
                 return "\n".join(lines)
         return capture.get()
 
+    @property
+    def _optimized(self):
+        from ibis.expr.optimize import optimize
+
+        return optimize(self)
+
     def __reduce__(self):
         return (self.__class__, (self._arg,))
 

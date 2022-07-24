@@ -17,6 +17,8 @@ class Window(Value):
     output_dtype = rlz.dtype_like("expr")
     output_shape = rlz.Shape.COLUMNAR
 
+    inlinable = False
+
     def __init__(self, expr, window):
         expr = propagate_down_window(expr, window)
         super().__init__(expr=expr, window=window)
