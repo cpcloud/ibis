@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import itertools
-
-from matchpy import CustomConstraint, Pattern, Wildcard, replace_all
+from matchpy import CustomConstraint, Operation, Pattern, Wildcard, replace_all
 
 import ibis.expr.analysis as an
-import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 
@@ -17,13 +14,16 @@ y = Wildcard.dot('y')
 left = Wildcard.dot('left')
 right = Wildcard.dot('right')
 
-rel = Wildcard.dot('rel')
 table = Wildcard.dot('table')
 
 selections = Wildcard.dot('selections')
+sels1 = Wildcard.dot('sels1')
+sels2 = Wildcard.dot('sels2')
+
 predicates = Wildcard.dot('predicates')
 preds1 = Wildcard.dot('preds1')
 preds2 = Wildcard.dot('preds2')
+
 sort_keys = Wildcard.dot('sort_keys')
 
 exprs00 = Wildcard.star("exprs00")
@@ -35,61 +35,7 @@ zero = ops.Literal.pattern(0, dtype=dtype)
 one = ops.Literal.pattern(1, dtype=dtype)
 
 
-#  class Ref(Operation):
-#      name = "#"
-#      arity = Arity.polyadic
-#      infix = False
-#
-#      def __str__(self) -> str:
-#          return ".".join(map(str, self.operands))
-#
-#
-#  Read = Operation.new("R", Arity.unary, "Read")
-#
-#  # Rel, Refs
-#  ProjectedRead = Operation.new("R#", Arity.binary, "ProjectedRead")
-#
-#  # Rel, predicate
-#  SelectedRead = Operation.new("R>", Arity.binary, "SelectedRead")
-#
-#  # Rel, Refs, predicate
-#  OptimizedRead = Operation.new("R+", Arity.ternary, "OptimizedRead")
-#
-#  # Left, right, predicate
-#  Join = Operation.new("⋈", Arity.ternary, "Join")
-#
-#  # Rel, Exprs
-#  Project = Operation.new("Π", Arity.binary, "Project")
-#
-#  # Rel, predicate
-#  Select = Operation.new("σ", Arity.binary, "Select")
-#
-#  # At least one rel
-#  Union = Operation.new(
-#      "⋃",
-#      Arity(min_count=1, fixed_size=False),
-#      "Union",
-#      commutative=True,
-#      associative=True,
-#      one_identity=True,
-#  )
-#
-#  # At least one rel
-#  Intersection = Operation.new(
-#      "⋂",
-#      Arity(min_count=1, fixed_size=False),
-#      "Intersection",
-#      commutative=True,
-#      associative=True,
-#      one_identity=True,
-#  )
-
-#  Refs = Operation.new("#*", Arity(min_count=1, fixed_size=False), "Refs")
-#  Exprs = Operation.new("@", Arity(min_count=1, fixed_size=False), "Exprs")
-
-
 AND_RULES = (
-    #  # Or identity
     #  ReplacementRule(Pattern(And()), lambda: true),
     #  ReplacementRule(Pattern(And(expr, expr)), lambda expr: expr),
     #  ReplacementRule(
@@ -194,206 +140,101 @@ LOGICAL_RULES = (
     #  ReplacementRule(Pattern(Not(null)), lambda: null),
 )
 
-MUL_RULES = (
-    #      # int * 1
-    #      ReplacementRule(Pattern(Mul(int_, one_int)), lambda int_: int_),
-    #      ReplacementRule(Pattern(Mul(one_int, int_)), lambda int_: int_),
-    #      # int * 0
-    #      ReplacementRule(Pattern(Mul(int_, zero_int)), lambda **_: zero_int),
-    #      ReplacementRule(Pattern(Mul(zero_int, int_)), lambda **_: zero_int),
-    #      # float * 1
-    #      ReplacementRule(Pattern(Mul(float_, one_float)), lambda float_: float_),  # noqa: E501
-    #      ReplacementRule(Pattern(Mul(one_float, float_)), lambda float_: float_),  # noqa: E501
-    #      # float * 0
-    #      ReplacementRule(Pattern(Mul(float_, zero_float)), lambda **_: zero_float),  # noqa: E501
-    #      ReplacementRule(Pattern(Mul(zero_float, float_)), lambda **_: zero_float),  # noqa: E501
-    #      # int * 1.0
-    #      ReplacementRule(
-    #          Pattern(Mul(int_, one_float)),
-    #          lambda int_: FloatLiteral(int_.value),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Mul(one_float, int_)),
-    #          lambda int_: FloatLiteral(int_.value),
-    #      ),
-    #      # int * 0.0
-    #      ReplacementRule(Pattern(Mul(int_, zero_float)), lambda **_: zero_float),  # noqa: E501
-    #      ReplacementRule(Pattern(Mul(zero_float, int_)), lambda **_: zero_float),  # noqa: E501
-    #      # int * float
-    #      ReplacementRule(
-    #          Pattern(Mul(int_, float_)),
-    #          lambda int_, float_: FloatLiteral(int(int_) * float(float_)),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Mul(float_, int_)),
-    #          lambda float_, int_: FloatLiteral(float(float_) * int(int_)),
-    #      ),
-)
 
-ADD_RULES = (
-    #      ReplacementRule(
-    #          Pattern(Add(int1_, int2_)),
-    #          lambda int1_, int2_: IntLiteral(int1_.value + int2_.value),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(float1_, float2_)),
-    #          lambda float1_, float2_: FloatLiteral(float1_.value + float2_.value),  # noqa: E501
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(float_, int_)),
-    #          lambda float_, int_: FloatLiteral(float_.value + int_.value),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(int_, float_)),
-    #          lambda int_, float_: FloatLiteral(int_.value + float_.value),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(exprs0, int1_, int2_, exprs1)),
-    #          lambda exprs0, int1_, int2_, exprs1: Add(
-    #              *exprs0,
-    #              IntLiteral(int1_.value + int2_.value),
-    #              *exprs1,
-    #          ),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(exprs1, int1_, int2_, exprs0)),
-    #          lambda exprs0, int1_, int2_, exprs1: Add(
-    #              *exprs1,
-    #              IntLiteral(int1_.value + int2_.value),
-    #              *exprs0,
-    #          ),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(exprs0, float1_, float2_, exprs1)),
-    #          lambda exprs0, float1_, float2_, exprs1: Add(
-    #              *exprs0,
-    #              FloatLiteral(float1_.value + float2_.value),
-    #              *exprs1,
-    #          ),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(exprs1, float1_, float2_, exprs0)),
-    #          lambda exprs0, float1_, float2_, exprs1: Add(
-    #              *exprs1,
-    #              FloatLiteral(float1_.value + float2_.value),
-    #              *exprs0,
-    #          ),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(exprs0, int_, float_, exprs1)),
-    #          lambda exprs0, int_, float_, exprs1: Add(
-    #              *exprs0,
-    #              FloatLiteral(int_.value + float_.value),
-    #              *exprs1,
-    #          ),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(Add(exprs1, float_, int_, exprs0)),
-    #          lambda exprs0, float_, int_, exprs1: Add(
-    #              *exprs1,
-    #          FloatLiteral(float_.value + int_.value),
-    #          *exprs0,
-    #      ),
-    #  ),
-)
+RULES = ()
 
 
-#  def can_replace_join(predicate, rel1, rel2):
-#      rel1_predicates, rel2_predicates, _ = partition_predicate(
-#          predicate=predicate,
-#          rel1=rel1,
-#          rel2=rel2,
-#      )
-#      return rel1_predicates or rel2_predicates
-#
-#
-#  def select_join_replacement(predicate, rel1, rel2):
-#      rel1_predicates, rel2_predicates, remaining = itertools.starmap(
-#          And,
-#          partition_predicate(
-#              predicate=predicate,
-#              rel1=rel1,
-#              rel2=rel2,
-#          ),
-#      )
-#      return Join(
-#          Select(rel1, rel1_predicates),
-#          Select(rel2, rel2_predicates),
-#          remaining,
-#      )
+def rule(pattern: Operation | Pattern, *constraints):
+    def wrapper(fn):
+        global RULES
+        RULES += ((Pattern(pattern, *map(CustomConstraint, constraints)), fn),)
+        return fn
+
+    return wrapper
 
 
-#  def refs_are_subset(rel, exprs2, exprs1):
-#      return frozenset(exprs2).issubset(exprs1)
+@rule(ops.Projection.pattern(table, ()))
+@rule(ops.Filter.pattern(table, ()))
+@rule(ops.SortBy.pattern(table, ()))
+def _empty_project(table):
+    return table
 
 
-RELATION_RULES = [
-    # empty selections are a no-op on a projection
-    (
-        Pattern(ops.Projection.pattern(table, ())),
-        lambda table: table,
-    ),
-    (
-        Pattern(ops.Filter.pattern(table, ())),
-        lambda table: table,
-    ),
-    (
-        Pattern(ops.SortBy.pattern(table, ())),
-        lambda table: table,
-    ),
-    # all columns from the child are projected
-    (
-        Pattern(
-            ops.Projection.pattern(table, selections),
-            CustomConstraint(
-                lambda table, selections: (
-                    sum(
-                        getattr(sel, "table", sel).equals(table)
-                        for sel in selections
-                    )
-                    == len(table.schema)
-                )
-            ),
-        ),
-        lambda table, **_: table,
-    ),
-    (
-        Pattern(
-            ops.Filter.pattern(
-                table,
-                predicates=(exprs00, ops.Equals.pattern(x, x), exprs01),
-            ),
-            CustomConstraint(
-                lambda x: not isinstance(x.output_dtype, dt.Floating)
-            ),
-        ),
-        lambda table, exprs00, exprs01, **_: ops.Filter(
-            table,
-            predicates=(*exprs00, *exprs01),
-        ),
-    ),
-    (
-        Pattern(
-            ops.Filter.pattern(table, predicates=(exprs00, true, exprs01))
-        ),
-        lambda table, exprs00, exprs01, **_: ops.Filter(
-            table,
-            predicates=(*exprs00, *exprs01),
-        ),
-    ),
-    (
-        Pattern(ops.Filter.pattern(ops.Filter.pattern(table, preds1), preds2)),
-        lambda table, preds1, preds2: ops.Filter(
-            table,
+#  @rule(
+#      ops.Filter.pattern(
+#          table,
+#          predicates=(exprs00, ops.Equals.pattern(x, x), exprs01),
+#      ),
+#      lambda x: not isinstance(x.output_dtype, dt.Floating),
+#  )
+#  @rule(ops.Filter.pattern(table, predicates=(exprs00, true, exprs01)))
+#  def _useless_predicate(table, exprs00, exprs01, **_):
+#      # empty selections are a no-op on a projection
+#      # all columns from the child are projected
+#      return ops.Filter(table=table, predicates=(*exprs00, *exprs01))
+
+
+@rule(ops.Filter.pattern(ops.Filter.pattern(table, preds1), preds2))
+def _compose_filters(table, preds1, preds2):
+    return ops.Filter(
+        table=table,
+        predicates=(
             preds1
             + tuple(
-                an.sub_for(pred, dict(zip(children, itertools.repeat(table))))
+                an.sub_for(pred, {child: table for child in children})
                 for pred, children in zip(
                     preds2, map(an.find_immediate_parent_tables, preds2)
                 )
-            ),
+            )
         ),
     )
+
+
+@rule(
+    ops.Projection.pattern(ops.Projection.pattern(table, sels1), sels2),
+    (
+        lambda table, sels1, sels2: frozenset(
+            an.sub_for(sel, {child: table for child in children})
+            for sel, children in zip(
+                *sels2, map(an.find_immediate_parent_tables, *sels2)
+            )
+        ).issubset(*sels1)
+    ),
+)
+def _compose_projections(table, sels2, **_):
+    new_sels = tuple(
+        an.sub_for(sel, {child: table for child in children})
+        for sel, children in zip(
+            *sels2, map(an.find_immediate_parent_tables, *sels2)
+        )
+    )
+    return ops.Projection(table=table, selections=new_sels)
+
+
+def cons(table, selections):
+    ncolumns = len(table.schema)
+    return (
+        len(selections) == ncolumns
+        and sum(
+            (
+                isinstance(
+                    sel.arg if isinstance(sel, ops.Alias) else sel,
+                    ops.TableColumn,
+                )
+                and an.find_first_base_table(sel).equals(table)
+            )
+            for sel in selections
+        )
+        == ncolumns
+    )
+
+
+@rule(ops.Projection.pattern(table, selections), cons)
+def _collapse_projections(table, **_):
+    return table
+
+
+RELATION_RULES = [
     # diff(select(t, p), select(s, p)) => select(diff(t, s), p)
     #      ReplacementRule(
     #          Pattern(Difference(Select(rel1, predicate), Select(rel2, predicate))),  # noqa: E501
@@ -453,13 +294,6 @@ RELATION_RULES = [
     #              rel, Or(predicate1, predicate2)
     #          ),
     #      ),
-    #      # compose filters
-    #      ReplacementRule(
-    #          Pattern(Select(Select(rel, predicate1), predicate2)),
-    #          lambda rel, predicate1, predicate2: Select(
-    #              rel, And(predicate1, predicate2)
-    #          ),
-    #      ),
     #      # project before filter if the filter predicate refers to a subset of the  # noqa: E501
     #      # projection columns
     #      ReplacementRule(
@@ -473,51 +307,6 @@ RELATION_RULES = [
     #              Project(rel, Exprs(*exprs1)),
     #              predicate,
     #          ),
-    #      ),
-    #      # collapse repeated projections
-    #      ReplacementRule(
-    #          Pattern(Project(Project(rel, expr), expr)),
-    #          lambda rel, expr: Project(rel, expr),
-    #      ),
-    #      # remove the child projection if the parent columns are a subset of the  # noqa: E501
-    #      # child columns
-    #      ReplacementRule(
-    #          Pattern(
-    #              Project(Project(rel, Refs(exprs1)), Refs(exprs2)),
-    #              CustomConstraint(
-    #                  lambda rel, exprs1, exprs2: frozenset(exprs2).issubset(exprs1)  # noqa: E501
-    #              ),
-    #          ),
-    #          lambda rel, exprs1, exprs2: Project(rel, Refs(*exprs2)),
-    #      ),
-    #      # remove the child projection if the parent expressions are a subset of the  # noqa: E501
-    #      # child expressions
-    #      ReplacementRule(
-    #          Pattern(
-    #              Project(Project(rel, Exprs(exprs1)), Exprs(exprs2)),
-    #              CustomConstraint(
-    #                  lambda rel, exprs1, exprs2: frozenset(exprs2).issubset(exprs1)  # noqa: E501
-    #              ),
-    #          ),
-    #          lambda rel, exprs1, exprs2: Project(rel, Exprs(*exprs2)),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(
-    #              Project(Project(rel, Refs(exprs1)), Exprs(exprs2)),
-    #              CustomConstraint(
-    #                  lambda rel, exprs1, exprs2: frozenset(exprs2).issubset(exprs1)  # noqa: E501
-    #              ),
-    #          ),
-    #          lambda rel, exprs1, exprs2: Project(rel, Refs(*exprs2)),
-    #      ),
-    #      ReplacementRule(
-    #          Pattern(
-    #              Project(Project(rel, Exprs(exprs1)), Refs(exprs2)),
-    #              CustomConstraint(
-    #                  lambda rel, exprs1, exprs2: frozenset(exprs2).issubset(exprs1)  # noqa: E501
-    #              ),
-    #          ),
-    #          lambda rel, exprs1, exprs2: Project(rel, Refs(*exprs2)),
     #      ),
     #      # turn a read -> filter -> project into a project of an optimized read  # noqa: E501
     #      # the projection is necessary because we're using expressions
@@ -613,64 +402,17 @@ RELATION_RULES = [
 #      return And(*rel1_operands), And(*rel2_operands), And(*remaining)
 
 
-RULES = (
-    #  AND_RULES
-    #  + OR_RULES
-    #  + COMPARISON_RULES
-    #  + LOGICAL_RULES
-    #  + ADD_RULES
-    #  + MUL_RULES
-    RELATION_RULES
-)
+def optimize(expr: ir.Expr) -> ir.Expr:
+    """Optimize an expression.
 
+    Parameters
+    ----------
+    expr
+        Expression to optimize
 
-def optimize(expr) -> ir.Expr:
-    """Optimize an expression."""
+    Returns
+    -------
+    Expr
+        Optimized expression
+    """
     return replace_all(expr.op(), RULES).to_expr()
-
-
-def popt(expr):
-    opt_expr = optimize(expr)
-    print("============ UNOPT ===============")
-    print(expr)
-    print("============= OPT ================")
-    print(opt_expr)
-    print("----------------------------------")
-    print()
-
-
-if __name__ == "__main__":
-    import ibis
-    from ibis import _
-
-    t = ibis.table(dict(a="string", b="float64"), name="t")
-
-    # project nothing new => t
-    popt(t.projection([]))
-
-    # project all columns from t => t
-    popt(t[[t[col] for col in t.columns]])
-    popt(t[list(t.columns)])
-
-    # can't optimize => no optimization
-    popt(t.filter([t.a == "1"]))
-
-    # useless predicate iff dtype is not floating (because of NaNs) => t
-    popt(t.filter([t.a == t.a]))
-
-    # useless predicate => t
-    popt(t.filter([ibis.literal(True)]))
-
-    # a == a => True
-    # True => True
-    # True & True => True
-    # => drop the predicate
-    popt(t.filter([t.a == t.a, ibis.literal(True)]))
-    popt(t.filter((t.a == t.a) & ibis.literal(True)))
-
-    # b is float64, so because of nans we can't remove the x == x
-    # predicate
-    popt(t.filter((t.b == t.b) & ibis.literal(True)))
-
-    # collapse filters that share the same child
-    popt(t.filter(t.a == "1").filter(_.b == 2.0).filter(_.a < "b"))
