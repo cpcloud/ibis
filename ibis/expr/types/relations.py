@@ -3,7 +3,6 @@ from __future__ import annotations
 import collections
 import functools
 import itertools
-import operator
 from functools import cached_property
 from typing import IO, TYPE_CHECKING, Any, Iterable, Literal, Mapping, Sequence
 
@@ -523,9 +522,7 @@ class Table(Expr):
         import ibis.expr.rules as rlz
 
         exprs = [] if exprs is None else util.promote_list(exprs)
-        for name, expr in sorted(
-            mutations.items(), key=operator.itemgetter(0)
-        ):
+        for name, expr in mutations.items():
             if util.is_function(expr):
                 value = expr(self)
             elif isinstance(expr, Deferred):
@@ -535,7 +532,7 @@ class Table(Expr):
             exprs.append(value.name(name))
 
         mutation_exprs = an.get_mutation_exprs(exprs, self)
-        return self.projection(mutation_exprs)
+        return self.select(list(self.columns) + mutation_exprs)
 
     def select(
         self,
