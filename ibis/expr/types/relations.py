@@ -1079,7 +1079,8 @@ class Table(Expr):
         if isinstance(predicates, ir.Expr):
             predicates = an.flatten_predicate(predicates)
 
-        expr = klass(left, right, predicates).to_expr()
+        op = klass(left, right, predicates)
+        expr = op.to_expr()
 
         # semi/anti join only give access to the left table's fields, so
         # there's never overlap
@@ -1088,8 +1089,8 @@ class Table(Expr):
 
         return ops.relations._dedup_join_columns(
             expr,
-            left=left,
-            right=right,
+            left=op.left,
+            right=op.right,
             suffixes=suffixes,
         )
 

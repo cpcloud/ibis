@@ -1526,3 +1526,12 @@ def test_exprs_to_select():
     with pytest.warns(FutureWarning, match="Passing `exprs`"):
         result = t.select(exprs=exprs)
     assert result.equals(t.select(len=t.a.length()))
+
+
+def test_python_table_ambiguous():
+    with pytest.raises(NotImplementedError):
+        ibis.table(
+            data=[(1,)],
+            schema=ibis.schema(dict(a="int8")),
+            columns=["a"],
+        )

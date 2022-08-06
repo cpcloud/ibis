@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import abc
 import collections
+import itertools
 from typing import TYPE_CHECKING, Iterable, Iterator, Mapping, Sequence
 
+import toolz
 from multipledispatch import Dispatcher
 
 from ibis.common.exceptions import IntegrityError
@@ -419,6 +421,42 @@ class HasSchema(abc.ABC):
 
 schema = Dispatcher('schema')
 infer = Dispatcher('infer')
+
+
+def _possible_sequence_schema(
+    data: Iterator,
+) -> Iterator[tuple[str, dt.DataType]]:
+    data_iter = iter(data)
+    first_row = next(data_iter)
+
+    if isinstance(first_row, collections.abc.Mapping):
+        is_mapping = True
+    elif isinstance(first_row, collections.abc.Sequence):
+        is_mapping = False
+    else:
+        raise TypeError(
+            f"Unsupported row type {type(first_row)}. "
+            "Supported types are mappings and sequences."
+        )
+
+    rows = itertools.chain([first_row], data_iter)
+
+    if is_mapping:
+        for row in rows:
+            yield from toolz.valmap(dt.infer, row).items()
+    else:
+        for row in rows:
+            for i, value in enumerate(row):
+                # this naming is arbitrary, we could add an option if needed
+                yield f"col{i:d}", dt.infer(value)
+
+
+@infer.register(collections.abc.Iterable)
+def infer_sequence_schema(data: Iterable) -> Schema:
+    possible_schema = collections.defaultdict(list)
+    for column_name, dtype in _possible_sequence_schema(data):
+        possible_schema[column_name].append(dtype)
+    return schema(toolz.valmap(dt.highest_precedence, possible_schema))
 
 
 @schema.register(Schema)

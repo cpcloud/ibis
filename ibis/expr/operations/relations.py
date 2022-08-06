@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import collections
 import itertools
+from abc import abstractmethod
 from functools import cached_property
+from typing import Iterator
 
+import pandas as pd
 from public import public
 
 from ibis import util
@@ -94,6 +97,34 @@ class SQLQueryResult(TableNode, sch.HasSchema):
 
     def blocks(self):
         return True
+
+
+@public
+class InMemoryTable(TableNode, sch.HasSchema):
+    name = rlz.optional(rlz.instance_of(str))
+    schema = rlz.instance_of(sch.Schema)
+
+    @abstractmethod
+    def _iterrows(self) -> Iterator:
+        """Iterate over rows of an in-memory table."""
+
+
+@public
+class PythonTable(InMemoryTable):
+    data = rlz.table_data
+
+    def _iterrows(self) -> Iterator:
+        """Iterate over a sequence of rows."""
+        return iter(self.data)
+
+
+@public
+class PandasTable(InMemoryTable):
+    data = rlz.instance_of(pd.DataFrame)
+
+    def _iterrows(self) -> Iterator:
+        """Iterate over the rows of a pandas DataFrame."""
+        return self.data.itertuples(index=False)
 
 
 def _make_distinct_join_predicates(left, right, predicates):

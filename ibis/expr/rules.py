@@ -1,7 +1,9 @@
+import collections
 import enum
 import functools
 import operator
 from itertools import product, starmap
+from typing import Hashable
 
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
@@ -351,25 +353,29 @@ def table(arg, *, schema=None, **kwargs):
 
     Parameters
     ----------
-    schema : Union[sch.Schema, List[Tuple[str, dt.DataType], None]
+    schema
         A validator for the table's columns. Only column subset validators are
         currently supported. Accepts any arguments that `sch.schema` accepts.
         See the example for usage.
-    arg : The validatable argument.
+    arg
+        An argument
 
-    Examples
-    --------
-    The following op will accept an argument named ``'table'``. Note that the
-    ``schema`` argument specifies rules for columns that are required to be in
-    the table: ``time``, ``group`` and ``value1``. These must match the types
-    specified in the column rules. Column ``value2`` is optional, but if
-    present it must be of the specified type. The table may have extra columns
-    not specified in the schema.
+    The following op will accept an argument named `'table'`. Note that the
+    `schema` argument specifies rules for columns that are required to be in
+    the table: `time`, `group` and `value1`. These must match the types
+    specified in the column rules. Column `value2` is optional, but if present
+    it must be of the specified type. The table may have extra columns not
+    specified in the schema.
     """
+    import ibis
+
     if not isinstance(arg, ir.Table):
-        raise com.IbisTypeError(
-            f'Argument is not a table; got type {type(arg).__name__}'
-        )
+        try:
+            return ibis.table(data=arg, schema=schema)
+        except Exception as e:
+            raise com.IbisTypeError(
+                f'Argument is not a table; got type {type(arg).__name__}'
+            ) from e
 
     if schema is not None:
         if arg.schema() >= sch.schema(schema):
@@ -485,6 +491,62 @@ def python_literal(value, arg, **kwargs):
             f"{value} with type {type(value)}, got `arg` with type {type(arg)}"
         )
     return arg
+
+
+@functools.singledispatch
+def _make_hashable(value) -> Hashable:
+    return value
+
+
+@_make_hashable.register(bytes)
+@_make_hashable.register(float)
+@_make_hashable.register(int)
+@_make_hashable.register(str)
+def _make_hashable_str(value) -> Hashable:
+    return value
+
+
+@_make_hashable.register(collections.abc.Sequence)
+def _make_hashable_sequence(sequence) -> Hashable:
+    return tuple(_make_hashable(element) for element in sequence)
+
+
+@_make_hashable.register(collections.abc.Mapping)
+def _make_hashable_mapping(mapping) -> Hashable:
+    return util.frozendict(
+        {key: _make_hashable(value) for key, value in mapping.items()}
+    )
+
+
+@functools.singledispatch
+def _to_tuple(value):
+    return value
+
+
+@_to_tuple.register(bytes)
+@_to_tuple.register(str)
+def _to_tuple_value(value):
+    return (value,)
+
+
+@_to_tuple.register(tuple)
+def _to_tuple_tuple(value):
+    return value
+
+
+@_to_tuple.register(collections.abc.Sequence)
+def _to_tuple_sequence(sequence):
+    return tuple(sequence)
+
+
+@_to_tuple.register(collections.abc.Mapping)
+def _to_tuple_mapping(mapping):
+    return tuple(mapping.values())
+
+
+@validator
+def table_data(data, **kwargs):
+    return tuple(map(_to_tuple, map(_make_hashable, data)))
 
 
 @validator

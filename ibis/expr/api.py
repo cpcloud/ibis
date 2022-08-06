@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import collections
 import datetime
 import functools
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 from typing import Tuple as _Tuple
 from typing import TypeVar
 from typing import Union as _Union
@@ -12,6 +13,7 @@ from typing import Union as _Union
 import dateutil.parser
 import numpy as np
 import pandas as pd
+from multipledispatch import Dispatcher
 
 import ibis.expr.builders as bl
 import ibis.expr.datatypes as dt
@@ -318,11 +320,16 @@ def schema(
         return sch.schema(names, types)
 
 
+_Row = TypeVar("_Row", Sequence, Mapping[str, Any])
+
+
 def table(
-    schema: SupportsSchema,
+    schema: SupportsSchema | None = None,
     name: str | None = None,
+    data: Sequence[_Row] | pd.DataFrame | None = None,
+    columns: Iterable[str] | None = None,
 ) -> ir.Table:
-    """Create an unbound table for building expressions without data.
+    """Create a table literal or an abstract table without data.
 
     Parameters
     ----------
@@ -330,14 +337,101 @@ def table(
         A schema for the table
     name
         Name for the table. One is generated if this value is `None`.
+    data
+        Table literal data.
+    columns
+        A sequence of [`str`][str] column names.
 
     Returns
     -------
     Table
-        An unbound table expression
+        A table expression
+
+    Examples
+    --------
+    Create a table with no data backing it
+
+    >>> t = ibis.table(schema=dict(a="int", b="string"))
+    >>> t
+    UnboundTable: unbound_table_0
+      a int64
+      b string
+
+    Create a table literal and infer column types, analogous to SQL's `VALUES`
+    construct
+
+    >>> t = ibis.table(data=[{"a": 1, "b": "foo"}, {"a": 2, "b": "baz"}])
+    >>> t
+    PythonTable
+      data:
+        ((1, 'foo'), (2, 'baz'))
+      schema:
+        a int8
+        b string
+
+    Create a table literal without column names embedded in the data and pass
+    `columns`
+
+    >>> t = ibis.table(data=[(1, "foo"), (2, "baz")], columns=["a", "b"])
+    >>> t
+    PythonTable
+      data:
+        ((1, 'foo'), (2, 'baz'))
+      schema:
+        a int8
+        b string
     """
-    node = ops.UnboundTable(sch.schema(schema), name=name)
-    return node.to_expr()
+    if schema is not None:
+        schema = sch.schema(schema)
+    return _table(schema, name, data, columns)
+
+
+_table = Dispatcher("_table")
+
+
+@_table.register(sch.Schema, (str, type(None)), type(None), type(None))
+def _unbound_table(schema, name, *_) -> Table:
+    return ops.UnboundTable(schema=schema, name=name).to_expr()
+
+
+@_table.register(
+    (sch.Schema, type(None)), (str, type(None)), pd.DataFrame, type(None)
+)
+def _data_frame(schema, name, data, _) -> Table:
+    if schema is None:
+        schema = sch.infer(data)
+    return ops.PandasTable(name=name, schema=schema, data=data).to_expr()
+
+
+@_table.register(
+    type(None),
+    (str, type(None)),
+    collections.abc.Sequence,
+    type(None),
+)
+def _sequence_of_rows_no_columns(_, name, data, columns) -> Table:
+    return _table(sch.infer(data), name, data, columns)
+
+
+@_table.register(
+    type(None),
+    (str, type(None)),
+    collections.abc.Sequence,
+    collections.abc.Sequence,
+)
+def _sequence_of_rows(_, name, data, columns) -> Table:
+    schema = sch.Schema(columns, sch.infer(data).types)
+    return _table(schema, name, data, None)
+
+
+@_table.register(
+    sch.Schema,
+    (str, type(None)),
+    collections.abc.Sequence,
+    type(None),
+)
+def _sequence_of_rows_with_schema(schema, name, data, _) -> Table:
+    return ops.PythonTable(name=name, schema=schema, data=data).to_expr()
 
 
 def desc(expr: ir.Column | str) -> ir.SortExpr | ops.DeferredSortKey:

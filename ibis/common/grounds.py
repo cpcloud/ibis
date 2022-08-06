@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import functools
 import inspect
+import io
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Hashable
 from weakref import WeakValueDictionary
 
+import pandas as pd
 from rich.console import Console
 
 from ibis.common.caching import WeakCache
@@ -64,6 +67,19 @@ class Parameter(inspect.Parameter):
         else:
             # TODO(kszucs): use self._validator
             return self.validator(arg, this=this)
+
+
+@functools.singledispatch
+def _get_hashable_object(value: Any) -> Hashable:
+    return value
+
+
+@_get_hashable_object.register(pd.DataFrame)
+def _get_hashable_object_dataframe(df: pd.DataFrame) -> Hashable:
+    # XXX: is this an acceptable approach?
+    buf = io.BytesIO()
+    df.to_pickle(buf)
+    return buf.getvalue()
 
 
 class AnnotableMeta(BaseMeta):
@@ -163,7 +179,11 @@ class Annotable(Base, Hashable, metaclass=AnnotableMeta):
         # optimizations to store frequently accessed generic properties
         args = tuple(kwargs[name] for name in self.argnames)
         object.__setattr__(self, "args", args)
-        object.__setattr__(self, "_hash", hash((self.__class__, args)))
+        object.__setattr__(
+            self,
+            "_hash",
+            hash((self.__class__, *map(_get_hashable_object, args))),
+        )
 
         # calculate special property-like objects only once due to the
         # immutable nature of annotable instances
