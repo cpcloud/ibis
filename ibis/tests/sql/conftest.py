@@ -6,7 +6,7 @@ from ibis.tests.expr.mocks import MockBackend
 
 
 @pytest.fixture(scope="module")
-def con(request):
+def con():
     return MockBackend()
 
 
@@ -85,7 +85,7 @@ def aggregate_having(star1):
 
 
 @pytest.fixture(scope="module")
-def multiple_joins(con, star1, star2, star3):
+def multiple_joins(star1, star2, star3):
     t1 = star1
     t2 = star2
     t3 = star3
@@ -126,7 +126,7 @@ def join_between_joins():
 
 
 @pytest.fixture(scope="module")
-def join_just_materialized(con, nation, region, customer):
+def join_just_materialized(nation, region, customer):
     t1 = nation
     t2 = region
     t3 = customer
@@ -138,7 +138,7 @@ def join_just_materialized(con, nation, region, customer):
 
 
 @pytest.fixture(scope="module")
-def semi_anti_joins(con, star1, star2):
+def semi_anti_joins(star1, star2):
     t1 = star1
     t2 = star2
 
@@ -149,12 +149,12 @@ def semi_anti_joins(con, star1, star2):
 
 
 @pytest.fixture(scope="module")
-def self_reference_simple(con, star1):
+def self_reference_simple(star1):
     return star1.view()
 
 
 @pytest.fixture(scope="module")
-def self_reference_join(con, star1):
+def self_reference_join(star1):
     t1 = star1
     t2 = t1.view()
     return t1.inner_join(t2, [t1.foo_id == t2.bar_id])[[t1]]
@@ -176,13 +176,13 @@ def join_projection_subquery_bug(nation, region, customer):
 
 
 @pytest.fixture(scope="module")
-def where_simple_comparisons(con, star1):
+def where_simple_comparisons(star1):
     t1 = star1
     return t1.filter([t1.f > 0, t1.c < t1.f * 2])
 
 
 @pytest.fixture(scope="module")
-def where_with_join(con, star1, star2):
+def where_with_join(star1, star2):
     t1 = star1
     t2 = star2
 
@@ -327,7 +327,7 @@ def tpch_self_join_failure(con):
 
 
 @pytest.fixture(scope="module")
-def subquery_in_filter_predicate(con, star1):
+def subquery_in_filter_predicate(star1):
     # E.g. comparing against some scalar aggregate value. See Ibis #43
     t1 = star1
 
@@ -343,7 +343,7 @@ def subquery_in_filter_predicate(con, star1):
 
 
 @pytest.fixture(scope="module")
-def filter_subquery_derived_reduction(con, star1):
+def filter_subquery_derived_reduction(star1):
     t1 = star1
 
     # Reduction can be nested inside some scalar expression
@@ -357,7 +357,7 @@ def filter_subquery_derived_reduction(con, star1):
 
 
 @pytest.fixture(scope="module")
-def topk_operation(con):
+def topk_operation():
     # TODO: top K with filter in place
 
     table = ibis.table(
@@ -446,7 +446,7 @@ def not_exists(foo_t, bar_t):
 
 
 @pytest.fixture(scope="module")
-def join_with_limited_table(con, star1, star2):
+def join_with_limited_table(star1, star2):
     t1 = star1
     t2 = star2
 
@@ -558,7 +558,7 @@ def limit_cte_extract(con):
 
 
 @pytest.fixture(scope="module")
-def subquery_aliased(con, star1, star2):
+def subquery_aliased(star1, star2):
     t1 = star1
     t2 = star2
 
@@ -569,7 +569,7 @@ def subquery_aliased(con, star1, star2):
 
 
 @pytest.fixture(scope="module")
-def filter_self_join_analysis_bug(con):
+def filter_self_join_analysis_bug():
     purchases = ibis.table(
         [
             ('region', 'string'),
@@ -593,7 +593,7 @@ def filter_self_join_analysis_bug(con):
 
 
 @pytest.fixture(scope="module")
-def projection_fuse_filter(con):
+def projection_fuse_filter():
     # Probably test this during the evaluation phase. In SQL, "fusable"
     # table operations will be combined together into a single select
     # statement
@@ -629,12 +629,12 @@ def projection_fuse_filter(con):
 
 
 @pytest.fixture(scope="module")
-def startswith(con, star1):
+def startswith(star1):
     t1 = star1
     return t1.foo_id.startswith('foo')
 
 
 @pytest.fixture(scope="module")
-def endswith(con, star1):
+def endswith(star1):
     t1 = star1
     return t1.foo_id.endswith('foo')

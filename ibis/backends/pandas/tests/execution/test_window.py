@@ -337,7 +337,7 @@ def test_batting_cumulative(batting, batting_df, sort_kind):
     tm.assert_frame_equal(result[expected.columns], expected)
 
 
-def test_batting_cumulative_partitioned(batting, batting_df, sort_kind):
+def test_batting_cumulative_partitioned(batting, batting_df):
     group_by = 'playerID'
     order_by = 'yearID'
 
@@ -384,7 +384,7 @@ def test_batting_rolling(batting, batting_df, sort_kind):
     tm.assert_frame_equal(result[expected.columns], expected)
 
 
-def test_batting_rolling_partitioned(batting, batting_df, sort_kind):
+def test_batting_rolling_partitioned(batting, batting_df):
     t = batting
     group_by = 'playerID'
     order_by = 'yearID'
@@ -417,7 +417,7 @@ def test_batting_rolling_partitioned(batting, batting_df, sort_kind):
         ibis.window(order_by='yearID', group_by='playerID'),
     ],
 )
-def test_window_failure_mode(batting, batting_df, window):
+def test_window_failure_mode(batting, window):
     # can't have order by without a following value of 0
     expr = batting.mutate(more_values=batting.G.sum().over(window))
     with pytest.raises(ibis.common.exceptions.OperationNotDefinedError):
@@ -525,7 +525,7 @@ def test_project_list_scalar():
 @pytest.mark.parametrize(
     'index',
     [
-        pytest.param(lambda time: None, id='no_index'),
+        pytest.param(lambda _: None, id='no_index'),  # noqa: U101
         pytest.param(lambda time: time, id='index'),
     ],
 )
@@ -596,7 +596,7 @@ def test_window_has_pre_execute_scope():
     called = [0]
 
     @pre_execute.register(ops.Lag, Backend)
-    def test_pre_execute(op, client, **kwargs):
+    def test_pre_execute(op, client, **kwargs):  # noqa: U100
         called[0] += 1
         return Scope()
 
@@ -628,7 +628,7 @@ def test_window_grouping_key_has_scope(t, df):
     tm.assert_series_equal(result, expected)
 
 
-def test_window_on_and_by_key_as_window_input(t, df):
+def test_window_on_and_by_key_as_window_input(t):
     order_by = 'plain_int64'
     group_by = 'dup_ints'
     control = 'plain_float64'
@@ -658,7 +658,7 @@ def test_window_on_and_by_key_as_window_input(t, df):
         return len(v)
 
     @reduction(input_type=[dt.int64, dt.int64], output_type=dt.int64)
-    def count_both(v1, v2):
+    def count_both(v1, v2):  # noqa: U100
         return len(v1)
 
     tm.assert_series_equal(
@@ -703,7 +703,7 @@ def test_custom_window_udf(t, custom_window):
     def get_aggcontext_custom(
         window,
         *,
-        scope,
+        scope,  # noqa: U100
         operand,
         parent,
         group_by,

@@ -35,7 +35,7 @@ def test_aggregation_float_nulls(
     client,
     result_fn,
     expected_fn,
-    treat_nan_as_null,
+    treat_nan_as_null,  # noqa: U100
 ):
     table = client.table('null_table')
     df = table.compile().toPandas()

@@ -26,7 +26,10 @@ class TestConf(BackendTest, RoundAwayFromZero):
 
     @staticmethod
     def _load_data(
-        data_dir: Path, script_dir: Path, database: str | None = None, **_: Any
+        data_dir: Path,
+        script_dir: Path,
+        database: str | None = None,
+        **_: Any,  # noqa: U101
     ) -> None:
         """Load test data into a SQLite backend instance.
 

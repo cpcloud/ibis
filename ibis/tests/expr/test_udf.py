@@ -4,7 +4,6 @@ import ibis
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
-import ibis.expr.types as ir
 
 
 @pytest.fixture
@@ -20,16 +19,16 @@ def table():
 
 
 @pytest.mark.parametrize(
-    ("klass", "output_type"),
+    "klass",
     [
-        (ops.ElementWiseVectorizedUDF, ir.IntegerColumn),
-        (ops.ReductionVectorizedUDF, ir.IntegerScalar),
-        (ops.AnalyticVectorizedUDF, ir.IntegerColumn),
+        ops.ElementWiseVectorizedUDF,
+        ops.ReductionVectorizedUDF,
+        ops.AnalyticVectorizedUDF,
     ],
 )
-def test_vectorized_udf_operations(table, klass, output_type):
+def test_vectorized_udf_operations(table, klass):
     udf = klass(
-        func=lambda a, b, c: a,
+        func=lambda a, *_: a,  # noqa: U101
         func_args=[table.a, table.b, table.c],
         input_type=[dt.int8(), dt.string(), dt.boolean()],
         return_type=dt.int8(),
@@ -55,7 +54,7 @@ def test_vectorized_udf_operations(table, klass, output_type):
     with pytest.raises(com.IbisTypeError):
         # scalar type instead of column type
         klass(
-            func=lambda a, b, c: a,
+            func=lambda a, *_: a,  # noqa: U101
             func_args=[ibis.literal(1), table.b, table.c],
             input_type=[dt.int8(), dt.string(), dt.boolean()],
             return_type=dt.int8(),
@@ -64,7 +63,7 @@ def test_vectorized_udf_operations(table, klass, output_type):
     with pytest.raises(com.IbisTypeError):
         # wrong input type
         klass(
-            func=lambda a, b, c: a,
+            func=lambda a, *_: a,  # noqa: U101
             func_args=[ibis.literal(1), table.b, table.c],
             input_type="int8",
             return_type=dt.int8(),
@@ -73,7 +72,7 @@ def test_vectorized_udf_operations(table, klass, output_type):
     with pytest.raises(com.IbisTypeError):
         # wrong return type
         klass(
-            func=lambda a, b, c: a,
+            func=lambda a, *_: a,  # noqa: U101
             func_args=[ibis.literal(1), table.b, table.c],
             input_type=[dt.int8(), dt.string(), dt.boolean()],
             return_type=table,

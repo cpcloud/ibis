@@ -626,7 +626,7 @@ def mj2(con):
         con.drop_table("mj2", force=True)
 
 
-def test_simple_join(con, mj1, mj2):
+def test_simple_join(mj1, mj2):
     joined = mj1.join(mj2, mj1.id1 == mj2.id2)
     result = joined.val2.execute()
     assert len(result) == 2

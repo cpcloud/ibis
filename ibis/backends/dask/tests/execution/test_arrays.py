@@ -57,7 +57,7 @@ def test_array_collect(t, df):
 
 
 @pytest.mark.notimpl(["dask"], reason="windowing - #2553")
-def test_array_collect_rolling_partitioned(t, df):
+def test_array_collect_rolling_partitioned(t):
     window = ibis.trailing_window(1, order_by=t.plain_int64)
     colexpr = t.plain_float64.collect().over(window)
     expr = t['dup_strings', 'plain_int64', colexpr.name('collected')]

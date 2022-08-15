@@ -346,7 +346,7 @@ def test_frame_limit(t, df, offset):
 
 
 @pytest.mark.parametrize('offset', [0, 2])
-def test_series_limit(t, df, offset):
+def test_series_limit(t, offset):
     with pytest.raises(AttributeError):
         t.plain_int64.limit(5, offset=offset)
 

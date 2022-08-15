@@ -147,7 +147,6 @@ def test_interval_films_schema(con):
 @pytest.mark.parametrize(
     ("column", "expected_dtype"),
     [
-        # a, b and g are variable length intervals, like YEAR TO MONTH
         ("c", dt.Interval("D")),
         ("d", dt.Interval("h")),
         ("e", dt.Interval("m")),
@@ -165,22 +164,11 @@ def test_all_interval_types_schema(intervals, column, expected_dtype):
 
 
 @pytest.mark.parametrize(
-    ("column", "expected_dtype"),
-    [
-        # a, b and g are variable length intervals, like YEAR TO MONTH
-        ("c", dt.Interval("D")),
-        ("d", dt.Interval("h")),
-        ("e", dt.Interval("m")),
-        ("f", dt.Interval("s")),
-        ("h", dt.Interval("h")),
-        ("i", dt.Interval("m")),
-        ("j", dt.Interval("s")),
-        ("k", dt.Interval("m")),
-        ("l", dt.Interval("s")),
-        ("m", dt.Interval("s")),
-    ],
+    "column",
+    # a, b and g are variable length intervals, like YEAR TO MONTH
+    ["c", "d", "e", "f", "h", "i", "j", "k", "l", "m"],
 )
-def test_all_interval_types_execute(intervals, column, expected_dtype):
+def test_all_interval_types_execute(intervals, column):
     expr = intervals[column]
     series = expr.execute()
     assert series.dtype == np.dtype("timedelta64[ns]")

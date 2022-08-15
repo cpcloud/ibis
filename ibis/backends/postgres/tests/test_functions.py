@@ -412,21 +412,20 @@ def test_coalesce(con, expr, expected):
 
 
 @pytest.mark.parametrize(
-    ('expr', 'expected'),
+    'expr',
     [
-        param(ibis.coalesce(ibis.NA, ibis.NA), None, id='all_null'),
+        param(ibis.coalesce(ibis.NA, ibis.NA), id='all_null'),
         param(
             ibis.coalesce(
                 ibis.NA.cast('int8'),
                 ibis.NA.cast('int8'),
                 ibis.NA.cast('int8'),
             ),
-            None,
             id='all_nulls_with_all_cast',
         ),
     ],
 )
-def test_coalesce_all_na(con, expr, expected):
+def test_coalesce_all_na(con, expr):
     assert con.execute(expr) is None
 
 
@@ -591,68 +590,68 @@ FROM anon_3""".format(
     ('func', 'pandas_func'),
     [
         param(
-            lambda t, cond: t.bool_col.count(),
-            lambda df, cond: df.bool_col.count(),
+            lambda t, _: t.bool_col.count(),
+            lambda df, _: df.bool_col.count(),
             id='count',
         ),
         param(
-            lambda t, cond: t.bool_col.any(),
-            lambda df, cond: df.bool_col.any(),
+            lambda t, _: t.bool_col.any(),
+            lambda df, _: df.bool_col.any(),
             id='any',
         ),
         param(
-            lambda t, cond: t.bool_col.all(),
-            lambda df, cond: df.bool_col.all(),
+            lambda t, _: t.bool_col.all(),
+            lambda df, _: df.bool_col.all(),
             id='all',
         ),
         param(
-            lambda t, cond: t.bool_col.notany(),
-            lambda df, cond: ~df.bool_col.any(),
+            lambda t, _: t.bool_col.notany(),
+            lambda df, _: ~df.bool_col.any(),
             id='notany',
         ),
         param(
-            lambda t, cond: t.bool_col.notall(),
-            lambda df, cond: ~df.bool_col.all(),
+            lambda t, _: t.bool_col.notall(),
+            lambda df, _: ~df.bool_col.all(),
             id='notall',
         ),
         param(
-            lambda t, cond: t.double_col.sum(),
-            lambda df, cond: df.double_col.sum(),
+            lambda t, _: t.double_col.sum(),
+            lambda df, _: df.double_col.sum(),
             id='sum',
         ),
         param(
-            lambda t, cond: t.double_col.mean(),
-            lambda df, cond: df.double_col.mean(),
+            lambda t, _: t.double_col.mean(),
+            lambda df, _: df.double_col.mean(),
             id='mean',
         ),
         param(
-            lambda t, cond: t.double_col.min(),
-            lambda df, cond: df.double_col.min(),
+            lambda t, _: t.double_col.min(),
+            lambda df, _: df.double_col.min(),
             id='min',
         ),
         param(
-            lambda t, cond: t.double_col.max(),
-            lambda df, cond: df.double_col.max(),
+            lambda t, _: t.double_col.max(),
+            lambda df, _: df.double_col.max(),
             id='max',
         ),
         param(
-            lambda t, cond: t.double_col.var(),
-            lambda df, cond: df.double_col.var(),
+            lambda t, _: t.double_col.var(),
+            lambda df, _: df.double_col.var(),
             id='var',
         ),
         param(
-            lambda t, cond: t.double_col.std(),
-            lambda df, cond: df.double_col.std(),
+            lambda t, _: t.double_col.std(),
+            lambda df, _: df.double_col.std(),
             id='std',
         ),
         param(
-            lambda t, cond: t.double_col.var(how='sample'),
-            lambda df, cond: df.double_col.var(ddof=1),
+            lambda t, _: t.double_col.var(how='sample'),
+            lambda df, _: df.double_col.var(ddof=1),
             id='samp_var',
         ),
         param(
-            lambda t, cond: t.double_col.std(how='pop'),
-            lambda df, cond: df.double_col.std(ddof=0),
+            lambda t, _: t.double_col.std(how='pop'),
+            lambda df, _: df.double_col.std(ddof=0),
             id='pop_std',
         ),
         param(

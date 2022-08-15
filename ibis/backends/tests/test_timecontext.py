@@ -74,7 +74,9 @@ def ctx_col():
         ),
     ],
 )
-def test_context_adjustment_window_udf(alltypes, context, window, ctx_col):
+def test_context_adjustment_window_udf(
+    alltypes, context, window, ctx_col  # noqa: U100
+):
     """This test case aims to test context adjustment of
     udfs in window method.
     """
@@ -88,7 +90,9 @@ def test_context_adjustment_window_udf(alltypes, context, window, ctx_col):
 
 
 @pytest.mark.notimpl(["dask", "duckdb"])
-def test_context_adjustment_filter_before_window(alltypes, context, ctx_col):
+def test_context_adjustment_filter_before_window(
+    alltypes, context, ctx_col  # noqa: U100
+):
     window = ibis.trailing_window(ibis.interval(days=3), order_by=ORDER_BY_COL)
 
     expr = alltypes[alltypes['bool_col']]
@@ -107,7 +111,7 @@ def test_context_adjustment_filter_before_window(alltypes, context, ctx_col):
 def test_context_adjustment_multi_col_udf_non_grouped(
     alltypes,
     context,
-    ctx_col,
+    ctx_col,  # noqa: U100
 ):
     w = ibis.window(preceding=None, following=None)
 

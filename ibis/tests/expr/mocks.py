@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 import pytest
 
 from ibis.backends.base.sql import BaseSQLBackend
@@ -23,7 +21,6 @@ from ibis.backends.base.sql.alchemy import (
     table_from_schema,
 )
 from ibis.expr.schema import Schema
-from ibis.expr.typing import TimeContext
 
 MOCK_TABLES = {
     'alltypes': [
@@ -379,26 +376,20 @@ class MockBackend(BaseSQLBackend):
     def list_databases(self):
         return ['mockdb']
 
-    def fetch_from_cursor(self, cursor, schema):
+    def fetch_from_cursor(self, *_):  # noqa: U101
         pass
 
     def get_schema(self, name):
         name = name.replace('`', '')
         return Schema.from_tuples(MOCK_TABLES[name])
 
-    def execute(self, expr, limit=None, params=None, **kwargs):
+    def execute(self, expr, limit=None, params=None, **_):  # noqa: U101
         ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         for query in ast.queries:
             self.executed_queries.append(query.compile())
         return None
 
-    def compile(
-        self,
-        expr,
-        limit=None,
-        params=None,
-        timecontext: Optional[TimeContext] = None,
-    ):
+    def compile(self, expr, limit=None, params=None, **_):  # noqa: U101
         ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         queries = [q.compile() for q in ast.queries]
         return queries[0] if len(queries) == 1 else queries
@@ -413,7 +404,7 @@ class MockAlchemyBackend(MockBackend):
         sa = pytest.importorskip('sqlalchemy')
         self.meta = sa.MetaData()
 
-    def table(self, name, database=None):
+    def table(self, name, **_):  # noqa: U101
         schema = self.get_schema(name)
         return self._inject_table(name, schema)
 

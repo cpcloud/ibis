@@ -57,7 +57,7 @@ class TestConf(BackendTest, RoundHalfToEven):
         host: str = PG_HOST,
         port: int = PG_PORT,
         database: str = IBIS_TEST_POSTGRES_DB,
-        **_: Any,
+        **_: Any,  # noqa: U101
     ) -> None:
         """Load test data into a PostgreSQL backend instance.
 
@@ -95,7 +95,7 @@ class TestConf(BackendTest, RoundHalfToEven):
         engine.execute('VACUUM FULL ANALYZE')
 
     @staticmethod
-    def connect(data_directory: Path):
+    def connect(_: Path):  # noqa: U101
         return ibis.postgres.connect(
             host=PG_HOST,
             port=PG_PORT,

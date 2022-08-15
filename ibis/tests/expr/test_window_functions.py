@@ -199,7 +199,7 @@ def test_window_bind_to_table(alltypes):
     assert_equal(w2, expected)
 
 
-def test_preceding_following_validate(alltypes):
+def test_preceding_following_validate():
     # these all work
     [
         ibis.window(preceding=0),
@@ -222,7 +222,7 @@ def test_preceding_following_validate(alltypes):
         lambda: ibis.window(following=(2, -1)),
     ]
 
-    for i, case in enumerate(error_cases):
+    for case in error_cases:
         with pytest.raises(Exception):
             case()
 

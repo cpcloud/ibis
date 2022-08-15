@@ -22,7 +22,7 @@ pytest.importorskip("clickhouse_driver")
         ('var', 'varSamp'),
     ],
 )
-def test_reduction_where(con, alltypes, translate, reduction, func_translated):
+def test_reduction_where(alltypes, translate, reduction, func_translated):
     template = '{0}If(`double_col`, `bigint_col` < 70)'
     expected = template.format(func_translated)
 
@@ -45,7 +45,7 @@ def test_std_var_pop(con, alltypes, translate):
 
 
 @pytest.mark.parametrize('reduction', ['sum', 'count', 'max', 'min'])
-def test_reduction_invalid_where(con, alltypes, reduction):
+def test_reduction_invalid_where(alltypes, reduction):
     condbad_literal = L('T')
 
     with pytest.raises(TypeError):
@@ -57,48 +57,48 @@ def test_reduction_invalid_where(con, alltypes, reduction):
     ('func', 'pandas_func'),
     [
         (
-            lambda t, cond: t.bool_col.count(),
-            lambda df, cond: df.bool_col.count(),
+            lambda t, _: t.bool_col.count(),
+            lambda df, _: df.bool_col.count(),
         ),
         (
-            lambda t, cond: t.bool_col.approx_nunique(),
-            lambda df, cond: df.bool_col.nunique(),
+            lambda t, _: t.bool_col.approx_nunique(),
+            lambda df, _: df.bool_col.nunique(),
         ),
         (
-            lambda t, cond: t.double_col.sum(),
-            lambda df, cond: df.double_col.sum(),
+            lambda t, _: t.double_col.sum(),
+            lambda df, _: df.double_col.sum(),
         ),
         (
-            lambda t, cond: t.double_col.mean(),
-            lambda df, cond: df.double_col.mean(),
+            lambda t, _: t.double_col.mean(),
+            lambda df, _: df.double_col.mean(),
         ),
         (
-            lambda t, cond: t.int_col.approx_median(),
-            lambda df, cond: np.int32(df.int_col.median()),
+            lambda t, _: t.int_col.approx_median(),
+            lambda df, _: np.int32(df.int_col.median()),
         ),
         (
-            lambda t, cond: t.double_col.min(),
-            lambda df, cond: df.double_col.min(),
+            lambda t, _: t.double_col.min(),
+            lambda df, _: df.double_col.min(),
         ),
         (
-            lambda t, cond: t.double_col.max(),
-            lambda df, cond: df.double_col.max(),
+            lambda t, _: t.double_col.max(),
+            lambda df, _: df.double_col.max(),
         ),
         (
-            lambda t, cond: t.double_col.var(),
-            lambda df, cond: df.double_col.var(),
+            lambda t, _: t.double_col.var(),
+            lambda df, _: df.double_col.var(),
         ),
         (
-            lambda t, cond: t.double_col.std(),
-            lambda df, cond: df.double_col.std(),
+            lambda t, _: t.double_col.std(),
+            lambda df, _: df.double_col.std(),
         ),
         (
-            lambda t, cond: t.double_col.var(how='sample'),
-            lambda df, cond: df.double_col.var(ddof=1),
+            lambda t, _: t.double_col.var(how='sample'),
+            lambda df, _: df.double_col.var(ddof=1),
         ),
         (
-            lambda t, cond: t.double_col.std(how='pop'),
-            lambda df, cond: df.double_col.std(ddof=0),
+            lambda t, _: t.double_col.std(how='pop'),
+            lambda df, _: df.double_col.std(ddof=0),
         ),
         (
             lambda t, cond: t.bool_col.count(where=cond),
@@ -142,7 +142,7 @@ def test_reduction_invalid_where(con, alltypes, reduction):
         ),
     ],
 )
-def test_aggregations(alltypes, df, func, pandas_func, translate):
+def test_aggregations(alltypes, df, func, pandas_func):
     table = alltypes.limit(100)
     count = table.count().execute()
     df = df.head(int(count))
@@ -173,7 +173,7 @@ def test_boolean_reduction(alltypes, op, df):
     assert result == op(df.bool_col)
 
 
-def test_anonymus_aggregate(alltypes, df, translate):
+def test_anonymus_aggregate(alltypes, df):
     t = alltypes
     expr = t[t.double_col > t.double_col.mean()]
     result = expr.execute().set_index('id')

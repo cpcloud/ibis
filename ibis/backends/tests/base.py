@@ -16,7 +16,7 @@ import ibis.expr.types as ir
 class RoundingConvention:
     @staticmethod
     @abc.abstractmethod
-    def round(series: pd.Series, decimals: int = 0) -> pd.Series:
+    def round(_: pd.Series, decimals: int = 0) -> pd.Series:
         """Round a series to `decimals` number of decimal values."""
 
 
@@ -92,7 +92,9 @@ class BackendTest(abc.ABC):
 
     @staticmethod
     def _load_data(
-        data_directory: Path, script_directory: Path, **kwargs: Any
+        data_directory: Path,  # noqa: U100
+        script_directory: Path,  # noqa: U100
+        **_: Any,  # noqa: U101
     ) -> None:
         ...
 

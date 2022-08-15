@@ -21,12 +21,6 @@ def test_ast_with_projection_join_filter(con):
 
     stmt = get_query(result)
 
-    def foo():
-        table3 = table[filter_pred]
-        joined = table2.inner_join(table3, [join_pred])
-        result = joined[[table3, table2['value']]]
-        return result
-
     assert len(stmt.select_set) == 2
 
     # #790, make sure the filter stays put

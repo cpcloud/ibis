@@ -22,7 +22,7 @@ class InstanceOf(Validator):
     def __init__(self, typ):
         self.typ = typ
 
-    def __call__(self, arg, **kwargs):
+    def __call__(self, arg, **_):  # noqa: U101
         if not isinstance(arg, self.typ):
             raise TypeError(self.typ)
         return arg
@@ -259,7 +259,7 @@ def test_multiple_inheritance():
         pass
 
     class UDF(Value):
-        func = ValidatorFunction(lambda fn, this: fn)
+        func = ValidatorFunction(lambda fn, this: fn)  # noqa: U100
 
     class UDAF(UDF, Reduction):
         arity = IsInt
@@ -420,7 +420,7 @@ def pair(a, b):
         return (b, a)
 
 
-def test_comparable_basic(cache):
+def test_comparable_basic(cache):  # noqa: U100
     a = Node(name="a")
     b = Node(name="a")
     c = Node(name="a")

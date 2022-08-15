@@ -138,7 +138,7 @@ def test_join_with_invalid_predicates(how, left, right):
 
 @join_type
 @pytest.mark.xfail(reason='Hard to detect this case')
-def test_join_with_duplicate_non_key_columns(how, left, right, df1, df2):
+def test_join_with_duplicate_non_key_columns(how, left, right):
     left = left.mutate(x=left.value * 2)
     right = right.mutate(x=right.other_value * 3)
     expr = left.join(right, left.key == right.key, how=how)

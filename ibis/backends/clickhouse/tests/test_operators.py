@@ -86,7 +86,7 @@ def test_binary_infix_operators(con, alltypes, translate, op, expected):
             lambda a, b, c: (a + b) + c,
             '(`int_col` + `tinyint_col`) + `double_col`',
         ),
-        (lambda a, b, c: a.log() + c, 'log(`int_col`) + `double_col`'),
+        (lambda a, _, c: a.log() + c, 'log(`int_col`) + `double_col`'),
         (
             lambda a, b, c: (b + (-(a + c))),
             '`tinyint_col` + (-(`int_col` + `double_col`))',
@@ -177,7 +177,7 @@ def test_negate(con, alltypes, translate, column):
         'month',
     ],
 )
-def test_negate_non_boolean(con, alltypes, field, df):
+def test_negate_non_boolean(alltypes, field, df):
     t = alltypes.limit(10)
     expr = t.projection([(-t[field]).name(field)])
     result = expr.execute()[field]
@@ -209,7 +209,7 @@ def test_negate_literal(con):
         ),
     ],
 )
-def test_ifelse(alltypes, df, op, pandas_op, translate):
+def test_ifelse(alltypes, df, op, pandas_op):
     expr = op(alltypes)
     result = expr.execute()
     result.name = None

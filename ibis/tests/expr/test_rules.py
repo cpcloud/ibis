@@ -321,32 +321,28 @@ def test_invalid_column_or_scalar(validator, value, expected):
 
 
 @pytest.mark.parametrize(
-    ('check_table', 'value', 'expected'),
+    ('value', 'expected'),
     [
-        (table, "int_col", table.int_col),
-        (table, table.int_col, table.int_col),
+        ("int_col", table.int_col),
+        (table.int_col, table.int_col),
     ],
 )
-def test_valid_column_from(check_table, value, expected):
+def test_valid_column_from(value, expected):
     validator = rlz.column_from("table")
     this = dict(table=table)
     assert validator(value, this=this).equals(expected)
 
 
 @pytest.mark.parametrize(
-    ('check_table', 'validator', 'value'),
+    ('validator', 'value'),
     [
-        (table, rlz.column_from("not_table"), "int_col"),
-        (table, rlz.column_from("table"), "col_not_in_table"),
-        (
-            table,
-            rlz.column_from("table"),
-            similar_table.int_col,
-        ),
+        (rlz.column_from("not_table"), "int_col"),
+        (rlz.column_from("table"), "col_not_in_table"),
+        (rlz.column_from("table"), similar_table.int_col),
     ],
 )
-def test_invalid_column_from(check_table, validator, value):
-    test = dict(table=check_table)
+def test_invalid_column_from(validator, value):
+    test = dict(table=table)
 
     with pytest.raises(IbisTypeError):
         validator(value, this=test)

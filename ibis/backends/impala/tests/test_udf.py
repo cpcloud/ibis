@@ -271,17 +271,17 @@ def alltypes(udfcon):
 
 
 @pytest.fixture
-def udf_ll(udfcon, test_data_dir):
+def udf_ll(test_data_dir):
     return pjoin(test_data_dir, 'udf/udf-sample.ll')
 
 
 @pytest.fixture
-def uda_ll(udfcon, test_data_dir):
+def uda_ll(test_data_dir):
     return pjoin(test_data_dir, 'udf/uda-sample.ll')
 
 
 @pytest.fixture
-def uda_so(udfcon, test_data_dir):
+def uda_so(test_data_dir):
     return pjoin(test_data_dir, 'udf/libudasample.so')
 
 

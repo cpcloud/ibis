@@ -272,7 +272,7 @@ def test_analytic_udf_mutate(udf_backend, udf_alltypes, udf_df, udf):
     udf_backend.assert_series_equal(result['zscore'], expected['zscore'])
 
 
-def test_reduction_udf(udf_backend, udf_alltypes, udf_df):
+def test_reduction_udf(udf_alltypes, udf_df):
     result = calc_mean(udf_alltypes['double_col']).execute()
     expected = udf_df['double_col'].mean()
     assert result == expected
@@ -307,7 +307,7 @@ def test_reduction_udf_on_empty_data(udf_backend, udf_alltypes):
     udf_backend.assert_frame_equal(result, expected, check_dtype=False)
 
 
-def test_output_type_in_list_invalid(udf_backend, udf_alltypes, udf_df):
+def test_output_type_in_list_invalid():
     # Test that an error is raised if UDF output type is wrapped in a list
 
     with pytest.raises(
@@ -424,14 +424,14 @@ def test_valid_args_and_kwargs(udf_backend, udf_alltypes, udf_df):
     udf_backend.assert_frame_equal(result, expected)
 
 
-def test_invalid_kwargs(udf_backend, udf_alltypes):
+def test_invalid_kwargs():
     # Test that defining a UDF with a non-column argument that is not a
     # keyword argument raises an error
 
     with pytest.raises(TypeError, match=".*must be defined as keyword only.*"):
 
         @elementwise(input_type=[dt.double], output_type=dt.double)
-        def foo1(v, amount):
+        def foo1(v, amount):  # noqa: U100
             return v + 1
 
 
@@ -497,7 +497,7 @@ def test_elementwise_udf_overwrite_destruct_and_assign(
 
 
 @pytest.mark.min_version(pyspark="3.1")
-def test_elementwise_udf_destruct_exact_once(udf_backend, udf_alltypes):
+def test_elementwise_udf_destruct_exact_once(udf_alltypes):
     with tempfile.TemporaryDirectory() as tempdir:
 
         @elementwise(
@@ -544,7 +544,7 @@ def test_elementwise_udf_multiple_overwrite_destruct(
     udf_backend.assert_frame_equal(result, expected, check_like=True)
 
 
-def test_elementwise_udf_named_destruct(udf_backend, udf_alltypes):
+def test_elementwise_udf_named_destruct(udf_alltypes):
     """Test error when assigning name to a destruct column."""
 
     add_one_struct_udf = create_add_one_struct_udf(

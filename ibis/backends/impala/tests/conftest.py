@@ -35,7 +35,11 @@ class TestConf(UnorderedComparator, BackendTest, RoundAwayFromZero):
     supports_structs = False
 
     @staticmethod
-    def _load_data(data_dir: Path, script_dir: Path, **_: Any) -> None:
+    def _load_data(
+        data_dir: Path,
+        script_dir: Path,  # noqa: U100
+        **_: Any,  # noqa: U101
+    ) -> None:
         """Load test data into an Impala backend instance.
 
         Parameters
@@ -130,7 +134,7 @@ class TestConf(UnorderedComparator, BackendTest, RoundAwayFromZero):
 
     @staticmethod
     def connect(
-        data_directory: Path,
+        data_directory: Path,  # noqa: U100
         database: str
         | None = os.environ.get("IBIS_TEST_DATA_DB", "ibis_testing"),
         with_hdfs: bool = True,

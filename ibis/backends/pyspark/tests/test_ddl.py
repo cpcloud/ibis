@@ -181,7 +181,7 @@ def created_view(client, alltypes):
     return name
 
 
-def test_drop_view(client, alltypes, created_view):
+def test_drop_view(client, created_view):
     client.drop_view(created_view)
     assert created_view not in client.list_tables()
 

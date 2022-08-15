@@ -255,7 +255,7 @@ def show_types():
         ibis.options.repr.show_types = old
 
 
-def test_show_types(show_types):
+def test_show_types(show_types):  # noqa: U100
     t = ibis.table(dict(a="int64", b="string"), name="t")
     expr = t.a / 1.0
     assert "# int64" in repr(t.a)

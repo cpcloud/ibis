@@ -8,7 +8,7 @@ class InstanceOf(Validator):
     def __init__(self, typ):
         self.typ = typ
 
-    def __call__(self, arg, **kwargs):
+    def __call__(self, arg, **_):  # noqa: U101
         if not isinstance(arg, self.typ):
             raise TypeError(self.typ)
         return arg

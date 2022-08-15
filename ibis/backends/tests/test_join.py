@@ -7,14 +7,14 @@ from packaging.version import parse as vparse
 from pytest import param
 
 
-def _pandas_semi_join(left, right, on, **_):
+def _pandas_semi_join(left, right, on, **_):  # noqa: U101
     assert len(on) == 1, str(on)
     inner = pd.merge(left, right, how="inner", on=on)
     filt = left.loc[:, on[0]].isin(inner.loc[:, on[0]])
     return left.loc[filt, :]
 
 
-def _pandas_anti_join(left, right, on, **_):
+def _pandas_anti_join(left, right, on, **_):  # noqa: U101
     inner = pd.merge(left, right, how="left", indicator=True, on=on)
     return inner[inner["_merge"] == "left_only"]
 

@@ -61,7 +61,7 @@ def test_subsecond_timestamp_literals(con, translate, expr, expected):
         ('An "escape"', "'An \"escape\"'"),
     ],
 )
-def test_string_literals(con, translate, value, expected):
+def test_string_literals(translate, value, expected):
     expr = ibis.literal(value)
     assert translate(expr) == expected
     # TODO clickhouse-driver escaping problem

@@ -112,7 +112,7 @@ def test_math_functions_decimal(t, df, ibis_func, dask_func):
     tm.assert_series_equal(computed_result, computed_expected)
 
 
-def test_round_decimal_with_negative_places(t, df):
+def test_round_decimal_with_negative_places(t):
     type = dt.Decimal(12, 3)
     expr = t.float64_as_strings.cast(type).round(-1)
     result = expr.compile()
@@ -181,7 +181,7 @@ def test_quantile_scalar(t, df, ibis_func, dask_func):
         (lambda x: x.quantile(0.5, interpolation='foo'), ValueError),
     ],
 )
-def test_arraylike_functions_transform_errors(t, df, ibis_func, exc):
+def test_arraylike_functions_transform_errors(t, ibis_func, exc):
     with pytest.raises(exc):
         ibis_func(t.float64_with_zeros).execute()
 

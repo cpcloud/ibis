@@ -42,7 +42,7 @@ def test_date_scalar_parameter(backend, alltypes, start_string, end_string):
 
 
 @pytest.mark.notimpl(["datafusion", "pyspark"])
-def test_timestamp_accepts_date_literals(backend, alltypes):
+def test_timestamp_accepts_date_literals(alltypes):
     date_string = '2009-03-01'
     param = ibis.param(dt.timestamp)
     expr = alltypes.mutate(param=param)
@@ -63,7 +63,7 @@ def test_timestamp_accepts_date_literals(backend, alltypes):
     ["mysql", "sqlite"],
     reason="mysql and sqlite will never implement array types",
 )
-def test_scalar_param_array(backend, con):
+def test_scalar_param_array(con):
     value = [1, 2, 3]
     param = ibis.param(dt.Array(dt.int64))
     result = con.execute(param.length(), params={param: value})
@@ -83,7 +83,7 @@ def test_scalar_param_array(backend, con):
     ["mysql", "sqlite"],
     reason="mysql and sqlite will never implement struct types",
 )
-def test_scalar_param_struct(backend, con):
+def test_scalar_param_struct(con):
     value = dict(a=1, b="abc", c=3.0)
     param = ibis.param("struct<a: int64, b: string, c: float64>")
     result = con.execute(param["a"], params={param: value})
@@ -105,7 +105,7 @@ def test_scalar_param_struct(backend, con):
     reason="mysql and sqlite will never implement map types",
 )
 @pytest.mark.notyet(["postgres"])
-def test_scalar_param_map(backend, con):
+def test_scalar_param_map(con):
     value = {'a': 'ghi', 'b': 'def', 'c': 'abc'}
     param = ibis.param(dt.Map(dt.string, dt.string))
     result = con.execute(param['b'], params={param: value})

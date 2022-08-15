@@ -23,7 +23,7 @@ class TestConf(BackendTest, RoundAwayFromZero):
         data_dir,
         script_dir,
         database: str = "ibis_testing",
-        **_: Any,
+        **_: Any,  # noqa: U101
     ) -> None:
         """Load test data into a DuckDB backend instance.
 

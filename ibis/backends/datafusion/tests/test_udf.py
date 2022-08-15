@@ -10,13 +10,13 @@ pc = pytest.importorskip("pyarrow.compute")
 
 
 @elementwise(input_type=['string'], output_type='int64')
-def my_string_length(arr, **kwargs):
+def my_string_length(arr, **kwargs):  # noqa: U100
     # arr is a pyarrow.StringArray
     return pc.cast(pc.multiply(pc.utf8_length(arr), 2), target_type='int64')
 
 
 @elementwise(input_type=[dt.int64, dt.int64], output_type=dt.int64)
-def my_add(arr1, arr2, **kwargs):
+def my_add(arr1, arr2, **kwargs):  # noqa: U100
     return pc.add(arr1, arr2)
 
 

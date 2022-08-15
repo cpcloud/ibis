@@ -51,7 +51,9 @@ def test_pre_execute_basic():
     """
 
     @pre_execute.register(ops.Add)
-    def pre_execute_test(op, *clients, scope=None, **kwargs):
+    def pre_execute_test(
+        op, *clients, scope=None, **kwargs  # noqa: U100, U101
+    ):
         return Scope({op: 4}, None)
 
     one = ibis.literal(1)
@@ -96,11 +98,11 @@ def test_missing_data_on_custom_client():
         con.execute(t)
 
 
-def test_post_execute_called_on_joins(dataframe, core_client, ibis_table):
+def test_post_execute_called_on_joins(ibis_table):
     count = [0]
 
     @post_execute.register(ops.InnerJoin, dd.DataFrame)
-    def tmp_left_join_exe(op, lhs, **kwargs):
+    def tmp_left_join_exe(op, lhs, **_):  # noqa: U100, U101
         count[0] += 1
         return lhs
 
@@ -135,7 +137,7 @@ def test_is_computable_input():
             return self.value
 
     @execute_node.register(ops.Add, int, MyObject)
-    def add_int_my_object(op, left, right, **kwargs):
+    def add_int_my_object(op, left, right, **kwargs):  # noqa: U100, U101
         return left + right.value
 
     # This multimethod must be implemented to play nicely with other value
@@ -143,11 +145,11 @@ def test_is_computable_input():
     # non-expression object to play nicely it must somehow map to one of the
     # types in ibis/expr/datatypes.py
     @dt.infer.register(MyObject)
-    def infer_my_object(_, **kwargs):
+    def infer_my_object(_, **kwargs):  # noqa: U100, U101
         return dt.float64
 
     @is_computable_input.register(MyObject)
-    def is_computable_input_my_object(_):
+    def is_computable_input_my_object(_):  # noqa: U101
         return True
 
     one = ibis.literal(1)

@@ -347,14 +347,14 @@ timestamp_value = pd.Timestamp('2018-01-01 18:18:18')
     ('expr_fn', 'expected_fn'),
     [
         param(
-            lambda t, be: t.timestamp_col + ibis.interval(days=4),
-            lambda t, be: t.timestamp_col + pd.Timedelta(days=4),
+            lambda t, _: t.timestamp_col + ibis.interval(days=4),
+            lambda t, _: t.timestamp_col + pd.Timedelta(days=4),
             id='timestamp-add-interval',
         ),
         param(
-            lambda t, be: t.timestamp_col
+            lambda t, _: t.timestamp_col
             + (ibis.interval(days=4) - ibis.interval(days=2)),
-            lambda t, be: t.timestamp_col
+            lambda t, _: t.timestamp_col
             + (pd.Timedelta(days=4) - pd.Timedelta(days=2)),
             id='timestamp-add-interval-binop',
             marks=pytest.mark.notimpl(
@@ -370,23 +370,22 @@ timestamp_value = pd.Timestamp('2018-01-01 18:18:18')
             ),
         ),
         param(
-            lambda t, be: t.timestamp_col - ibis.interval(days=17),
-            lambda t, be: t.timestamp_col - pd.Timedelta(days=17),
+            lambda t, _: t.timestamp_col - ibis.interval(days=17),
+            lambda t, _: t.timestamp_col - pd.Timedelta(days=17),
             id='timestamp-subtract-interval',
         ),
         param(
-            lambda t, be: t.timestamp_col.date() + ibis.interval(days=4),
-            lambda t, be: t.timestamp_col.dt.floor('d') + pd.Timedelta(days=4),
+            lambda t, _: t.timestamp_col.date() + ibis.interval(days=4),
+            lambda t, _: t.timestamp_col.dt.floor('d') + pd.Timedelta(days=4),
             id='date-add-interval',
         ),
         param(
-            lambda t, be: t.timestamp_col.date() - ibis.interval(days=14),
-            lambda t, be: t.timestamp_col.dt.floor('d')
-            - pd.Timedelta(days=14),
+            lambda t, _: t.timestamp_col.date() - ibis.interval(days=14),
+            lambda t, _: t.timestamp_col.dt.floor('d') - pd.Timedelta(days=14),
             id='date-subtract-interval',
         ),
         param(
-            lambda t, be: t.timestamp_col - ibis.timestamp(timestamp_value),
+            lambda t, _: t.timestamp_col - ibis.timestamp(timestamp_value),
             lambda t, be: pd.Series(
                 t.timestamp_col.sub(timestamp_value).values.astype(
                     f'timedelta64[{be.returned_timestamp_unit}]'
@@ -396,8 +395,8 @@ timestamp_value = pd.Timestamp('2018-01-01 18:18:18')
             marks=pytest.mark.notimpl(["duckdb", "pyspark"]),
         ),
         param(
-            lambda t, be: t.timestamp_col.date() - ibis.date(date_value),
-            lambda t, be: t.timestamp_col.dt.floor('d') - date_value,
+            lambda t, _: t.timestamp_col.date() - ibis.date(date_value),
+            lambda t, _: t.timestamp_col.dt.floor('d') - date_value,
             id='date-subtract-date',
             marks=pytest.mark.notimpl(["pyspark"]),
         ),
@@ -614,7 +613,7 @@ def test_integer_to_timestamp(backend, con, unit):
         'datafusion',
     ]
 )
-def test_string_to_timestamp(backend, con, fmt, timezone):
+def test_string_to_timestamp(con, fmt, timezone):
     table = con.table('functional_alltypes')
     result = table.mutate(
         date=table.date_string_col.to_timestamp(fmt, timezone)
@@ -638,7 +637,7 @@ def test_string_to_timestamp(backend, con, fmt, timezone):
         'datafusion',
     ]
 )
-def test_string_to_timestamp_tz_error(backend, con):
+def test_string_to_timestamp_tz_error(con):
     table = con.table('functional_alltypes')
 
     with pytest.raises(com.UnsupportedArgumentError):
@@ -662,7 +661,7 @@ def test_string_to_timestamp_tz_error(backend, con):
     ],
 )
 @pytest.mark.notimpl(["datafusion", "impala"])
-def test_day_of_week_scalar(backend, con, date, expected_index, expected_day):
+def test_day_of_week_scalar(con, date, expected_index, expected_day):
     expr = ibis.literal(date).cast(dt.date)
     result_index = con.execute(expr.day_of_week.index())
     assert result_index == expected_index
@@ -672,7 +671,7 @@ def test_day_of_week_scalar(backend, con, date, expected_index, expected_day):
 
 
 @pytest.mark.notimpl(["datafusion"])
-def test_day_of_week_column(backend, con, alltypes, df):
+def test_day_of_week_column(backend, alltypes, df):
     expr = alltypes.timestamp_col.day_of_week
 
     result_index = expr.index().execute()
@@ -705,7 +704,7 @@ def test_day_of_week_column(backend, con, alltypes, df):
 )
 @pytest.mark.notimpl(["datafusion"])
 def test_day_of_week_column_group_by(
-    backend, con, alltypes, df, day_of_week_expr, day_of_week_pandas
+    backend, alltypes, df, day_of_week_expr, day_of_week_pandas
 ):
     expr = alltypes.groupby('string_col').aggregate(
         day_of_week_result=day_of_week_expr
@@ -726,7 +725,7 @@ def test_day_of_week_column_group_by(
 
 
 @pytest.mark.notimpl(["datafusion"])
-def test_now(backend, con):
+def test_now(con):
     expr = ibis.now()
     result = con.execute(expr)
     pandas_now = pd.Timestamp('now')
@@ -739,7 +738,7 @@ def test_now(backend, con):
 
 @pytest.mark.notimpl(["dask"], reason="Limit #2553")
 @pytest.mark.notimpl(["datafusion"])
-def test_now_from_projection(backend, alltypes):
+def test_now_from_projection(alltypes):
     n = 5
     expr = alltypes[[ibis.now().name('ts')]].limit(n)
     result = expr.execute()

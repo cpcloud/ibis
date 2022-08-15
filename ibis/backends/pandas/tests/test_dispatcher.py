@@ -39,22 +39,22 @@ def foo_dispatchers():
 
     @foo.register(A1, B1)
     @foo_m.register(A1, B1)
-    def foo0(x, y):
+    def foo0(x, y):  # noqa: U100
         return 0
 
     @foo.register(A1, B2)
     @foo_m.register(A1, B2)
-    def foo1(x, y):
+    def foo1(x, y):  # noqa: U100
         return 1
 
     @foo.register(A2, B1)
     @foo_m.register(A2, B1)
-    def foo2(x, y):
+    def foo2(x, y):  # noqa: U100
         return 2
 
     @foo.register(A2, B2)
     @foo_m.register(A2, B2)
-    def foo3(x, y):
+    def foo3(x, y):  # noqa: U100
         return 3
 
     @foo.register(
@@ -63,7 +63,7 @@ def foo_dispatchers():
     @foo_m.register(
         (A1, A2),
     )
-    def foo4(x):
+    def foo4(x):  # noqa: U100
         return 4
 
     return foo, foo_m
@@ -152,9 +152,9 @@ def test_unregistered(foo, args):
 def test_ambiguities_warning():
     bar = TwoLevelDispatcher('bar')
 
-    bar.register(A1, B1)(lambda a, b: 0)
-    bar.register(A1, B2)(lambda a, b: 1)
-    bar.register(A2, B1)(lambda a, b: 2)
+    bar.register(A1, B1)(lambda a, b: 0)  # noqa: U100
+    bar.register(A1, B2)(lambda a, b: 1)  # noqa: U100
+    bar.register(A2, B1)(lambda a, b: 2)  # noqa: U100
 
     with pytest.warns(AmbiguityWarning, match=".*Consider.*\n\n.*(A2, B2).*"):
         bar.reorder()
@@ -163,10 +163,10 @@ def test_ambiguities_warning():
 def test_ambiguities_no_warning():
     bar = TwoLevelDispatcher('bar')
 
-    bar.register(A1, B1)(lambda a, b: 0)
-    bar.register(A1, B2)(lambda a, b: 1)
-    bar.register(A2, B1)(lambda a, b: 2)
-    bar.register(A2, B2)(lambda a, b: 3)
+    bar.register(A1, B1)(lambda a, b: 0)  # noqa: U100
+    bar.register(A1, B2)(lambda a, b: 1)  # noqa: U100
+    bar.register(A2, B1)(lambda a, b: 2)  # noqa: U100
+    bar.register(A2, B2)(lambda a, b: 3)  # noqa: U100
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")

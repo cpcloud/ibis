@@ -282,7 +282,7 @@ def test_adjust_context_scope(time_keyed_left, time_keyed_right):
 
     @adjust_context.register(CustomAsOfJoin)
     def adjust_context_custom_asof_join(
-        op: ops.AsOfJoin,
+        op: ops.AsOfJoin,  # noqa: U100
         scope: Scope,
         timecontext: TimeContext,
     ) -> TimeContext:
@@ -323,7 +323,7 @@ def test_adjust_context_complete_shift(
     @adjust_context.register(CustomAsOfJoin)
     def adjust_context_custom_asof_join(
         op: ops.AsOfJoin,
-        scope: Scope,
+        scope: Scope,  # noqa: U100
         timecontext: TimeContext,
     ) -> TimeContext:
         """Shifts both the begin and end in the same direction."""

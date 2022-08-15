@@ -17,7 +17,7 @@ def test_array_literal(client, arr, create_arr_expr):
     tm.assert_numpy_array_equal(result, expected)
 
 
-def test_array_length(t, df):
+def test_array_length(t):
     expr = t.projection(
         [
             t.array_of_float64.length().name('array_of_float64_length'),
@@ -67,7 +67,7 @@ def test_array_collect_grouped(t, df):
     tm.assert_frame_equal(result, expected)
 
 
-def test_array_collect_rolling_partitioned(t, df):
+def test_array_collect_rolling_partitioned(t):
     window = ibis.trailing_window(1, order_by=t.plain_int64)
     colexpr = t.plain_float64.collect().over(window)
     expr = t['dup_strings', 'plain_int64', colexpr.name('collected')]

@@ -48,7 +48,8 @@ def star1(con):
 
 @pytest.fixture(scope="module")
 def sa_star1(con, star1):
-    return con.meta.tables["star1"]
+    (table,) = con.compile(star1).get_final_froms()
+    return table
 
 
 @pytest.fixture(scope="module")
@@ -58,7 +59,8 @@ def functional_alltypes(con):
 
 @pytest.fixture(scope="module")
 def sa_functional_alltypes(con, functional_alltypes):
-    return con.meta.tables['functional_alltypes'].alias("t0")
+    (table,) = con.compile(functional_alltypes).get_final_froms()
+    return table.alias("t0")
 
 
 @pytest.fixture(scope="module")
@@ -68,7 +70,8 @@ def alltypes(con):
 
 @pytest.fixture(scope="module")
 def sa_alltypes(con, alltypes):
-    return con.meta.tables['alltypes'].alias("t0")
+    (table,) = con.compile(alltypes).get_final_froms()
+    return table.alias("t0")
 
 
 def _check(expr, sqla):
@@ -116,7 +119,7 @@ def test_sqla_schema_conversion(con):
         operator.ne,
     ],
 )
-def test_comparisons(con, functional_alltypes, sa_functional_alltypes, op):
+def test_comparisons(functional_alltypes, sa_functional_alltypes, op):
     expr = op(functional_alltypes.double_col, 5)
     expected = sa.select(
         [op(sa_functional_alltypes.c.double_col, L(5)).label("tmp")]
@@ -138,7 +141,6 @@ def test_comparisons(con, functional_alltypes, sa_functional_alltypes, op):
     ],
 )
 def test_boolean_conjunction(
-    con,
     sa_functional_alltypes,
     functional_alltypes,
     expr_fn,
@@ -146,12 +148,12 @@ def test_boolean_conjunction(
 ):
     expr = expr_fn(functional_alltypes.double_col)
     expected = sa.select(
-        [expr_fn(sa_functional_alltypes.c.double_col).label("tmp")]
+        [expected_fn(sa_functional_alltypes.c.double_col).label("tmp")]
     )
     _check(expr, expected)
 
 
-def test_between(con, functional_alltypes, sa_functional_alltypes):
+def test_between(functional_alltypes, sa_functional_alltypes):
     expr = functional_alltypes.double_col.between(5, 10)
     expected = sa.select(
         [sa_functional_alltypes.c.double_col.between(L(5), L(10)).label("tmp")]
@@ -167,7 +169,6 @@ def test_between(con, functional_alltypes, sa_functional_alltypes):
     ],
 )
 def test_isnull_notnull(
-    con,
     sa_functional_alltypes,
     functional_alltypes,
     expr_fn,
@@ -328,7 +329,7 @@ def test_full_outer_join(con):
     assert 'left' not in joined_sql_str.lower()
 
 
-def test_simple_case(sa_alltypes, alltypes, simple_case):
+def test_simple_case(sa_alltypes, simple_case):
     st = sa_alltypes
     expr = simple_case
     expected = sa.select(
@@ -345,7 +346,7 @@ def test_simple_case(sa_alltypes, alltypes, simple_case):
     _check(expr, expected)
 
 
-def test_searched_case(sa_alltypes, alltypes, search_case):
+def test_searched_case(sa_alltypes, search_case):
     st = sa_alltypes.alias("t0")
     expr = search_case
     expected = sa.select(
@@ -414,7 +415,7 @@ def test_where_simple_comparisons(sa_star1, where_simple_comparisons):
         ),
     ],
 )
-def test_aggregate(con, star1, sa_star1, expr_fn, expected_fn):
+def test_aggregate(star1, sa_star1, expr_fn, expected_fn):
     st = sa_star1.alias('t0')
     expr = expr_fn(star1)
     expected = expected_fn(st)
@@ -441,7 +442,7 @@ def test_aggregate(con, star1, sa_star1, expr_fn, expected_fn):
         ),
     ],
 )
-def test_sort_by(con, star1, sa_star1, expr_fn, expected_fn):
+def test_sort_by(star1, sa_star1, expr_fn, expected_fn):
     st = sa_star1.alias("t0")
     expr = expr_fn(star1)
     expected = expected_fn(st)
@@ -458,20 +459,20 @@ def test_sort_by(con, star1, sa_star1, expr_fn, expected_fn):
         ),
     ],
 )
-def test_limit(con, star1, sa_star1, expr_fn, expected_fn):
+def test_limit(star1, sa_star1, expr_fn, expected_fn):
     expr = expr_fn(star1)
     expected = expected_fn(sa.select([sa_star1.alias("t0")]))
     _check(expr, expected)
 
 
-def test_limit_filter(con, star1, sa_star1):
+def test_limit_filter(star1, sa_star1):
     expr = star1[star1.f > 0].limit(10)
     expected = sa_star1.alias("t0")
     expected = sa.select([expected]).where(expected.c.f > L(0)).limit(10)
     _check(expr, expected)
 
 
-def test_limit_subquery(con, star1, sa_star1):
+def test_limit_subquery(star1, sa_star1):
     expr = star1.limit(10)[lambda x: x.f > 0]
     expected = sa.select([sa_star1.alias("t1")]).limit(10).alias("t0")
     expected = sa.select([expected]).where(expected.c.f > 0)
@@ -479,7 +480,6 @@ def test_limit_subquery(con, star1, sa_star1):
 
 
 def test_cte_factor_distinct_but_equal(
-    con,
     cte_factor_distinct_but_equal,
     sa_alltypes,
 ):
@@ -501,7 +501,7 @@ def test_cte_factor_distinct_but_equal(
     _check(expr, stmt)
 
 
-def test_self_reference_join(con, self_reference_join, sa_star1):
+def test_self_reference_join(self_reference_join, sa_star1):
     t0 = sa_star1.alias('t0')
     t1 = sa_star1.alias('t1')
 
@@ -513,7 +513,6 @@ def test_self_reference_join(con, self_reference_join, sa_star1):
 
 
 def test_self_reference_in_not_exists(
-    con,
     sa_functional_alltypes,
     self_reference_in_exists,
 ):
@@ -568,8 +567,8 @@ def test_where_correlated_subquery(con, where_correlated_subquery, foo):
 def test_subquery_aliased(con, subquery_aliased, star1, star2):
     expr = subquery_aliased
 
-    s1 = con.meta.tables["star1"].alias("t2")
-    s2 = con.meta.tables["star2"].alias("t1")
+    s1 = con.compile(star1).get_final_froms()[0].alias("t2")
+    s2 = con.compile(star2).get_final_froms()[0].alias("t1")
 
     agged = (
         sa.select([s1.c.foo_id, F.sum(s1.c.f).label('total')])
@@ -586,8 +585,8 @@ def test_subquery_aliased(con, subquery_aliased, star1, star2):
 def test_lower_projection_sort_key(con, subquery_aliased, star1, star2):
     expr = subquery_aliased
 
-    t3 = con.meta.tables["star1"].alias("t3")
-    t2 = con.meta.tables["star2"].alias("t2")
+    t3 = con.compile(star1).get_final_froms()[0].alias("t3")
+    t2 = con.compile(star2).get_final_froms()[0].alias("t2")
 
     t4 = (
         sa.select([t3.c.foo_id, F.sum(t3.c.f).label('total')])

@@ -61,7 +61,7 @@ class TestConf(BackendTest, RoundHalfToEven):
         host: str = MYSQL_HOST,
         port: int = MYSQL_PORT,
         database: str = IBIS_TEST_MYSQL_DB,
-        **_: Any,
+        **_: Any,  # noqa: U101
     ) -> None:
         """Load test data into a MySql backend instance.
 
@@ -95,7 +95,7 @@ class TestConf(BackendTest, RoundHalfToEven):
                     con.execute("\n".join(lines))
 
     @staticmethod
-    def connect(_: Path):
+    def connect(_: Path):  # noqa: U101
         return ibis.mysql.connect(
             host=MYSQL_HOST,
             user=MYSQL_USER,

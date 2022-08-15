@@ -126,18 +126,8 @@ def test_timestamp_field_access_on_date(
     assert isinstance(result.op().arg.op(), expected_operation)
 
 
-@pytest.mark.parametrize(
-    ('field', 'expected_operation', 'expected_type'),
-    [
-        ('hour', ops.ExtractHour, ir.IntegerColumn),
-        ('minute', ops.ExtractMinute, ir.IntegerColumn),
-        ('second', ops.ExtractSecond, ir.IntegerColumn),
-        ('millisecond', ops.ExtractMillisecond, ir.IntegerColumn),
-    ],
-)
-def test_timestamp_field_access_on_date_failure(
-    field, expected_operation, expected_type, alltypes
-):
+@pytest.mark.parametrize('field', ['hour', 'minute', 'second', 'millisecond'])
+def test_timestamp_field_access_on_date_failure(field, alltypes):
     time_col = alltypes.i.date()
     with pytest.raises(AttributeError):
         getattr(time_col, field)
@@ -163,17 +153,8 @@ def test_timestamp_field_access_on_time(
     assert isinstance(result.op().arg.op(), expected_operation)
 
 
-@pytest.mark.parametrize(
-    ('field', 'expected_operation', 'expected_type'),
-    [
-        ('year', ops.ExtractYear, ir.IntegerColumn),
-        ('month', ops.ExtractMonth, ir.IntegerColumn),
-        ('day', ops.ExtractDay, ir.IntegerColumn),
-    ],
-)
-def test_timestamp_field_access_on_time_failure(
-    field, expected_operation, expected_type, alltypes
-):
+@pytest.mark.parametrize('field', ['year', 'month', 'day'])
+def test_timestamp_field_access_on_time_failure(field, alltypes):
     date_col = alltypes.i.time()
     with pytest.raises(AttributeError):
         getattr(date_col, field)

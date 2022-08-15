@@ -28,7 +28,7 @@ TIMESTAMP = "2022-03-13 06:59:10.467417"
         ('string', 'object'),
     ],
 )
-def test_cast_numeric(t, df, from_, to, expected):
+def test_cast_numeric(t, from_, to, expected):
     c = t[from_].cast(to)
     result = c.execute()
     assert str(result.dtype) == expected
@@ -38,7 +38,7 @@ def test_cast_numeric(t, df, from_, to, expected):
 @pytest.mark.parametrize(
     ('to', 'expected'), [('double', 'float64'), ('string', 'object')]
 )
-def test_cast_string(t, df, from_, to, expected):
+def test_cast_string(t, from_, to, expected):
     c = t[from_].cast(to)
     result = c.execute()
     assert str(result.dtype) == expected
@@ -49,7 +49,7 @@ def test_cast_string(t, df, from_, to, expected):
     ('to', 'expected'),
     [('array<double>', 'float64'), ('array<int32>', 'int32')],
 )
-def test_cast_array(t, df, from_, to, expected):
+def test_cast_array(t, from_, to, expected):
     c = t[from_].cast(to)
     result = c.execute()
     # The Series of arrays
@@ -79,7 +79,7 @@ def test_cast_array(t, df, from_, to, expected):
     'column',
     ['plain_datetimes_naive', 'plain_datetimes_ny', 'plain_datetimes_utc'],
 )
-def test_cast_timestamp_column(t, df, column, to, expected):
+def test_cast_timestamp_column(t, column, to, expected):
     c = t[column].cast(to)
     result = c.execute()
     assert str(result.dtype) == expected
@@ -134,7 +134,7 @@ def test_cast_timestamp_scalar(to, expected, tz):
     assert result == expected(raw)
 
 
-def test_timestamp_with_timezone_is_inferred_correctly(t, df):
+def test_timestamp_with_timezone_is_inferred_correctly(t):
     assert t.plain_datetimes_naive.type().equals(dt.timestamp)
     assert t.plain_datetimes_ny.type().equals(dt.Timestamp('America/New_York'))
     assert t.plain_datetimes_utc.type().equals(dt.Timestamp('UTC'))

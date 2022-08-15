@@ -6,7 +6,7 @@ from ibis.tests.util import assert_equal
 
 
 @pytest.fixture
-def companies(con):
+def companies():
     schema = [
         ('permalink', 'string'),
         ('name', 'string'),
@@ -31,7 +31,7 @@ def companies(con):
 
 
 @pytest.fixture
-def rounds(con):
+def rounds():
     schema = [
         ('company_permalink', 'string'),
         ('company_name', 'string'),

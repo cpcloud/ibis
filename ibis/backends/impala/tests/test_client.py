@@ -25,7 +25,7 @@ def db(con, test_data_db):
     raises=AssertionError,
     reason='Temporary not setting default backends. #2676',
 )
-def test_execute_exprs_default_backend(con_no_hdfs):
+def test_execute_exprs_default_backend():
     expr = ibis.literal(2)
     expected = 2
 
@@ -36,7 +36,7 @@ def test_execute_exprs_default_backend(con_no_hdfs):
 
 
 def test_cursor_garbage_collection(con):
-    for i in range(5):
+    for _ in range(5):
         con.raw_sql('select 1').fetchall()
         con.raw_sql('select 1').fetchone()
 
@@ -271,9 +271,7 @@ def test_disable_codegen(con):
     assert opts2['DISABLE_CODEGEN'] == '1'
 
 
-def test_attr_name_conflict(
-    con, tmp_db, temp_parquet_table, temp_parquet_table2
-):
+def test_attr_name_conflict(temp_parquet_table, temp_parquet_table2):
     left = temp_parquet_table
     right = temp_parquet_table2
 

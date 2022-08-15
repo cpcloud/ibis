@@ -93,7 +93,7 @@ def test_adjust_context_scope(client):
     # that `scope` is passed in.
     @adjust_context.register(CustomWindow)
     def adjust_context_window_check_scope(
-        op: CustomWindow,
+        _: CustomWindow,  # noqa: U101
         scope: Scope,
         timecontext: TimeContext,
     ) -> TimeContext:

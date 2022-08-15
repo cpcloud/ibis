@@ -25,7 +25,7 @@ def awards_players(con):
     return con.table('awards_players')
 
 
-def test_timestamp_extract_field(con, db, alltypes):
+def test_timestamp_extract_field(db, alltypes):
     t = alltypes.timestamp_col
     expr = alltypes[
         t.year().name('year'),
@@ -48,7 +48,7 @@ FROM {0}.`functional_alltypes`"""
     assert result == expected.format(db.name)
 
 
-def test_isin_notin_in_select(con, db, alltypes, translate):
+def test_isin_notin_in_select(db, alltypes):
     values = {'foo', 'bar'}
     filtered = alltypes[alltypes.string_col.isin(values)]
     result = ibis.clickhouse.compile(filtered)
@@ -381,7 +381,7 @@ GROUP BY `uuid`"""
     assert result == expected
 
 
-def test_timestamp_scalar_in_filter(alltypes, translate):
+def test_timestamp_scalar_in_filter(alltypes):
     table = alltypes
 
     expr = table.filter(
@@ -415,7 +415,7 @@ GROUP BY `key`"""
     assert ibis.clickhouse.compile(expr) == expected
 
 
-def test_join_with_external_table_errors(con, alltypes, df):
+def test_join_with_external_table_errors(alltypes):
     external_table = ibis.table(
         [('a', 'string'), ('b', 'int64'), ('c', 'string')], name='external'
     )
@@ -432,7 +432,7 @@ def test_join_with_external_table_errors(con, alltypes, df):
         expr.execute(external_tables={'external': []})
 
 
-def test_join_with_external_table(con, alltypes, df):
+def test_join_with_external_table(alltypes, df):
     external_df = pd.DataFrame(
         [('alpha', 1, 'first'), ('beta', 2, 'second'), ('gamma', 3, 'third')],
         columns=['a', 'b', 'c'],

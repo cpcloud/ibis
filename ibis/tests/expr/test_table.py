@@ -137,7 +137,7 @@ def test_projection_duplicate_names(table):
         table.projection([table.c, table.c])
 
 
-def test_projection_invalid_root(table):
+def test_projection_invalid_root():
     schema1 = {'foo': 'double', 'bar': 'int32'}
 
     left = api.table(schema1, name='foo')
@@ -243,7 +243,7 @@ def test_mutate_alter_existing_columns(table):
     assert_equal(expr, expected)
 
 
-def test_replace_column(table):
+def test_replace_column():
     tb = api.table([('a', 'int32'), ('b', 'double'), ('c', 'string')])
 
     expr = tb.b.cast('int32')
@@ -893,7 +893,7 @@ def test_join_reference_bug(con):
     items['o_orderpriority'].value_counts()
 
 
-def test_join_project_after(table):
+def test_join_project_after():
     # e.g.
     #
     # SELECT L.foo, L.bar, R.baz, R.qux
@@ -920,7 +920,7 @@ def test_join_project_after(table):
     assert projected.schema().names == ('key2', 'stuff', 'key1')
 
 
-def test_semi_join_schema(table):
+def test_semi_join_schema():
     # A left semi join discards the schema of the right table
     table1 = ibis.table([('key1', 'string'), ('value1', 'double')])
     table2 = ibis.table([('key2', 'string'), ('stuff', 'double')])
@@ -955,7 +955,7 @@ def test_cross_join_multiple(table):
     assert joined.equals(expected)
 
 
-def test_filter_join(table):
+def test_filter_join():
     table1 = ibis.table(
         {'key1': 'string', 'key2': 'string', 'value1': 'double'}
     )
@@ -967,7 +967,7 @@ def test_filter_join(table):
     repr(filtered)
 
 
-def test_join_overlapping_column_names(table):
+def test_join_overlapping_column_names():
     t1 = ibis.table(
         [('foo', 'string'), ('bar', 'string'), ('value1', 'double')]
     )
@@ -1034,7 +1034,7 @@ def test_join_non_boolean_expr(con):
         t1.inner_join(t2, [predicate])
 
 
-def test_unravel_compound_equijoin(table):
+def test_unravel_compound_equijoin():
     t1 = ibis.table(
         [
             ('key1', 'string'),

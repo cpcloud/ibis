@@ -512,7 +512,7 @@ def test_grouped_unbounded_window(
 # Some backends do not support non-grouped window specs
 @pytest.mark.notimpl(["clickhouse", "datafusion"])
 def test_ungrouped_unbounded_window(
-    backend, alltypes, df, con, result_fn, expected_fn, ordered
+    backend, alltypes, df, result_fn, expected_fn, ordered
 ):
     # Define a window that is
     # 1) Ungrouped

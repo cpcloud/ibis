@@ -27,7 +27,7 @@ WHERE `c` > 0"""
     assert handler(output) == 5
 
 
-def test_scalar_aggregates_multiple_tables(con):
+def test_scalar_aggregates_multiple_tables():
     # #740
     table = ibis.table([('flag', 'string'), ('value', 'double')], 'tbl')
 
@@ -114,7 +114,7 @@ FROM (
     assert query == expected
 
 
-def test_scalar_exprs_no_table_refs(con):
+def test_scalar_exprs_no_table_refs():
     expr1 = ibis.now()
     expected1 = "SELECT now() AS `tmp`"
 

@@ -43,7 +43,7 @@ def test_map_keys_expr(t):
     tm.assert_series_equal(result, expected)
 
 
-def test_map_keys_scalar(client, t):
+def test_map_keys_scalar(client):
     expr = ibis.literal({'a': 10, 'b': 50, 'c': 20, 'd': 40})
     expr = expr.keys()
     result = client.execute(expr)
@@ -62,7 +62,7 @@ def test_map_values_expr(t):
     tm.assert_series_equal(result, expected)
 
 
-def test_map_values_scalar(client, t):
+def test_map_values_scalar(client):
     expr = ibis.literal({'a': 10, 'b': 50, 'c': 20, 'd': 40})
     expr = expr.values()
     result = client.execute(expr)

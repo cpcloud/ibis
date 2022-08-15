@@ -1239,7 +1239,7 @@ def test_invalid_negate(value, expected_type):
 
 
 @pytest.mark.parametrize(
-    'type',
+    "dtype",
     [
         np.float16,
         np.float32,
@@ -1259,8 +1259,8 @@ def test_invalid_negate(value, expected_type):
         int,
     ],
 )
-def test_valid_negate(type):
-    expr = ibis.literal(1)
+def test_valid_negate(dtype):
+    expr = ibis.literal(dtype(1))
     assert -expr is not None
 
 

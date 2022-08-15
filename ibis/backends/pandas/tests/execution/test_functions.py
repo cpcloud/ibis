@@ -104,7 +104,7 @@ def test_math_functions_decimal(t, df, ibis_func, pandas_func):
     tm.assert_series_equal(result, expected)
 
 
-def test_round_decimal_with_negative_places(t, df):
+def test_round_decimal_with_negative_places(t):
     type = dt.Decimal(12, 3)
     expr = t.float64_as_strings.cast(type).round(-1)
     result = expr.execute()
@@ -166,7 +166,7 @@ def test_quantile_multi(t, df, ibis_func, pandas_func, column):
         (lambda x: x.quantile(0.5, interpolation='foo'), ValueError),
     ],
 )
-def test_arraylike_functions_transform_errors(t, df, ibis_func, exc):
+def test_arraylike_functions_transform_errors(t, ibis_func, exc):
     with pytest.raises(exc):
         ibis_func(t.float64_with_zeros).execute()
 
@@ -213,7 +213,7 @@ def test_execute_with_same_hash_value_in_scope(
     left, right, expected_value, expected_type, left_dtype, right_dtype
 ):
     @udf.elementwise([left_dtype, right_dtype], left_dtype)
-    def my_func(x, y):
+    def my_func(x, y):  # noqa: U100
         return x
 
     df = pd.DataFrame({"left": [left], "right": [right]})

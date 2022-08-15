@@ -55,12 +55,12 @@ def t2(con):
 
 
 @udf.elementwise(input_type=['string'], output_type='int64')
-def my_string_length(series, **kwargs):
+def my_string_length(series, **kwargs):  # noqa: U100
     return series.str.len() * 2
 
 
 @udf.elementwise(input_type=[dt.double, dt.double], output_type=dt.double)
-def my_add(series1, series2, **kwargs):
+def my_add(series1, series2, **kwargs):  # noqa: U100
     return series1 + series2
 
 
@@ -70,12 +70,12 @@ def my_mean(series):
 
 
 @udf.reduction(input_type=[dt.string], output_type=dt.int64)
-def my_string_length_sum(series, **kwargs):
+def my_string_length_sum(series, **kwargs):  # noqa: U100
     return (series.str.len() * 2).sum()
 
 
 @udf.reduction(input_type=[dt.double, dt.double], output_type=dt.double)
-def my_corr(lhs, rhs, **kwargs):
+def my_corr(lhs, rhs, **kwargs):  # noqa: U100
     return lhs.corr(rhs)
 
 
@@ -112,7 +112,7 @@ def test_udf(t, df):
     tm.assert_series_equal(result, expected)
 
 
-def test_multiple_argument_udf(con, t, df):
+def test_multiple_argument_udf(t, df):
     expr = my_add(t.b, t.c)
 
     assert isinstance(expr, ir.Column)
@@ -124,7 +124,7 @@ def test_multiple_argument_udf(con, t, df):
     tm.assert_series_equal(result, expected)
 
 
-def test_multiple_argument_udf_group_by(con, t, df):
+def test_multiple_argument_udf_group_by(t):
     expr = t.groupby(t.key).aggregate(my_add=my_add(t.b, t.c).sum())
 
     assert isinstance(expr, ir.Table)
@@ -139,7 +139,7 @@ def test_multiple_argument_udf_group_by(con, t, df):
     tm.assert_frame_equal(result, expected)
 
 
-def test_udaf(con, t, df):
+def test_udaf(t):
     expr = my_string_length_sum(t.a)
 
     assert isinstance(expr, ir.Scalar)
@@ -149,7 +149,7 @@ def test_udaf(con, t, df):
     assert result == expected
 
 
-def test_udaf_analytic(con, t, df):
+def test_udaf_analytic(t, df):
     expr = zscore(t.c)
 
     assert isinstance(expr, ir.Column)
@@ -163,7 +163,7 @@ def test_udaf_analytic(con, t, df):
     tm.assert_series_equal(result, expected)
 
 
-def test_udaf_analytic_groupby(con, t, df):
+def test_udaf_analytic_groupby(t, df):
     expr = zscore(t.c).over(ibis.window(group_by=t.key))
 
     assert isinstance(expr, ir.Column)
@@ -216,7 +216,7 @@ def test_udaf_parameter_mismatch():
     with pytest.raises(TypeError):
 
         @udf.reduction(input_type=[dt.double], output_type=dt.double)
-        def my_corr(lhs, rhs, **kwargs):
+        def my_corr(lhs, rhs, **kwargs):  # noqa: U100
             pass
 
 
@@ -224,13 +224,13 @@ def test_udf_parameter_mismatch():
     with pytest.raises(TypeError):
 
         @udf.reduction(input_type=[], output_type=dt.double)
-        def my_corr2(lhs, **kwargs):
+        def my_corr2(lhs, **kwargs):  # noqa: U100
             pass
 
 
 def test_udf_error(t):
     @udf.elementwise(input_type=[dt.double], output_type=dt.double)
-    def error_udf(s):
+    def error_udf(s):  # noqa: U100
         raise ValueError('xxx')
 
     with pytest.raises(ValueError):
@@ -383,7 +383,7 @@ def qs(request):
     return request.param
 
 
-def test_array_return_type_reduction(con, t, df, qs):
+def test_array_return_type_reduction(t, df, qs):
     """Tests reduction UDF returning an array."""
     expr = quantiles(t.b, quantiles=qs)
     result = expr.execute()
@@ -391,7 +391,7 @@ def test_array_return_type_reduction(con, t, df, qs):
     tm.assert_numpy_array_equal(result, expected)
 
 
-def test_array_return_type_reduction_window(con, t, df, qs):
+def test_array_return_type_reduction_window(t, df, qs):
     """Tests reduction UDF returning an array, used over a window."""
     expr = quantiles(t.b, quantiles=qs).over(ibis.window())
     result = expr.execute()
@@ -400,7 +400,7 @@ def test_array_return_type_reduction_window(con, t, df, qs):
     tm.assert_series_equal(result, expected)
 
 
-def test_array_return_type_reduction_group_by(con, t, df, qs):
+def test_array_return_type_reduction_group_by(t, df, qs):
     """Tests reduction UDF returning an array, used in a grouped aggregation.
 
     Getting this use case to succeed required avoiding use of
@@ -422,30 +422,30 @@ def test_elementwise_udf_with_many_args(t2):
         input_type=[dt.double] * 16 + [dt.int32] * 8, output_type=dt.double
     )
     def my_udf(
-        c1,
-        c2,
-        c3,
-        c4,
-        c5,
-        c6,
-        c7,
-        c8,
-        c9,
-        c10,
-        c11,
-        c12,
-        c13,
-        c14,
-        c15,
-        c16,
-        c17,
-        c18,
-        c19,
-        c20,
-        c21,
-        c22,
-        c23,
-        c24,
+        c1,  # noqa: U100
+        c2,  # noqa: U100
+        c3,  # noqa: U100
+        c4,  # noqa: U100
+        c5,  # noqa: U100
+        c6,  # noqa: U100
+        c7,  # noqa: U100
+        c8,  # noqa: U100
+        c9,  # noqa: U100
+        c10,  # noqa: U100
+        c11,  # noqa: U100
+        c12,  # noqa: U100
+        c13,  # noqa: U100
+        c14,  # noqa: U100
+        c15,  # noqa: U100
+        c16,  # noqa: U100
+        c17,  # noqa: U100
+        c18,  # noqa: U100
+        c19,  # noqa: U100
+        c20,  # noqa: U100
+        c21,  # noqa: U100
+        c22,  # noqa: U100
+        c23,  # noqa: U100
+        c24,  # noqa: U100
     ):
         return c1
 

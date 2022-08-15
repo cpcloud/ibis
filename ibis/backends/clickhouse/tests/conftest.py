@@ -37,7 +37,7 @@ class TestConf(UnorderedComparator, BackendTest, RoundHalfToEven):
         user: str = CLICKHOUSE_USER,
         password: str = CLICKHOUSE_PASS,
         database: str = IBIS_TEST_CLICKHOUSE_DB,
-        **_,
+        **_,  # noqa: U101
     ) -> None:
         """Load test data into a ClickHouse backend instance.
 
@@ -74,7 +74,7 @@ class TestConf(UnorderedComparator, BackendTest, RoundHalfToEven):
             )
 
     @staticmethod
-    def connect(data_directory: Path):
+    def connect(_: Path):  # noqa: U101
         pytest.importorskip("clickhouse_driver")
         return ibis.clickhouse.connect(
             host=CLICKHOUSE_HOST,
