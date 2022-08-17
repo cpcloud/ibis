@@ -76,10 +76,6 @@ class _AlchemyTableSetFormatter(TableSetFormatter):
     def _get_join_type(self, op):
         return type(op)
 
-    def _format_in_memory_table(self, op: ops.InMemoryTable):
-        columns = _schema_to_sqlalchemy_columns(op.schema)
-        return sa.values(*columns).data(list(op._iterrows()))
-
     def _format_table(self, expr):
         ctx = self.context
         ref_expr = expr
@@ -112,7 +108,9 @@ class _AlchemyTableSetFormatter(TableSetFormatter):
             backend = ref_op.child._find_backend()
             backend._create_temp_view(view=result, definition=definition)
         elif isinstance(ref_op, ops.InMemoryTable):
-            result = self._format_in_memory_table(ref_op)
+            columns = _schema_to_sqlalchemy_columns(ref_op.schema)
+            rows = list(ref_op.data.itertuples(index=False))
+            result = sa.values(*columns).data(rows)
         else:
             # A subquery
             if ctx.is_extracted(ref_expr):

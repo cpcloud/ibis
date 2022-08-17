@@ -320,14 +320,10 @@ def schema(
         return sch.schema(names, types)
 
 
-_Row = TypeVar("_Row", Sequence, Mapping[str, Any])
-
-
+@functools.singledispatch
 def table(
     schema: SupportsSchema | None = None,
     name: str | None = None,
-    data: Sequence[_Row] | pd.DataFrame | None = None,
-    columns: Iterable[str] | None = None,
 ) -> ir.Table:
     """Create a table literal or an abstract table without data.
 
@@ -383,55 +379,23 @@ def table(
     """
     if schema is not None:
         schema = sch.schema(schema)
-    return _table(schema, name, data, columns)
-
-
-_table = Dispatcher("_table")
-
-
-@_table.register(sch.Schema, (str, type(None)), type(None), type(None))
-def _unbound_table(schema, name, *_) -> Table:
     return ops.UnboundTable(schema=schema, name=name).to_expr()
 
 
-@_table.register(
-    (sch.Schema, type(None)), (str, type(None)), pd.DataFrame, type(None)
-)
-def _data_frame(schema, name, data, _) -> Table:
-    if schema is None:
-        schema = sch.infer(data)
-    return ops.PandasTable(name=name, schema=schema, data=data).to_expr()
+# @functools.singledispatch
+# def dataset(data, schema=None, name=None):
+#     """Create a dataset literal.
 
-
-@_table.register(
-    type(None),
-    (str, type(None)),
-    collections.abc.Sequence,
-    type(None),
-)
-def _sequence_of_rows_no_columns(_, name, data, columns) -> Table:
-    return _table(sch.infer(data), name, data, columns)
-
-
-@_table.register(
-    type(None),
-    (str, type(None)),
-    collections.abc.Sequence,
-    collections.abc.Sequence,
-)
-def _sequence_of_rows(_, name, data, columns) -> Table:
-    schema = sch.Schema(columns, sch.infer(data).types)
-    return _table(schema, name, data, None)
-
-
-@_table.register(
-    sch.Schema,
-    (str, type(None)),
-    collections.abc.Sequence,
-    type(None),
-)
-def _sequence_of_rows_with_schema(schema, name, data, _) -> Table:
-    return ops.PythonTable(name=name, schema=schema, data=data).to_expr()
+#     Parameters
+#     ----------
+#     data
+#         Table literal data.
+#     schema
+#         A schema for the table
+#     name
+#         Name for the table. One is generated if this value is `None`.
+#     """
+#     raise NotImplementedError
 
 
 def desc(expr: ir.Column | str) -> ir.SortExpr | ops.DeferredSortKey:

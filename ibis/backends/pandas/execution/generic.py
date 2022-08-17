@@ -22,7 +22,6 @@ import ibis.expr.operations as ops
 import ibis.expr.types as ir
 from ibis.backends.pandas import Backend as PandasBackend
 from ibis.backends.pandas import aggcontext as agg_ctx
-from ibis.backends.pandas.client import PandasTable
 from ibis.backends.pandas.core import (
     boolean_types,
     date_types,
@@ -1066,7 +1065,7 @@ def execute_node_where_scalar_scalar_series(op, cond, true, false, **kwargs):
     return pd.Series(np.repeat(true, len(false))) if cond else false
 
 
-@execute_node.register(PandasTable, PandasBackend)
+@execute_node.register(ops.DatabaseTable, PandasBackend)
 def execute_database_table_client(
     op, client, timecontext: Optional[TimeContext], **kwargs
 ):

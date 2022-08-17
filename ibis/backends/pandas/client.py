@@ -6,9 +6,12 @@ import numpy as np
 import pandas as pd
 import toolz
 from pandas.api.types import CategoricalDtype, DatetimeTZDtype
+from pandas.util import hash_pandas_object
 
+import ibis.expr.api as api
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
+import ibis.expr.rules as rlz
 import ibis.expr.schema as sch
 from ibis.backends.base import Database
 
@@ -293,9 +296,26 @@ dt.DataType.to_pandas = ibis_dtype_to_pandas  # type: ignore
 sch.Schema.to_pandas = ibis_schema_to_pandas  # type: ignore
 
 
-class PandasTable(ops.DatabaseTable):
-    pass
+# ImmutableProxy?
+class DataFrameProxy:
+    __slots__ = ('_df', '_hash')
+
+    def __init__(self, df):
+        self._df = df
+        self._hash = hash((type(df), id(df)))
+
+    def __getattr__(self, name):
+        return getattr(self._df, name)
+
+    def __hash__(self):
+        return self._hash
 
 
-class PandasDatabase(Database):
-    pass
+class PandasTable(ops.InMemoryTable):
+    data = rlz.instance_of(DataFrameProxy)
+
+
+@api.table.register(pd.DataFrame)
+def table_from_dataframe(df, name=None):  # optionally accept schema?
+    op = PandasTable(name=name, data=DataFrameProxy(df), schema=sch.infer(df))
+    return op.to_expr()

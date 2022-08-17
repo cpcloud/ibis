@@ -13,11 +13,7 @@ import ibis.expr.operations as ops
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
 from ibis.backends.base import BaseBackend
-from ibis.backends.pandas.client import (
-    PandasDatabase,
-    PandasTable,
-    ibis_schema_to_pandas,
-)
+from ibis.backends.pandas.client import ibis_schema_to_pandas
 
 
 class BasePandasBackend(BaseBackend):
@@ -195,8 +191,8 @@ class BasePandasBackend(BaseBackend):
 
 class Backend(BasePandasBackend):
     name = 'pandas'
-    database_class = PandasDatabase
-    table_class = PandasTable
+    # database_class = PandasDatabase
+    # table_class = PandasTable
 
     def execute(self, query, params=None, limit='default', **kwargs):
         from ibis.backends.pandas.core import execute_and_reset

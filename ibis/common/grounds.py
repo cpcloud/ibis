@@ -69,17 +69,28 @@ class Parameter(inspect.Parameter):
             return self.validator(arg, this=this)
 
 
-@functools.singledispatch
-def _get_hashable_object(value: Any) -> Hashable:
-    return value
+class Immutable(Hashable):
+
+    __slots__ = ()
+
+    def __setattr__(self, name: str, _: Any) -> None:
+        raise TypeError(
+            f"Attribute {name!r} cannot be assigned to immutable instance of "
+            f"type {type(self)}"
+        )
 
 
-@_get_hashable_object.register(pd.DataFrame)
-def _get_hashable_object_dataframe(df: pd.DataFrame) -> Hashable:
-    # XXX: is this an acceptable approach?
-    buf = io.BytesIO()
-    df.to_pickle(buf)
-    return buf.getvalue()
+# @functools.singledispatch
+# def _get_hashable_object(value: Any) -> Hashable:
+#     return value
+
+
+# @_get_hashable_object.register(pd.DataFrame)
+# def _get_hashable_object_dataframe(df: pd.DataFrame) -> Hashable:
+#     # XXX: is this an acceptable approach?
+#     buf = io.BytesIO()
+#     df.to_pickle(buf)
+#     return buf.getvalue()
 
 
 class AnnotableMeta(BaseMeta):
@@ -148,7 +159,7 @@ class AnnotableMeta(BaseMeta):
         return super().__new__(metacls, clsname, bases, attribs)
 
 
-class Annotable(Base, Hashable, metaclass=AnnotableMeta):
+class Annotable(Base, Immutable, metaclass=AnnotableMeta):
     """Base class for objects with custom validation rules."""
 
     __slots__ = ("args", "_hash")
@@ -179,11 +190,7 @@ class Annotable(Base, Hashable, metaclass=AnnotableMeta):
         # optimizations to store frequently accessed generic properties
         args = tuple(kwargs[name] for name in self.argnames)
         object.__setattr__(self, "args", args)
-        object.__setattr__(
-            self,
-            "_hash",
-            hash((self.__class__, *map(_get_hashable_object, args))),
-        )
+        object.__setattr__(self, "_hash", hash((self.__class__, args)))
 
         # calculate special property-like objects only once due to the
         # immutable nature of annotable instances
@@ -201,12 +208,6 @@ class Annotable(Base, Hashable, metaclass=AnnotableMeta):
 
     def __eq__(self, other):
         return super().__eq__(other)
-
-    def __setattr__(self, name: str, _: Any) -> None:
-        raise TypeError(
-            f"Attribute {name!r} cannot be assigned to immutable instance of "
-            f"type {type(self)}"
-        )
 
     def __repr__(self) -> str:
         args = ", ".join(

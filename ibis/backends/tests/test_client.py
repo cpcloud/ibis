@@ -385,31 +385,31 @@ def test_unsigned_integer_type(alchemy_con, coltype):
 @pytest.mark.parametrize(
     ("expr", "expected"),
     [
-        param(
-            ibis.table(data=[(1, 2.0, "3")], columns=list("abc")),
-            pd.DataFrame([(np.int8(1), 2.0, "3")], columns=list("abc")),
-            id="simple",
-        ),
-        param(
-            ibis.table(data=[(1, 2.0, "3")]),
-            pd.DataFrame(
-                [(np.int8(1), 2.0, "3")], columns=["col0", "col1", "col2"]
-            ),
-            id="simple_auto_named",
-        ),
+        # param(
+        #     ibis.table(data=[(1, 2.0, "3")], columns=list("abc")),
+        #     pd.DataFrame([(np.int8(1), 2.0, "3")], columns=list("abc")),
+        #     id="simple",
+        # ),
+        # param(
+        #     ibis.table(data=[(1, 2.0, "3")]),
+        #     pd.DataFrame(
+        #         [(np.int8(1), 2.0, "3")], columns=["col0", "col1", "col2"]
+        #     ),
+        #     id="simple_auto_named",
+        # ),
+        # param(
+        #     ibis.table(
+        #         data=[(1, 2.0, "3")],
+        #         schema=ibis.schema(dict(a="int8", b="float32", c="string")),
+        #     ),
+        #     pd.DataFrame([(1, 2.0, "3")], columns=list("abc")).astype(
+        #         {"a": "int8", "b": "float32"}
+        #     ),
+        #     id="simple_schema",
+        # ),
         param(
             ibis.table(
-                data=[(1, 2.0, "3")],
-                schema=ibis.schema(dict(a="int8", b="float32", c="string")),
-            ),
-            pd.DataFrame([(1, 2.0, "3")], columns=list("abc")).astype(
-                {"a": "int8", "b": "float32"}
-            ),
-            id="simple_schema",
-        ),
-        param(
-            ibis.table(
-                data=pd.DataFrame({"a": [1], "b": [2.0], "c": ["3"]}).astype(
+                pd.DataFrame({"a": [1], "b": [2.0], "c": ["3"]}).astype(
                     {"a": "int8", "b": "float32"}
                 )
             ),
@@ -438,12 +438,12 @@ def test_in_memory_table(backend, con, expr, expected):
 @pytest.mark.parametrize(
     "t",
     [
+        # param(
+        #     ibis.table(data=[("a", 1.0)], columns=["a", "b"]),
+        #     id="python",
+        # ),
         param(
-            ibis.table(data=[("a", 1.0)], columns=["a", "b"]),
-            id="python",
-        ),
-        param(
-            ibis.table(data=pd.DataFrame([("a", 1.0)], columns=["a", "b"])),
+            ibis.table(pd.DataFrame([("a", 1.0)], columns=["a", "b"])),
             id="pandas",
         ),
     ],

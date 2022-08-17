@@ -104,27 +104,10 @@ class InMemoryTable(TableNode, sch.HasSchema):
     name = rlz.optional(rlz.instance_of(str))
     schema = rlz.instance_of(sch.Schema)
 
+    @property
     @abstractmethod
-    def _iterrows(self) -> Iterator:
-        """Iterate over rows of an in-memory table."""
-
-
-@public
-class PythonTable(InMemoryTable):
-    data = rlz.table_data
-
-    def _iterrows(self) -> Iterator:
-        """Iterate over a sequence of rows."""
-        return iter(self.data)
-
-
-@public
-class PandasTable(InMemoryTable):
-    data = rlz.instance_of(pd.DataFrame)
-
-    def _iterrows(self) -> Iterator:
-        """Iterate over the rows of a pandas DataFrame."""
-        return self.data.itertuples(index=False)
+    def data(self):
+        ...
 
 
 def _make_distinct_join_predicates(left, right, predicates):
