@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 import ibis.expr.types as ir
+from ibis import util
 
 fully_qualified_re = re.compile(r"(.*)\.(?:`(.*)`|(.*))")
 
@@ -36,32 +37,12 @@ class ClickhouseTable(ir.Table):
     def name(self):
         return self.op().name
 
-    def insert(self, obj, **kwargs):
-        import numpy as np
-        import pandas as pd
-
-        from ibis.backends.clickhouse.identifiers import quote_identifier
-
+    def insert(self, obj, **_):
         schema = self.schema()
 
-        assert isinstance(obj, pd.DataFrame)
         assert set(schema.names) >= set(obj.columns)
 
-        columns = ", ".join(map(quote_identifier, obj.columns))
-        query = f"INSERT INTO {self._qualified_name} ({columns}) VALUES"
-
-        # convert data columns with datetime64 pandas dtype to native date
-        # because clickhouse-driver 0.0.10 does arithmetic operations on it
-        obj = obj.copy()
-        for col in obj.select_dtypes(include=[np.datetime64]):
-            if schema[col].is_date():
-                obj[col] = obj[col].dt.date
-
-        settings = kwargs.pop("settings", {})
-        settings["use_numpy"] = True
-        return self._client.con.insert_dataframe(
-            query,
-            obj,
-            settings=settings,
-            **kwargs,
-        )
+        tmpname = f"tmp_{util.guid()}"
+        name = self._qualified_name
+        query = f"INSERT INTO {name} SELECT * FROM {tmpname}"
+        return self._client.raw_sql(query, external_tables={tmpname: obj})

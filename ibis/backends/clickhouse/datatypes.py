@@ -220,7 +220,7 @@ def serialize_raw(ty: dt.DataType) -> str:
 
 @serialize_raw.register(dt.DataType)
 def _(ty: dt.DataType) -> str:
-    return type(ty).__name__.capitalize()
+    return type(ty).__name__
 
 
 @serialize_raw.register(dt.Array)
