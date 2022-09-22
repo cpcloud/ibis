@@ -496,7 +496,7 @@ class NumericColumn(Column, NumericValue):
         close_extreme: bool = True,
         include_under: bool = False,
         include_over: bool = False,
-    ) -> ir.CategoryColumn:
+    ) -> ir.IntegerColumn:
         """Compute a discrete binning of a numeric array.
 
         Parameters
@@ -520,8 +520,8 @@ class NumericColumn(Column, NumericValue):
 
         Returns
         -------
-        CategoryColumn
-            A categorical column expression
+        IntegerColumn
+            A column expression indicating bucket membership
         """
         return ops.Bucket(
             self,
@@ -539,7 +539,7 @@ class NumericColumn(Column, NumericValue):
         base: float | None = None,
         closed: Literal["left", "right"] = "left",
         aux_hash: str | None = None,
-    ) -> ir.CategoryColumn:
+    ) -> ir.IntegerColumn:
         """Compute a histogram with fixed width bins.
 
         Parameters
@@ -557,7 +557,7 @@ class NumericColumn(Column, NumericValue):
 
         Returns
         -------
-        CategoryColumn
+        IntegerColumn
             Coded value expression
         """
         return ops.Histogram(
@@ -668,54 +668,40 @@ class IntegerValue(NumericValue):
 
     def __and__(self, other: IntegerValue) -> IntegerValue | NotImplemented:
         """Bitwise and `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseAnd, self, other)
 
     __rand__ = __and__
 
     def __or__(self, other: IntegerValue) -> IntegerValue | NotImplemented:
         """Bitwise or `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseOr, self, other)
 
     __ror__ = __or__
 
     def __xor__(self, other: IntegerValue) -> IntegerValue | NotImplemented:
         """Bitwise xor `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseXor, self, other)
 
     __rxor__ = __xor__
 
     def __lshift__(self, other: IntegerValue) -> IntegerValue | NotImplemented:
         """Bitwise left shift `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseLeftShift, self, other)
 
     def __rlshift__(
         self, other: IntegerValue
     ) -> IntegerValue | NotImplemented:
         """Bitwise left shift `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseLeftShift, other, self)
 
     def __rshift__(self, other: IntegerValue) -> IntegerValue | NotImplemented:
         """Bitwise right shift `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseRightShift, self, other)
 
     def __rrshift__(
         self, other: IntegerValue
     ) -> IntegerValue | NotImplemented:
         """Bitwise right shift `self` with `other`."""
-        from ibis.expr import operations as ops
-
         return _binop(ops.BitwiseRightShift, other, self)
 
     def __invert__(self) -> IntegerValue:
@@ -726,14 +712,32 @@ class IntegerValue(NumericValue):
         IntegerValue
             Inverted bits of `self`.
         """
-        from ibis.expr import operations as ops
-
         try:
             node = ops.BitwiseNot(self)
         except (IbisTypeError, NotImplementedError):
             return NotImplemented
         else:
             return node.to_expr()
+
+    def label(
+        self, labels: Sequence[str], nulls: str | None = None
+    ) -> ir.StringValue:
+        """Format a known number of categories as strings.
+
+        Parameters
+        ----------
+        labels
+            Labels to use for formatting categories
+        nulls
+            How to label any null values among the categories
+
+        Returns
+        -------
+        StringValue
+            Labeled categories
+        """
+        op = ops.CategoryLabel(self, labels, nulls)
+        return op.to_expr()
 
 
 @public

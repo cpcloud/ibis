@@ -114,7 +114,6 @@ def parse(text: str) -> dt.DataType:
         | spaceless_string("timestamp").result(dt.Timestamp())
         | spaceless_string("time").result(dt.time)
         | spaceless_string("date").result(dt.date)
-        | spaceless_string("category").result(dt.category)
         | spaceless_string("geometry").result(
             dt.GeoSpatial(geotype='geometry')
         )

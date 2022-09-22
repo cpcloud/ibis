@@ -41,7 +41,7 @@ IBIS_TYPE_TO_PANDAS_TYPE: Dict[dt.DataType, Union[Type, str]] = {
     dt.string: str,
     dt.timestamp: 'datetime64[ns]',
     dt.boolean: np.bool_,
-    dt.category: 'category',
+    dt.enum: 'category',
     dt.json: str,
 }
 

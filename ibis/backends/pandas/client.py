@@ -81,7 +81,7 @@ _inferable_pandas_dtypes = {
     'mixed-integer-float': dt.float64,
     'decimal': dt.float64,
     'complex': dt.binary,
-    'categorical': dt.category,
+    'categorical': dt.enum,
     'boolean': dt.boolean,
     'datetime64': dt.timestamp,
     'datetime': dt.timestamp,
@@ -115,7 +115,7 @@ def from_pandas_tzdtype(value):
 
 @dt.dtype.register(CategoricalDtype)
 def from_pandas_categorical(_):
-    return dt.Category()
+    return dt.Enum()
 
 
 @dt.dtype.register(pd.core.arrays.string_.StringDtype)
@@ -236,7 +236,7 @@ def ibis_dtype_to_pandas(ibis_dtype):
         return DatetimeTZDtype('ns', ibis_dtype.timezone)
     elif isinstance(ibis_dtype, dt.Interval):
         return np.dtype(f'timedelta64[{ibis_dtype.unit}]')
-    elif isinstance(ibis_dtype, dt.Category):
+    elif isinstance(ibis_dtype, dt.Enum):
         return CategoricalDtype()
     elif type(ibis_dtype) in _ibis_dtypes:
         return _ibis_dtypes[type(ibis_dtype)]

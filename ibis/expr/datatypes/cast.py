@@ -58,7 +58,6 @@ def can_cast_subtype(
     return isinstance(target, source.__class__)
 
 
-@castable.register(dt.Integer, dt.Category)
 @castable.register(dt.Integer, (dt.Floating, dt.Decimal))
 @castable.register(dt.Floating, dt.Decimal)
 @castable.register((dt.Date, dt.Timestamp), (dt.Date, dt.Timestamp))

@@ -76,7 +76,7 @@ def test_numpy_dtype(numpy_dtype, ibis_dtype):
             DatetimeTZDtype(tz='US/Eastern', unit='ns'),
             dt.Timestamp('US/Eastern'),
         ),
-        (CategoricalDtype(), dt.Category()),
+        (CategoricalDtype(), dt.Enum()),
     ],
 )
 def test_dask_dtype(dask_dtype, ibis_dtype):
@@ -125,7 +125,7 @@ def test_series_to_ibis_literal(core_client):
             "interval('ns')",
         ),
         (['foo', 'bar', 'hello'], "string"),
-        (pd.Series(['a', 'b', 'c', 'a']).astype('category'), dt.Category()),
+        (pd.Series(['a', 'b', 'c', 'a']).astype('category'), dt.Enum()),
     ],
 )
 def test_schema_infer(col_data, schema_type):

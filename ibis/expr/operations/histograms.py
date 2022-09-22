@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from public import public
 
 from ibis.expr import datatypes as dt
@@ -8,14 +10,7 @@ from ibis.expr.operations.core import Value
 @public
 class BucketLike(Value):
     output_shape = rlz.Shape.COLUMNAR
-
-    @property
-    def nbuckets(self):
-        return None
-
-    @property
-    def output_dtype(self):
-        return dt.Category(self.nbuckets)
+    output_dtype = dt.int64
 
 
 @public
@@ -43,10 +38,6 @@ class Bucket(BucketLike):
             **kwargs,
         )
 
-    @property
-    def nbuckets(self):
-        return len(self.buckets) - 1 + self.include_over + self.include_under
-
 
 @public
 class Histogram(BucketLike):
@@ -68,23 +59,14 @@ class Histogram(BucketLike):
     @property
     def output_dtype(self):
         # always undefined cardinality (for now)
-        return dt.category
+        return dt.int64
 
 
 @public
 class CategoryLabel(Value):
-    arg = rlz.category
+    arg = rlz.integer
     labels = rlz.tuple_of(rlz.instance_of(str))
     nulls = rlz.optional(rlz.instance_of(str))
 
     output_dtype = dt.string
     output_shape = rlz.shape_like("arg")
-
-    def __init__(self, arg, labels, **kwargs):
-        cardinality = arg.output_dtype.cardinality
-        if len(labels) != cardinality:
-            raise ValueError(
-                'Number of labels must match number of '
-                f'categories: {cardinality}'
-            )
-        super().__init__(arg=arg, labels=labels, **kwargs)

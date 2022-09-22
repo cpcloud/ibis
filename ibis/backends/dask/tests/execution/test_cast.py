@@ -166,7 +166,7 @@ def test_cast_to_decimal(t, df, type):
     ['plain_int64', 'dup_strings', 'dup_ints', 'strings_with_nulls'],
 )
 def test_cast_to_category(t, df, column):
-    test = t[column].cast('category').compile()
+    test = t[column].cast('enum').compile()
     tm.assert_series_equal(
         test.compute(), df[column].astype('category').compute()
     )

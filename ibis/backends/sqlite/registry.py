@@ -53,11 +53,6 @@ def _value_to_temporal(arg, from_, to):
     raise com.UnsupportedOperationError(type(arg))
 
 
-@sqlite_cast.register(object, dt.Category, dt.Int32)
-def _category_to_int(arg, from_, to):
-    return arg
-
-
 @sqlite_cast.register(object, dt.DataType, dt.DataType)
 def _default_cast_impl(arg, from_, to):
     return sa.cast(arg, to_sqla_type(to))

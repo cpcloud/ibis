@@ -32,8 +32,6 @@ from ibis.expr.types import (  # noqa: F401
     BooleanColumn,
     BooleanScalar,
     BooleanValue,
-    CategoryScalar,
-    CategoryValue,
     Column,
     DateColumn,
     DateScalar,
@@ -939,7 +937,7 @@ where = ifelse = _deferred(ir.BooleanValue.ifelse)
 coalesce = _deferred(ir.Value.coalesce)
 greatest = _deferred(ir.Value.greatest)
 least = _deferred(ir.Value.least)
-category_label = _deferred(ir.CategoryValue.label)
+category_label = _deferred(ir.IntegerValue.label)
 
 aggregate = ir.Table.aggregate
 cross_join = ir.Table.cross_join

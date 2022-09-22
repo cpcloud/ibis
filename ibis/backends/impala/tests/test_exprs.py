@@ -9,7 +9,6 @@ import ibis.expr.api as api
 import ibis.expr.types as ir
 from ibis import literal as L
 from ibis.backends.impala.compiler import ImpalaCompiler
-from ibis.expr.datatypes import Category
 
 
 def test_embedded_identifier_quoting(alltypes):
@@ -168,16 +167,8 @@ def _check_impala_output_types_match(con, table):
     query = ImpalaCompiler.to_sql(table)
     t = con.sql(query)
 
-    def _clean_type(x):
-        if isinstance(x, Category):
-            x = x.to_integer_type()
-        return x
-
     left, right = t.schema(), table.schema()
     for n, left, right in zip(left.names, left.types, right.types):
-        left = _clean_type(left)
-        right = _clean_type(right)
-
         if left != right:
             pytest.fail(
                 'Value for {} had left type {}'

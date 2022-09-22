@@ -1,7 +1,6 @@
 from ibis.expr.types.analytic import *  # noqa: F401,F403
 from ibis.expr.types.arrays import *  # noqa: F401,F403
 from ibis.expr.types.binary import *  # noqa: F401,F403
-from ibis.expr.types.category import *  # noqa: F401,F403
 from ibis.expr.types.collections import *  # noqa: F401,F403
 from ibis.expr.types.core import *  # noqa: F401,F403
 from ibis.expr.types.generic import *  # noqa: F401,F403

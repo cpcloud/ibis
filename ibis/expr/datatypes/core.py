@@ -474,29 +474,6 @@ class Interval(DataType):
 
 
 @public
-class Category(DataType):
-    cardinality = optional(instance_of(int))
-
-    scalar = ir.CategoryScalar
-    column = ir.CategoryColumn
-
-    def __repr__(self):
-        if self.cardinality is not None:
-            cardinality = repr(self.cardinality)
-        else:
-            cardinality = "unknown"
-        return f"{self.name}(cardinality={cardinality})"
-
-    def to_integer_type(self):
-        from ibis.expr.datatypes.value import infer
-
-        if self.cardinality is None:
-            return int64
-        else:
-            return infer(self.cardinality)
-
-
-@public
 class Struct(DataType):
     """Structured values."""
 
@@ -605,8 +582,8 @@ class Set(Variadic):
 class Enum(DataType):
     """Enumeration values."""
 
-    rep_type = datatype
-    value_type = datatype
+    rep_type = optional(datatype, default=String())
+    value_type = optional(datatype, default=Int32())
 
     scalar = ir.EnumScalar
     column = ir.EnumColumn
@@ -786,10 +763,10 @@ float64 = Float64()
 string = String()
 binary = Binary()
 date = Date()
+enum = Enum()
 time = Time()
 timestamp = Timestamp()
 interval = Interval()
-category = Category()
 # geo spatial data type
 geometry = Geometry()
 geography = Geography()
@@ -825,11 +802,11 @@ public(
     string=string,
     binary=binary,
     date=date,
+    enum=enum,
     time=time,
     timestamp=timestamp,
     dtype=dtype,
     interval=interval,
-    category=category,
     geometry=geometry,
     geography=geography,
     point=point,

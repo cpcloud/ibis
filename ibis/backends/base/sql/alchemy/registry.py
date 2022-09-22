@@ -162,9 +162,6 @@ def _cast(t, op):
     sa_arg = t.translate(arg)
     sa_type = t.get_sqla_type(typ)
 
-    if isinstance(arg, ir.CategoryValue) and typ == dt.int32:
-        return sa_arg
-
     # specialize going from an integer type to a timestamp
     if isinstance(arg.output_dtype, dt.Integer) and isinstance(
         sa_type, sa.DateTime

@@ -117,8 +117,6 @@ def value_list(translator, op):
 def cast(translator, op):
     arg_formatted = translator.translate(op.arg)
 
-    if isinstance(op.arg.output_dtype, dt.Category) and op.to == dt.int32:
-        return arg_formatted
     if (
         isinstance(op.arg.output_dtype, (dt.Timestamp, dt.Date, dt.Time))
         and op.to == dt.int64
