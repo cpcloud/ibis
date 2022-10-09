@@ -8,7 +8,6 @@ import ipaddress
 import uuid
 from typing import TYPE_CHECKING, Any, Mapping, NamedTuple, Sequence
 
-import numpy as np
 import toolz
 from public import public
 
@@ -172,6 +171,7 @@ class _WellKnownText(NamedTuple):
 
 
 def _infer_object_array_dtype(x):
+    import numpy as np
     import pandas as pd
     from pandas.api.types import infer_dtype
 
@@ -206,13 +206,15 @@ def _infer_object_array_dtype(x):
         }[classifier]
 
 
-@infer.register(np.generic)
+@infer.register("numpy.generic")
 def infer_numpy_scalar(value):
     return dt.dtype(value.dtype)
 
 
-@infer.register(np.ndarray)
+@infer.register("numpy.ndarray")
 def infer_numpy_array(value):
+    import numpy as np
+
     np_dtype = value.dtype
     if np_dtype.type == np.object_:
         return dt.Array(_infer_object_array_dtype(value))
@@ -223,6 +225,8 @@ def infer_numpy_array(value):
 
 @infer.register("pandas.Series")
 def infer_pandas_series(value):
+    import numpy as np
+
     if value.dtype == np.object_:
         value_dtype = _infer_object_array_dtype(value)
     else:

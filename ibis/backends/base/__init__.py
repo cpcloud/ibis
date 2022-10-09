@@ -24,13 +24,13 @@ if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
     import ibis.expr.schema as sch
+    import ibis.expr.types as ir
 
 import ibis
 import ibis.common.exceptions as exc
 import ibis.config
 import ibis.expr.operations as ops
-import ibis.expr.types as ir
-import ibis.util as util
+from ibis import util
 
 __all__ = ('BaseBackend', 'Database', 'connect')
 
@@ -224,6 +224,7 @@ class ResultHandler:
 
     @staticmethod
     def _table_or_column_schema(expr: ir.Expr) -> sch.Schema:
+        import ibis.expr.types as ir
         from ibis.backends.pyarrow.datatypes import sch
 
         if isinstance(expr, ir.Table):
@@ -261,6 +262,8 @@ class ResultHandler:
         Table
             A pyarrow table holding the results of the executed expression.
         """
+        import ibis.expr.types as ir
+
         pa = self._import_pyarrow()
         try:
             # Can't construct an array from record batches

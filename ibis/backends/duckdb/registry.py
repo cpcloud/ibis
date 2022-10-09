@@ -1,8 +1,8 @@
 import collections
+import math
 import numbers
 import operator
 
-import numpy as np
 import sqlalchemy as sa
 
 import ibis.expr.operations as ops
@@ -80,10 +80,12 @@ def _literal(_, op):
     elif dtype.is_set() or (
         isinstance(value, collections.abc.Sequence) and not isinstance(value, str)
     ):
+        try:
+            value = value.tolist()
+        except AttributeError:
+            pass
         return sa.cast(sa.func.list_value(*value), sqla_type)
-    elif isinstance(value, np.ndarray):
-        return sa.cast(sa.func.list_value(*value.tolist()), sqla_type)
-    elif isinstance(value, (numbers.Real, np.floating)) and np.isnan(value):
+    elif isinstance(value, numbers.Real) and math.isnan(value):
         return sa.cast(sa.literal("NaN"), sqla_type)
     elif isinstance(value, collections.abc.Mapping):
         if dtype.is_struct():

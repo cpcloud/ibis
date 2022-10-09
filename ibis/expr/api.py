@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import functools
 import itertools
+import numbers
 import operator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping, Sequence
@@ -13,7 +14,6 @@ from typing import TypeVar
 from typing import Union as _Union
 
 import dateutil.parser
-import numpy as np
 
 import ibis.expr.builders as bl
 import ibis.expr.datatypes as dt
@@ -641,10 +641,7 @@ def timestamp(
     raise NotImplementedError(f'cannot convert {type(value)} to timestamp')
 
 
-@timestamp.register(np.integer)
-@timestamp.register(np.floating)
-@timestamp.register(int)
-@timestamp.register(float)
+@timestamp.register(numbers.Real)
 def _timestamp_from_ymdhms(
     value, *args, timezone: str | None = None
 ) -> ir.TimestampScalar:

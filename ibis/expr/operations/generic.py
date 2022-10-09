@@ -9,7 +9,6 @@ import itertools
 import uuid
 from operator import attrgetter
 
-import numpy as np
 from public import public
 
 import ibis.expr.datatypes as dt
@@ -184,8 +183,6 @@ class Literal(Value):
                     int,
                     ipaddress.IPv4Address,
                     ipaddress.IPv6Address,
-                    np.generic,
-                    np.ndarray,
                     str,
                     tuple,
                     type(None),
@@ -193,6 +190,8 @@ class Literal(Value):
                 )
             ),
             rlz.lazy_instance_of("shapely.geometry.BaseGeometry"),
+            rlz.lazy_instance_of("np.generic"),
+            rlz.lazy_instance_of("np.ndarray"),
         )
     )
     dtype = rlz.datatype

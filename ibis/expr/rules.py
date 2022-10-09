@@ -81,13 +81,15 @@ class rule(validator):
     __slots__ = ()
 
     def _erase_expr(self, value):
-        return value.op() if isinstance(value, ir.Expr) else value
+        try:
+            return value.op()
+        except AttributeError:
+            return value
 
     def __call__(self, *args, **kwargs):
         args = map(self._erase_expr, args)
         kwargs = {k: self._erase_expr(v) for k, v in kwargs.items()}
         result = super().__call__(*args, **kwargs)
-        assert not isinstance(result, ir.Expr)
         return result
 
 
@@ -209,6 +211,11 @@ def value(dtype, arg, **kwargs):
       An ibis value expression with the specified datatype
     """
     import ibis.expr.operations as ops
+
+    if arg is None:
+        import ibis
+
+        arg = ibis.NA
 
     if not isinstance(arg, ops.Value):
         # coerce python literal to ibis literal

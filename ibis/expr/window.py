@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import functools
+import numbers
 from typing import NamedTuple
 
-import numpy as np
 import toolz
 
 import ibis.expr.operations as ops
@@ -21,14 +21,14 @@ def _sequence_to_tuple(x):
 
 
 class RowsWithMaxLookback(NamedTuple):
-    rows: int | np.integer
+    rows: numbers.Integral
     max_lookback: ir.IntervalValue
 
 
 def _choose_non_empty_val(first, second):
-    if isinstance(first, (int, np.integer)) and first:
+    if isinstance(first, numbers.Integral) and first:
         non_empty_value = first
-    elif not isinstance(first, (int, np.integer)) and first is not None:
+    elif not isinstance(first, numbers.Integral) and first is not None:
         non_empty_value = first
     else:
         non_empty_value = second
@@ -37,7 +37,7 @@ def _choose_non_empty_val(first, second):
 
 def _determine_how(preceding):
     offset_type = type(get_preceding_value(preceding))
-    if issubclass(offset_type, (int, np.integer)):
+    if issubclass(offset_type, numbers.Integral):
         how = 'rows'
     elif issubclass(offset_type, ir.IntervalScalar):
         how = 'range'
@@ -67,8 +67,7 @@ def get_preceding_value_tuple(preceding):
     return preceding_value
 
 
-@get_preceding_value.register(int)
-@get_preceding_value.register(np.integer)
+@get_preceding_value.register(numbers.Integral)
 @get_preceding_value.register(ir.IntervalScalar)
 def get_preceding_value_simple(preceding):
     return preceding
@@ -77,7 +76,7 @@ def get_preceding_value_simple(preceding):
 @get_preceding_value.register(RowsWithMaxLookback)
 def get_preceding_value_mlb(preceding: RowsWithMaxLookback):
     preceding_value = preceding.rows
-    if not isinstance(preceding_value, (int, np.integer)):
+    if not isinstance(preceding_value, numbers.Integral):
         raise TypeError(
             "'Rows with max look-back' only supports integer " "row-based indexing."
         )
@@ -304,7 +303,7 @@ class Window(Comparable):
 
 
 def rows_with_max_lookback(
-    rows: int | np.integer,
+    rows: numbers.Integral,
     max_lookback: ir.IntervalValue,
 ) -> RowsWithMaxLookback:
     """Create a bound preceding value for use with trailing window functions.

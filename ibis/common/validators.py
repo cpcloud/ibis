@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import datetime
+import decimal
+import enum
+import ipaddress
 import math
+import uuid
 from contextlib import suppress
 from typing import Any, Callable, Union
 
@@ -9,7 +14,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from ibis.common.dispatch import lazy_singledispatch
 from ibis.common.exceptions import IbisTypeError
-from ibis.util import flatten_iterable, is_function, is_iterable
+from ibis.util import flatten_iterable, frozendict, is_function, is_iterable
 
 
 class Validator(Callable):
@@ -118,6 +123,41 @@ class lazy_instance_of(Validator):
             f"Given argument with type {type(arg)} is not an instance of "
             f"{self._classes}"
         )
+
+
+@validator
+def literal_types(arg, **kwargs):
+    import numpy as np
+
+    try:
+        from shapely.geometry.base import BaseGeometry
+    except ImportError:
+        BaseGeometry = type(None)
+
+    valid_literal_types = (
+        BaseGeometry,
+        bytes,
+        datetime.date,
+        datetime.datetime,
+        datetime.time,
+        datetime.timedelta,
+        decimal.Decimal,
+        enum.Enum,
+        float,
+        frozendict,
+        frozenset,
+        int,
+        ipaddress.IPv4Address,
+        ipaddress.IPv6Address,
+        np.generic,
+        np.ndarray,
+        str,
+        tuple,
+        type(None),
+        uuid.UUID,
+    )
+
+    return instance_of(valid_literal_types, arg, **kwargs)
 
 
 @validator

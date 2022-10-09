@@ -13,7 +13,6 @@ from posixpath import join as pjoin
 from typing import TYPE_CHECKING, Any, Literal
 
 import fsspec
-import numpy as np
 
 import ibis.common.exceptions as com
 import ibis.config
@@ -111,6 +110,8 @@ class _type_parser:
 
 
 def _chunks_to_pandas_array(chunks):
+    import numpy as np
+
     total_length = 0
     have_nulls = False
     for c in chunks:

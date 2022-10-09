@@ -3,8 +3,6 @@ import math
 import operator
 from typing import Mapping
 
-import numpy as np
-import pandas as pd
 import polars as pl
 
 import ibis.common.exceptions as com
@@ -620,7 +618,9 @@ def count_star(op):
 
 
 @translate.register(ops.TimestampNow)
-def timestamp_now(op):
+def timestamp_now(_):
+    import pandas as pd
+
     now = pd.Timestamp("now", tz="UTC").tz_localize(None)
     return pl.lit(now)
 
@@ -658,6 +658,8 @@ def date_from_ymd(op):
 
 @translate.register(ops.Atan2)
 def atan2(op):
+    import numpy as np
+
     left = translate(op.left)
     right = translate(op.right)
     return pl.map([left, right], lambda cols: np.arctan2(cols[0], cols[1]))
@@ -665,6 +667,8 @@ def atan2(op):
 
 @translate.register(ops.Modulus)
 def modulus(op):
+    import numpy as np
+
     left = translate(op.left)
     right = translate(op.right)
     return pl.map([left, right], lambda cols: np.mod(cols[0], cols[1]))
@@ -865,17 +869,19 @@ def between(op):
 
 
 _bitwise_binops = {
-    ops.BitwiseRightShift: np.right_shift,
-    ops.BitwiseLeftShift: np.left_shift,
-    ops.BitwiseOr: np.bitwise_or,
-    ops.BitwiseAnd: np.bitwise_and,
-    ops.BitwiseXor: np.bitwise_xor,
+    ops.BitwiseRightShift: "right_shift",
+    ops.BitwiseLeftShift: "left_shift",
+    ops.BitwiseOr: "bitwise_or",
+    ops.BitwiseAnd: "bitwise_and",
+    ops.BitwiseXor: "bitwise_xor",
 }
 
 
 @translate.register(ops.BitwiseBinary)
 def bitwise_binops(op):
-    ufunc = _bitwise_binops[type(op)]
+    import numpy as np
+
+    ufunc = getattr(np, _bitwise_binops[type(op)])
     left = translate(op.left)
     right = translate(op.right)
 
@@ -891,6 +897,8 @@ def bitwise_binops(op):
 
 @translate.register(ops.BitwiseNot)
 def bitwise_not(op):
+    import numpy as np
+
     arg = translate(op.arg)
     return arg.map(lambda x: np.invert(x))
 

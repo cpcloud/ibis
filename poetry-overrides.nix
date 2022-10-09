@@ -181,4 +181,8 @@ in
     nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.setuptools ];
     buildInputs = attrs.buildInputs or [ ] ++ [ pkgs.libkrb5 ];
   });
+
+  tuna = super.tuna.overridePythonAttrs (attrs: {
+    nativeBuildInputs = attrs.nativeBuildInputs or [ ] ++ [ self.setuptools ];
+  });
 }

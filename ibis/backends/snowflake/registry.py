@@ -1,4 +1,5 @@
-import numpy as np
+import math
+
 import sqlalchemy as sa
 
 import ibis.expr.operations as ops
@@ -13,10 +14,10 @@ def _literal(t, op):
     if isinstance(op, ops.Literal) and op.output_dtype.is_floating():
         value = op.value
 
-        if np.isnan(value):
+        if math.isnan(value):
             return _SF_NAN
 
-        if np.isinf(value):
+        if math.isinf(value):
             return _SF_NEG_INF if value < 0 else _SF_POS_INF
     return _postgres_literal(t, op)
 
