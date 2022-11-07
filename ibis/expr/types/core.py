@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import webbrowser
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 import toolz
@@ -124,6 +123,8 @@ class Expr(Immutable):
         ImportError
             If ``graphviz`` is not installed.
         """
+        import webbrowser
+
         import ibis.expr.visualize as viz
 
         path = viz.draw(
