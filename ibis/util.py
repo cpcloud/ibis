@@ -4,7 +4,6 @@ from __future__ import annotations
 import abc
 import collections
 import functools
-import importlib.metadata
 import itertools
 import logging
 import operator
@@ -29,6 +28,8 @@ from uuid import uuid4
 import toolz
 
 if TYPE_CHECKING:
+    import importlib.metadata as md
+
     import pandas as pd
 
     import ibis.expr.operations as ops
@@ -506,13 +507,14 @@ class ToFrame(abc.ABC):
         ...
 
 
-def backend_entry_points() -> list[importlib.metadata.EntryPoint]:
+def backend_entry_points() -> list[md.EntryPoint]:
     """Get the list of installed `ibis.backend` entrypoints."""
+    import importlib.metadata as md
 
     if sys.version_info < (3, 10):
-        eps = importlib.metadata.entry_points()["ibis.backends"]
+        eps = md.entry_points()["ibis.backends"]
     else:
-        eps = importlib.metadata.entry_points(group="ibis.backends")
+        eps = md.entry_points(group="ibis.backends")
     return sorted(eps)
 
 
@@ -527,6 +529,8 @@ def import_object(qualname: str) -> Any:
 
     >>> from foo.bar import baz
     """
+    import importlib
+
     mod_name, name = qualname.rsplit(".", 1)
     mod = importlib.import_module(mod_name)
     try:

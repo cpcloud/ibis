@@ -3,7 +3,6 @@ from __future__ import annotations
 import abc
 import collections.abc
 import functools
-import importlib.metadata
 import keyword
 import re
 import sys
@@ -749,11 +748,12 @@ def _get_backend_names() -> frozenset[str]:
     If a `set` is used, then any in-place modifications to the set
     are visible to every caller of this function.
     """
+    import importlib.metadata as md
 
     if sys.version_info < (3, 10):
-        entrypoints = importlib.metadata.entry_points()["ibis.backends"]
+        entrypoints = md.entry_points()["ibis.backends"]
     else:
-        entrypoints = importlib.metadata.entry_points(group="ibis.backends")
+        entrypoints = md.entry_points(group="ibis.backends")
     return frozenset(ep.name for ep in entrypoints)
 
 
