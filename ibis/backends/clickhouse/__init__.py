@@ -7,6 +7,7 @@ import json
 from typing import TYPE_CHECKING, Any, Mapping
 
 import pyarrow as pa
+import pyarrow.json as pj
 import requests
 import toolz
 
@@ -245,15 +246,7 @@ class Backend(BaseSQLBackend):
                 }
             )
 
-        params = dict(
-            # tell clickhouse to return arrow strings as strings instead of
-            # binary
-            output_format_arrow_string_as_string=1,
-            # map low cardinality columns to dictionary encoded columns
-            output_format_arrow_low_cardinality_as_dictionary=1,
-            # use arrow stream as the output format
-            default_format="ArrowStream",
-        )
+        params = dict(default_format="JSONEachRow")
         files, data = self._construct_external_tables(external_tables)
         ibis.util.log(query)
         resp = self._post(query, data=data, params=params, files=files)
@@ -263,8 +256,8 @@ class Backend(BaseSQLBackend):
             raise ClickhouseServerError(resp.text) from e
 
         if content := resp.content:
-            t = pa.RecordBatchStreamReader(content)
-            return t.read_all()
+            t = pj.read_json(io.BytesIO(content))
+            return t
 
     def fetch_from_cursor(self, cursor, schema):
         df = cursor.to_pandas()
