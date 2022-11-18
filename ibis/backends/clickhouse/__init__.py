@@ -23,6 +23,10 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
+class ClickhouseServerError(Exception):
+    pass
+
+
 class Backend(BaseSQLBackend):
     name = 'clickhouse'
     # for now map clickhouse to mysql so that _something_ works
@@ -126,13 +130,17 @@ class Backend(BaseSQLBackend):
         with self.session as sesh:
             resp = sesh.get(
                 self.url,
-                params={
+                params=dict(
+                    query=query,
+                    default_format=format,
                     **self.params,
                     **params,
-                    **dict(query=query, default_format=format),
-                },
+                ),
             )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            raise ClickhouseServerError(resp.text.strip()) from e
         return resp
 
     def _post(
@@ -150,14 +158,13 @@ class Backend(BaseSQLBackend):
             resp = sesh.post(
                 self.url,
                 data=data,
-                params={
-                    **self.params,
-                    **params,
-                    **dict(query=query),
-                },
+                params=dict(query=query, **self.params, **params),
                 files=files,
             )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            raise ClickhouseServerError(resp.text.strip()) from e
         return resp
 
     @property
@@ -250,6 +257,10 @@ class Backend(BaseSQLBackend):
         files, data = self._construct_external_tables(external_tables)
         ibis.util.log(query)
         resp = self._post(query, data=data, params=params, files=files)
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            raise ClickhouseServerError(resp.text) from e
 
         if content := resp.content:
             t = pa.RecordBatchStreamReader(content)
