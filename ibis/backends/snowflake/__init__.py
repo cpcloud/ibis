@@ -12,6 +12,7 @@ from ibis.backends.base.sql.alchemy import (
     AlchemyExprTranslator,
     BaseAlchemyBackend,
 )
+from ibis.backends.base.sql.alchemy.datatypes import to_sqla_type
 from ibis.backends.snowflake.datatypes import parse
 from ibis.backends.snowflake.registry import operation_registry
 
@@ -77,21 +78,35 @@ class Backend(BaseAlchemyBackend):
     ) -> sa.Table:
         inspected = self.inspector.get_columns(name, schema)
         cols = []
-        identifier = name if not schema else schema + "." + name
+        quoted_name = self.con.dialect.preparer(self.con.dialect).quote_identifier(name)
+        identifier = quoted_name if not schema else schema + "." + quoted_name
         for (colname, *_), colinfo in zip(
-            self.con.execute(f"DESCRIBE TABLE {identifier}"), inspected
+            self.con.execute(f'DESCRIBE TABLE {identifier}'), inspected
         ):
             del colinfo["name"]
             colinfo["type_"] = colinfo.pop("type")
             cols.append(sa.Column(colname, **colinfo, quote=True))
-        return sa.Table(
-            name,
-            self.meta,
-            *cols,
-            schema=schema,
-            extend_existing=True,
-            keep_existing=False,
-        )
+        try:
+            return self.meta.tables[name]
+        except KeyError:
+            return sa.Table(
+                name,
+                self.meta,
+                *cols,
+                schema=schema,
+                extend_existing=True,
+                keep_existing=False,
+                quote=True,
+            )
+
+    def _table_from_schema(
+        self, name: str, schema: sch.Schema, database: str | None = None
+    ) -> sa.Table:
+        cols = [
+            sa.Column(colname, to_sqla_type(dtype), nullable=dtype.nullable, quote=True)
+            for colname, dtype in zip(schema.names, schema.types)
+        ]
+        return sa.Table(name, self.meta, *cols, quote=True)
 
     def fetch_from_cursor(self, cursor, schema: sch.Schema) -> pd.DataFrame:
         global _NATIVE_PANDAS

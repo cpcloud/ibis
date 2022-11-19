@@ -171,11 +171,18 @@ def test_table_dot_sql_repr(con):
 @table_dot_sql_notimpl
 @dot_sql_notimpl
 @dot_sql_never
-def test_table_dot_sql_does_not_clobber_existing_tables(con):
+def test_table_dot_sql_does_not_clobber_existing_tables(backend, con):
     name = f"ibis_{util.guid()}"
     con.create_table(name, schema=ibis.schema(dict(a="string")))
+    ft = (
+        con.con.dialect.preparer(con.con.dialect).quote_identifier(
+            "functional_alltypes"
+        )
+        if backend.name() == "snowflake"
+        else "functional_alltypes"
+    )
     try:
-        expr = con.table(name).sql("SELECT 1 as x FROM functional_alltypes")
+        expr = con.table(name).sql(f"SELECT 1 as x FROM {ft}")
         with pytest.raises(ValueError):
             expr.alias(name)
     finally:

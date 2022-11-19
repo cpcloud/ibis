@@ -512,7 +512,12 @@ def test_sa_default_numeric_precision_and_scale(
     # Create a table with the numeric types.
     table_name = 'test_sa_default_param_decimal'
     engine = con.con
-    table = sa.Table(table_name, sa.MetaData(bind=engine), *sqla_types)
+    table = sa.Table(
+        table_name,
+        sa.MetaData(bind=engine),
+        *sqla_types,
+        quote=(backend.name() == "snowflake") or None,
+    )
     table.create(bind=engine, checkfirst=True)
 
     try:
