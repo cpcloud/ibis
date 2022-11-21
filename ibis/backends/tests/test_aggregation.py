@@ -260,7 +260,7 @@ def test_aggregate_multikey_group_reduction_udf(backend, alltypes, df):
             lambda t, where: (t.int_col > 0).sum(where=where),
             lambda t, where: (t.int_col > 0)[where].sum(),
             id="bool_sum",
-            marks=pytest.mark.notimpl(["datafusion", "mysql", "pyspark"]),
+            marks=pytest.mark.notimpl(["datafusion", "mysql", "pyspark", "mssql"]),
         ),
         param(
             lambda t, where: t.double_col.mean(where=where),
@@ -905,7 +905,7 @@ def test_filter(backend, alltypes, df):
     backend.assert_frame_equal(result, expected, check_like=True)
 
 
-@pytest.mark.notimpl(["polars", "datafusion", "pyspark"])
+@pytest.mark.notimpl(["polars", "datafusion", "pyspark", "mssql"])
 def test_column_summary(alltypes):
     bool_col_summary = alltypes.bool_col.summary()
     expr = alltypes.aggregate(bool_col_summary)

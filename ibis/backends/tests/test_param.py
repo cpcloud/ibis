@@ -184,6 +184,7 @@ def test_scalar_param(alltypes, df, value, dtype, col):
         "snowflake",
         "impala",
         "pyspark",
+        "mssql",
     ]
 )
 def test_scalar_param_date(backend, alltypes, value, dtype):
@@ -224,6 +225,7 @@ def test_scalar_param_date(backend, alltypes, value, dtype):
         "snowflake",
         "impala",
         "pyspark",
+        "mssql",
     ]
 )
 def test_scalar_param_nested(con):

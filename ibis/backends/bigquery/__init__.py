@@ -350,7 +350,20 @@ class Backend(BaseSQLBackend):
 
     def fetch_from_cursor(self, cursor, schema):
         query = cursor.query
-        df = query.to_arrow().to_pandas(timestamp_as_object=True)
+        query_result = query.result()
+        # workaround potentially not having the ability to create read sessions
+        # in the dataset project
+        orig_project = query_result._project
+        query_result._project = self.billing_project
+        try:
+            arrow_t = query_result.to_arrow(
+                progress_bar_type=None,
+                bqstorage_client=None,
+                create_bqstorage_client=True,
+            )
+        finally:
+            query_result._project = orig_project
+        df = arrow_t.to_pandas(timestamp_as_object=True)
         return schema.apply_to(df)
 
     def get_schema(self, name, database=None):

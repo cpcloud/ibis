@@ -126,24 +126,23 @@ def _translate_pattern(translator, op):
 
 
 def _regex_search(translator, op):
+    arg = translator.translate(op.arg)
     regex = _translate_pattern(translator, op.pattern)
-    return f"REGEXP_CONTAINS({translator.translate(op.arg)}, {regex})"
+    return f"REGEXP_CONTAINS({arg}, {regex})"
 
 
 def _regex_extract(translator, op):
-    arg, pattern, index = op.args
-    regex = _translate_pattern(translator, pattern)
-    return "REGEXP_EXTRACT_ALL({}, {})[SAFE_OFFSET({})]".format(
-        translator.translate(arg), regex, translator.translate(index)
-    )
+    arg = translator.translate(op.arg)
+    regex = _translate_pattern(translator, op.pattern)
+    index = translator.translate(op.index)
+    return f"REGEXP_EXTRACT_ALL({arg}, {regex})[SAFE_OFFSET({index})]"
 
 
 def _regex_replace(translator, op):
-    arg, pattern, replacement = op.args
-    regex = _translate_pattern(translator, pattern)
-    return "REGEXP_REPLACE({}, {}, {})".format(
-        translator.translate(arg), regex, translator.translate(replacement)
-    )
+    arg = translator.translate(op.arg)
+    regex = _translate_pattern(translator, op.pattern)
+    replacement = translator.translate(op.replacement)
+    return f"REGEXP_REPLACE({arg}, {regex}, {replacement})"
 
 
 def _string_concat(translator, op):
@@ -159,7 +158,8 @@ def _string_join(translator, op):
 
 
 def _string_ascii(translator, op):
-    return f"TO_CODE_POINTS({translator.translate(op.arg)})[SAFE_OFFSET(0)]"
+    arg = translator.translate(op.arg)
+    return f"TO_CODE_POINTS({arg})[SAFE_OFFSET(0)]"
 
 
 def _string_right(translator, op):
