@@ -21,6 +21,7 @@ import ibis.expr.operations as ops
 import ibis.expr.rules as rlz
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
+from ibis import util
 from ibis.backends.base import connect
 from ibis.common.pretty import show_sql, to_sql
 from ibis.expr.decompile import decompile
@@ -879,7 +880,7 @@ def row_number() -> ir.IntegerColumn:
     return ops.RowNumber().to_expr()
 
 
-def read(path: str | Path, **kwargs: Any) -> ir.Table:
+def read(path: str | Path | Iterable[str | Path], **kwargs: Any) -> ir.Table:
     """Lazily load a data source located at `path`.
 
     Parameters
@@ -906,7 +907,8 @@ def read(path: str | Path, **kwargs: Any) -> ir.Table:
     from ibis.config import _default_backend
 
     con = _default_backend()
-    return con.register(str(path), **kwargs)
+    arg = list(map(str, util.promote_list(path)))
+    return con.register(arg, **kwargs)
 
 
 e = ops.E().to_expr()

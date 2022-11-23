@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import ast
+import collections
 import itertools
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Mapping, MutableMapping
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, MutableMapping
 
 import pyarrow as pa
 import pyarrow.types as pat
@@ -59,7 +60,7 @@ def _format_kwargs(kwargs):
 
 
 @_generate_view_code.register(r"parquet://(?P<path>.+)", priority=13)
-def _parquet(_, path, table_name=None, scheme=None, **kwargs):
+def _parquet(_, path, *paths, table_name=None, scheme=None, **kwargs):
     scheme = _get_scheme(scheme)
     if not scheme:
         path = os.path.abspath(path)
@@ -74,7 +75,7 @@ SELECT * FROM read_parquet({', '.join(args)})"""
 
 
 @_generate_view_code.register(r"(c|t)sv://(?P<path>.+)", priority=13)
-def _csv(_, path, table_name=None, scheme=None, **kwargs):
+def _csv(_, path, *paths, table_name=None, scheme=None, **kwargs):
     scheme = _get_scheme(scheme)
     if not scheme:
         path = os.path.abspath(path)
@@ -98,14 +99,14 @@ SELECT * FROM read_csv({', '.join(args)})"""
     r"(?P<scheme>(?:file|https?)://)?(?P<path>.+?\.((?:c|t)sv|txt)(?:\.gz)?)",
     priority=12,
 )
-def _csv_file_or_url(_, path, table_name=None, **kwargs):
+def _csv_file_or_url(_, path, *paths, table_name=None, **kwargs):
     return _csv(f"csv://{path}", path=path, table_name=table_name, **kwargs)
 
 
 @_generate_view_code.register(
     r"(?P<scheme>(?:file|https?)://)?(?P<path>.+?\.parquet)", priority=12
 )
-def _parquet_file_or_url(_, path, table_name=None, **kwargs):
+def _parquet_file_or_url(_, path, *paths, table_name=None, **kwargs):
     return _parquet(f"parquet://{path}", path=path, table_name=table_name, **kwargs)
 
 
@@ -120,7 +121,7 @@ def _s3(full_path, table_name=None):
 
 
 @_generate_view_code.register(r".+", priority=1)
-def _default(path, **kwargs):
+def _default(path, *_, **kwargs):
     raise ValueError(
         f"""Unrecognized file type or extension: {path}.
 
@@ -221,7 +222,7 @@ class Backend(BaseAlchemyBackend):
 
     def register(
         self,
-        source: str | Path | Any,
+        source: str | Path | Any | Iterable[str | Path | Any],
         table_name: str | None = None,
         **kwargs: Any,
     ) -> ir.Table:
@@ -261,9 +262,9 @@ class Backend(BaseAlchemyBackend):
                 # by the time we execute against this so we register it
                 # explicitly.
                 cursor.cursor.c.register(table_name, dataset)
-        elif isinstance(source, (str, Path)):
+        elif isinstance(source, collections.abc.Iterable):
             sql, table_name, extensions_required = _generate_view_code(
-                str(source), table_name=table_name, **kwargs
+                *source, table_name=table_name, **kwargs
             )
             self._load_extensions(extensions_required)
             self.con.execute(sql)
