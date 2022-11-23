@@ -135,7 +135,9 @@ def _regex_extract(translator, op):
     arg = translator.translate(op.arg)
     regex = _translate_pattern(translator, op.pattern)
     index = translator.translate(op.index)
-    return f"REGEXP_EXTRACT_ALL({arg}, {regex})[SAFE_OFFSET({index})]"
+    matches = f"REGEXP_CONTAINS({arg}, {regex})"
+    extract = f"REGEXP_EXTRACT_ALL({arg}, {regex})[SAFE_ORDINAL({index})]"
+    return f"IF({matches}, IF(COALESCE({index}, 0) = 0, {arg}, {extract}), NULL)"
 
 
 def _regex_replace(translator, op):
