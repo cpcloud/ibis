@@ -9,7 +9,6 @@ from public import public
 import ibis.expr.rules as rlz
 from ibis.common.annotations import attribute
 from ibis.common.grounds import Concrete
-from ibis.common.validators import immutable_property
 from ibis.expr.rules import Shape
 from ibis.util import UnnamedMarker, deprecated
 
@@ -165,14 +164,15 @@ class NodeList(
 
     @classmethod
     def __create__(self, *args, **kwargs):
-        kwargs.pop("variable_name", None)
-        return super().__create__(values=args)
+        # kwargs.pop("variable_name", None)
+        return super().__create__(*args)
 
     @classmethod
     def pattern(cls, *args, **kwargs):
         values = args + tuple(kwargs.pop("values", ()))
-        params = cls.__signature__.apply(values=values)
-        return cls.__pattern__(params["values"])
+        bound = cls.__signature__.bind(*values)
+        bound.apply_defaults()
+        return cls.__pattern__(bound.arguments["values"])
 
     @property
     def args(self):
@@ -199,12 +199,6 @@ class NodeList(
 
     def __lt__(self, other):
         return self.values < other.values
-
-    @immutable_property
-    def foldable(self) -> bool:
-        import ibis.expr.operations as ops
-
-        return all(isinstance(value, ops.Literal) for value in self.values)
 
     @property
     def value(self):

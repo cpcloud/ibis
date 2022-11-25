@@ -64,18 +64,13 @@ _REPLACER = ManyToOneReplacer()
 _COLLAPSER = ManyToOneReplacer()
 
 
-def _replace_child(
-    exprs: Iterable[ops.Value], table: ops.TableNode
-) -> ops.NodeList:
+def _replace_child(exprs: Iterable[ops.Value], table: ops.TableNode) -> ops.NodeList:
     """Replace child tables of `exprs` with `table`."""
     return ops.NodeList(
         *(
             an.sub_for(
                 expr,
-                {
-                    child: table
-                    for child in an.find_immediate_parent_tables(expr)
-                },
+                {child: table for child in an.find_immediate_parent_tables(expr)},
             )
             for expr in exprs
         )
@@ -114,10 +109,9 @@ collapse = opt_pass(_COLLAPSER)
 @generic(ops.And.pattern(_, false))
 @generic(ops.Not.pattern(true))
 def _always_false(**_):
-    """Always-false expressions
+    """Always-false expressions.
 
-    x AND false -> false
-       not true -> false
+    x AND false -> false    not true -> false
     """
     return FALSE
 
@@ -129,10 +123,7 @@ def _always_false(**_):
 def _logical_redundant(operand, **_):
     """Redundant logical operations.
 
-    x AND true -> x
-       x AND x -> x
-    x OR false -> x
-        x OR x -> x
+    x AND true -> x    x AND x -> x x OR false -> x     x OR x -> x
     """
     return operand
 
@@ -142,8 +133,7 @@ def _logical_redundant(operand, **_):
 def _always_true(**_):
     """Always true expressions.
 
-    x OR true -> true
-    not false -> true
+    x OR true -> true not false -> true
     """
     return TRUE
 
@@ -172,15 +162,14 @@ def _not_equals(left, right):
     lambda operand: not isinstance(operand.output_dtype, dt.Floating),
 )
 @generic(
-    ops.Filter.pattern(
-        table, ops.NodeList.pattern(exprs_star0, true, exprs_star1)
-    )
+    ops.Filter.pattern(table, ops.NodeList.pattern(exprs_star0, true, exprs_star1))
 )
 def _useless_predicate(table, exprs_star0, exprs_star1, **_):
     """Remove useless predicates from a `Filter` operation.
 
-    If `operand` is a floating point value then this optimization cannot be
-    performed due to the possibility of NaNs, since NaN == NaN is always false.
+    If `operand` is a floating point value then this optimization cannot
+    be performed due to the possibility of NaNs, since NaN == NaN is
+    always false.
     """
     # empty selections are a no-op on a projection
     # all columns from the child are projected
@@ -313,8 +302,8 @@ def _useless_filter(table, **_):
     )
 )
 def _distribute_difference_filter(table1, predicates, table2):
-    """Turn an difference of a table with a filtered table into an
-    difference of two tables filtered."""
+    """Turn an difference of a table with a filtered table into an difference
+    of two tables filtered."""
 
     table = ops.Difference(table1, table2)
     return ops.Filter(table, _replace_child(predicates, table))
@@ -339,11 +328,7 @@ def _distribute_intersection_filter(table1, predicates, table2):
     return ops.Filter(table, _replace_child(predicates, table))
 
 
-@generic(
-    ops.NodeList.pattern(
-        exprs_star0, ops.And.pattern(left, right), exprs_star1
-    )
-)
+@generic(ops.NodeList.pattern(exprs_star0, ops.And.pattern(left, right), exprs_star1))
 def _flatten_predicates(exprs_star0, left, right, exprs_star1):
     return ops.NodeList(*exprs_star0, left, right, *exprs_star1)
 
@@ -365,9 +350,7 @@ def _partition_predicate(
         frozenset,
         map(an.find_immediate_parent_tables, predicates),
     ):
-        is_right_subset = operand_tables.issubset(
-            an.find_immediate_parent_tables(rel2)
-        )
+        is_right_subset = operand_tables.issubset(an.find_immediate_parent_tables(rel2))
         if not is_right_subset and operand_tables.issubset(
             an.find_immediate_parent_tables(rel1)
         ):
@@ -388,8 +371,7 @@ def _can_partition_predicate(predicates: Sequence[ops.BooleanValue]) -> bool:
     Zero child tables means a constant-equivalent.
     """
     return any(
-        ntables < 2
-        for ntables in map(an.count_immediate_parent_tables, predicates)
+        ntables < 2 for ntables in map(an.count_immediate_parent_tables, predicates)
     )
 
 
@@ -422,20 +404,18 @@ def _filter_inner_join(table1, table2, predicates):
 
     # replace old tables with new pushed down tables in remaining predicates
     substitutions = {table1: left, table2: right}
-    predicates = ops.NodeList(
-        *(an.sub_for(node, substitutions) for node in both)
-    )
+    predicates = ops.NodeList(*(an.sub_for(node, substitutions) for node in both))
     return op_class(left=left, right=right, predicates=predicates)
 
 
 def _no_scalar_subqueries(table, selections, predicates):
-    import ibis.expr.lineage as lin
+    import ibis.common.graph as g
 
     def fn(op):
         is_correlated = isinstance(op, ops.TableArrayView)
-        return lin.halt if is_correlated else lin.proceed, is_correlated
+        return g.halt if is_correlated else g.proceed, is_correlated
 
-    return not any(lin.traverse(fn, predicates))
+    return not any(g.traverse(fn, predicates))
 
 
 @collapse(
@@ -482,9 +462,7 @@ def _collapse_proj_sort(table, selections, sort_keys):
         sort_keys=ops.NodeList.pattern(sort_keys2),
     )
 )
-def _collapse_selection_sort(
-    table, sort_keys1, selections, predicates, sort_keys2
-):
+def _collapse_selection_sort(table, sort_keys1, selections, predicates, sort_keys2):
     sort_keys = ops.NodeList(
         *sort_keys1,
         *_replace_child(sort_keys2, table),
@@ -527,9 +505,7 @@ def _collapse_selection_projection(
         sort_keys=ops.NodeList.pattern(sort_keys),
     )
 )
-def _collapse_selection_filter(
-    table, predicates1, selections, predicates2, sort_keys
-):
+def _collapse_selection_filter(table, predicates1, selections, predicates2, sort_keys):
     """Collapse filters into an existing selection."""
     selections = _replace_child(selections, table)
     predicates = ops.NodeList(

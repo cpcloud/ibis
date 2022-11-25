@@ -29,7 +29,7 @@ def s():
         ),
         param(lambda t: t[list(t.columns)], identity, id="all_columns_str"),
         param(lambda t: t.filter([]), identity, id="empty_filter"),
-        param(lambda t: t.sort_by([]), identity, id="empty_sort_by"),
+        param(lambda t: t.order_by([]), identity, id="empty_order_by"),
         param(lambda t: t.filter(_.a == _.a), identity, id="useless_pred_eq"),
         param(
             lambda t: t.filter([ibis.literal(True)]),
@@ -52,9 +52,7 @@ def s():
             id="useless_pred_partial",
         ),
         param(
-            lambda t: (
-                t.filter(_.a == "1").filter(_.b == 2.0).filter(_.a < "b")
-            ),
+            lambda t: (t.filter(_.a == "1").filter(_.b == 2.0).filter(_.a < "b")),
             lambda t: t.filter([_.a == "1", _.b == 2.0, _.a < "b"]),
             id="compose_filters",
         ),
@@ -90,12 +88,8 @@ def s():
             id="useful_mutate",
         ),
         param(
-            lambda t: t.mutate(c=_.b + 1.0, d=_.a.length() - 2).select(
-                ["c", "d"]
-            ),
-            lambda t: t.select(
-                [(_.b + 1.0).name("c"), (_.a.length() - 2).name("d")]
-            ),
+            lambda t: t.mutate(c=_.b + 1.0, d=_.a.length() - 2).select(["c", "d"]),
+            lambda t: t.select([(_.b + 1.0).name("c"), (_.a.length() - 2).name("d")]),
             id="useful_multi_mutate",
         ),
         param(
@@ -351,9 +345,7 @@ def test_collapse(t):
 
 
 def test_collapse_limit(t):
-    expr = (
-        t.filter(_.a > "1").mutate(c=_.a + "2").filter(_.c == "foo").limit(10)
-    )
+    expr = t.filter(_.a > "1").mutate(c=_.a + "2").filter(_.c == "foo").limit(10)
     result = opt(expr)
     expected = (
         ops.Selection(

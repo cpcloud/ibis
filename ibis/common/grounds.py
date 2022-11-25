@@ -249,8 +249,9 @@ class Matchable(Base):
 
     @classmethod
     def pattern(cls, *args, **kwargs):
-        params = cls.__signature__.apply(*args, **kwargs)
-        return cls.__pattern__(*params.values())
+        bound = cls.__signature__.bind(*args, **kwargs)
+        bound.apply_defaults()
+        return cls.__pattern__(*bound.args)
 
     def __len__(self):
         return len(self.__args__)
