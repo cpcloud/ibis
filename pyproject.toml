@@ -84,7 +84,6 @@ isort = ">=5.9.3,<6"
 mypy = "0.991"
 poetry-dynamic-versioning = ">=0.18.0,<1"
 pyupgrade = ">=2.26.0,<4"
-tuna = "^0.5.11"
 
 [tool.poetry.group.test.dependencies]
 black = ">=22.1.0,<23"
