@@ -3,7 +3,6 @@
 import base64
 import datetime
 
-import numpy as np
 from multipledispatch import Dispatcher
 
 import ibis
@@ -194,6 +193,8 @@ def _log(translator, op):
 
 
 def _literal(translator, op):
+    import numpy as np
+
     dtype = op.output_dtype
     if isinstance(dtype, dt.Numeric):
         value = op.value
