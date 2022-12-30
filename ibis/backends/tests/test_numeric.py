@@ -608,3 +608,18 @@ def test_histogram(con, alltypes):
     n = 10
     results = con.execute(alltypes.int_col.histogram(n).name("tmp"))
     assert len(results.value_counts()) == n
+
+
+@pytest.mark.notimpl(["dask", "pandas", "pyspark", "sqlite"])
+@pytest.mark.notyet(
+    ["bigquery", "datafusion", "duckdb", "mssql", "polars", "postgres", "snowflake"]
+)
+@pytest.mark.parametrize("value", range(0, 17))
+@pytest.mark.parametrize(("base", "fmt_chr", "padding"), [(16, "x", 2), (2, "b", 8)])
+def test_convert_base(con, value, base, fmt_chr, padding):
+    lit = ibis.literal(value)
+    expr = lit.convert_base(base)
+    result = con.execute(expr)
+    # backends return these values with different padding and case, so we
+    # do a bit of post processing here
+    assert result.lower().rjust(padding, "0") == f"{value:0>{padding}{fmt_chr}}"
