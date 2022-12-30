@@ -652,17 +652,11 @@ class IntegerValue(NumericValue):
         """
         return ops.IntervalFromInteger(self, unit).to_expr()
 
-    def convert_base(
-        self,
-        from_base: IntegerValue,
-        to_base: IntegerValue,
-    ) -> IntegerValue:
+    def convert_base(self, to_base: IntegerValue) -> IntegerValue:
         """Convert an integer from one base to another.
 
         Parameters
         ----------
-        from_base
-            Numeric base of expression
         to_base
             New base
 
@@ -671,7 +665,7 @@ class IntegerValue(NumericValue):
         IntegerValue
             Converted expression
         """
-        return ops.BaseConvert(self, from_base, to_base).to_expr()
+        return ops.BaseConvert(self, 10, to_base).to_expr()
 
     def __and__(self, other: IntegerValue) -> IntegerValue | NotImplemented:
         """Bitwise and `self` with `other`."""
