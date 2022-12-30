@@ -1360,3 +1360,15 @@ def _first_value(op, **kw):
 @translate_val.register(ops.LastValue)
 def _last_value(op, **kw):
     return f"last_value({translate_val(op.arg, **kw)})"
+
+
+@translate_val.register(ops.BaseConvert)
+def _base_convert(op, **kw):
+    if not op.arg.output_dtype.is_integer():
+        raise TypeError("Can only convert from integer type")
+    arg = translate_val(op.arg, **kw)
+    to_base = translate_val(op.to_base, **kw)
+    check = f"{to_base} NOT IN (2, 16)"
+    msg = "Invalid base, only 2 and 16 are supported"
+    to_base = f"if(throwIf({check}, {msg!r}) = 0, {to_base}, NULL)"
+    return f"if({to_base} = 2, bin({arg}), hex({arg}))"
