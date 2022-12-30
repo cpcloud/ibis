@@ -619,6 +619,7 @@ _invalid_operations = {
     ops.Capitalize,
     ops.DateDiff,
     ops.TimestampDiff,
+    ops.BaseConvert,
 }
 
 OPERATION_REGISTRY = {
