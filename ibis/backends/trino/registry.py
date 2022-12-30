@@ -196,6 +196,14 @@ def _array_slice(t, op):
     return sa.func.slice(arg, start + 1, length, type_=arg.type)
 
 
+def _base_convert(t, op):
+    arg = t.translate(op.arg)
+    to_base = t.translate(op.to_base)
+    if op.arg.output_dtype.is_string():
+        arg = sa.func.from_base(arg, t.translate(op.from_base))
+    return sa.func.to_base(arg, to_base)
+
+
 operation_registry.update(
     {
         # conditional expressions
@@ -271,5 +279,6 @@ operation_registry.update(
         ops.MapContains: fixed_arity(
             lambda arg, key: sa.func.contains(sa.func.map_keys(arg), key), 2
         ),
+        ops.BaseConvert: _base_convert,
     }
 )
