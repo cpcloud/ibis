@@ -217,5 +217,6 @@ operation_registry.update(
         ops.DayOfWeekIndex: _day_of_week_index,
         ops.DayOfWeekName: _day_of_week_name,
         ops.JSONGetItem: _json_get_item,
+        ops.BaseConvert: fixed_arity(sa.func.conv, 3),
     }
 )
