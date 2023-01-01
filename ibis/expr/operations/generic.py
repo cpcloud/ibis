@@ -262,9 +262,20 @@ class Pi(Constant):
 
 
 @public
-class Hash(Value):
+class DecimalPrecision(Unary):
+    arg = rlz.decimal
+    output_dtype = dt.int32
+
+
+@public
+class DecimalScale(Unary):
+    arg = rlz.decimal
+    output_dtype = dt.int32
+
+
+@public
+class Fingerprint(Value):
     arg = rlz.any
-    how = rlz.isin({'fnv', 'farm_fingerprint'})
 
     output_dtype = dt.int64
     output_shape = rlz.shape_like("arg")
@@ -272,8 +283,17 @@ class Hash(Value):
 
 @public
 class HashBytes(Value):
-    arg = rlz.one_of({rlz.value(dt.string), rlz.value(dt.binary)})
-    how = rlz.isin({'md5', 'sha1', 'sha256', 'sha512'})
+    arg = rlz.binary
+    how = rlz.string
+
+    output_dtype = dt.binary
+    output_shape = rlz.shape_like("arg")
+
+
+@public
+class HashString(Value):
+    arg = rlz.string
+    how = rlz.string
 
     output_dtype = dt.binary
     output_shape = rlz.shape_like("arg")

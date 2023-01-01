@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ibis.expr import types as ir
@@ -13,10 +13,7 @@ from ibis.expr.types.generic import Column, Scalar, Value
 
 @public
 class BinaryValue(Value):
-    def hashbytes(
-        self,
-        how: Literal["md5", "sha1", "sha256", "sha512"] = "sha256",
-    ) -> ir.BinaryValue:
+    def hash(self, how: str = "sha256") -> ir.BinaryValue:
         """Compute the binary hash value of `arg`.
 
         Parameters

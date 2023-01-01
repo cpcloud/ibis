@@ -159,10 +159,7 @@ class StringValue(Value):
         """
         return ops.StringContains(self, substr).to_expr()
 
-    def hashbytes(
-        self,
-        how: Literal["md5", "sha1", "sha256", "sha512"] = "sha256",
-    ) -> ir.BinaryValue:
+    def hash(self, how: str = "sha256") -> ir.BinaryValue:
         """Compute the binary hash value of the input.
 
         Parameters
@@ -175,7 +172,7 @@ class StringValue(Value):
         BinaryValue
             Binary expression
         """
-        return ops.HashBytes(self, how).to_expr()
+        return ops.HashString(self, how).to_expr()
 
     def substr(
         self,

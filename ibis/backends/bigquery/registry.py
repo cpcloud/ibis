@@ -117,17 +117,6 @@ def _array_index(translator, op):
     return f"{arg}[SAFE_OFFSET({index})]"
 
 
-def _hash(translator, op):
-    arg, how = op.args
-
-    arg_formatted = translator.translate(arg)
-
-    if how == "farm_fingerprint":
-        return f"farm_fingerprint({arg_formatted})"
-    else:
-        raise NotImplementedError(how)
-
-
 def _string_find(translator, op):
     haystack, needle, start, end = op.args
 
@@ -622,7 +611,7 @@ OPERATION_REGISTRY = {
     ops.TimestampNow: fixed_arity("CURRENT_TIMESTAMP", 0),
     ops.TimestampSub: _timestamp_op("TIMESTAMP_SUB", {"h", "m", "s", "ms", "us"}),
     ops.TimestampTruncate: _truncate("TIMESTAMP", _timestamp_units),
-    ops.Hash: _hash,
+    ops.Fingerprint: fixed_arity("FARM_FINGERPRINT", 1),
     ops.StringReplace: fixed_arity("REPLACE", 3),
     ops.StringSplit: fixed_arity("SPLIT", 2),
     ops.StringConcat: _string_concat,

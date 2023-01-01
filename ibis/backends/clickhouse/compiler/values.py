@@ -329,24 +329,25 @@ def _sign(op, **kw):
     return f"intDivOrZero({arg}, abs({arg}))"
 
 
-@translate_val.register(ops.Hash)
-def _hash(op, **kw):
+@translate_val.register(ops.HashBytes)
+@translate_val.register(ops.HashString)
+def _hash_string_bytes(op, **kw):
     algorithms = {
-        "MD5",
-        "halfMD5",
-        "SHA1",
-        "SHA224",
-        "SHA256",
-        "intHash32",
-        "intHash64",
-        "cityHash64",
-        "sipHash64",
-        "sipHash128",
+        "md5": "MD5",
+        "halfMD5": "halfMD5",
+        "sha1": "SHA1",
+        "sha224": "SHA224",
+        "sha256": "SHA256",
+        "intHash32": "intHash32",
+        "intHash64": "intHash64",
+        "cityHash64": "cityHash64",
+        "sipHash64": "sipHash64",
+        "sipHash128": "sipHash128",
     }
 
     arg = translate_val(op.arg, **kw)
-    if (how := op.how) not in algorithms:
-        raise com.UnsupportedOperationError(f"Unsupported hash algorithm {how}")
+    if (how := algorithms.get(op.how)) is None:
+        raise com.UnsupportedOperationError(f"Unsupported hash algorithm {op.how}")
 
     return f"{how}({arg})"
 
