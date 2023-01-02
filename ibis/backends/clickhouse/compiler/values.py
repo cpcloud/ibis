@@ -332,6 +332,11 @@ def _sign(op, **kw):
 @translate_val.register(ops.HashBytes)
 @translate_val.register(ops.HashString)
 def _hash_string_bytes(op, **kw):
+    if not isinstance(op.how, ops.Literal):
+        raise TypeError("`how` must be a literal string")
+
+    raw_how = op.how.value
+
     algorithms = {
         "md5": "MD5",
         "halfMD5": "halfMD5",
@@ -346,8 +351,8 @@ def _hash_string_bytes(op, **kw):
     }
 
     arg = translate_val(op.arg, **kw)
-    if (how := algorithms.get(op.how)) is None:
-        raise com.UnsupportedOperationError(f"Unsupported hash algorithm {op.how}")
+    if (how := algorithms.get(raw_how)) is None:
+        raise com.UnsupportedOperationError(f"Unsupported hash algorithm {raw_how}")
 
     return f"{how}({arg})"
 
