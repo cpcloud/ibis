@@ -352,6 +352,13 @@ def _hash_string_bytes(op, **kw):
     return f"{how}({arg})"
 
 
+@translate_val.register(ops.Fingerprint)
+def _fingerprint(op, **kw):
+    # when the result of farmFingerprint64 is larger than can be represented by
+    # an int64 this will return the equivalent bytes in int64 space
+    return f"toInt64(farmFingerprint64({translate_val(op.arg, **kw)}))"
+
+
 @translate_val.register(ops.Log)
 def _log(op, **kw):
     arg = translate_val(op.arg, **kw)
