@@ -153,6 +153,11 @@ def _unnest(t, op):
     return sa.func.unnest(t.translate(arg)).table_valued(name).render_derived().c[name]
 
 
+def _hash_string(t, op):
+    how = op.how.value
+    return getattr(sa.func, how)(sa.cast(t.translate(op.arg), sa.VARBINARY))
+
+
 operation_registry.update(
     {
         # conditional expressions
@@ -307,6 +312,7 @@ operation_registry.update(
         ),
         ops.TypeOf: unary(sa.func.typeof),
         ops.Unnest: _unnest,
+        ops.HashString: _hash_string,
     }
 )
 

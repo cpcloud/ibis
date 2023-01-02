@@ -1922,3 +1922,21 @@ def compile_argmin(t, op, **kwargs):
 @compiles(ops.ArgMax)
 def compile_argmax(t, op, **kwargs):
     return compile_aggregator(t, op, fn=F.max_by, **kwargs)
+
+
+@compiles(ops.Fingerprint)
+def compile_fingerprint(t, op, **kwargs):
+    return F.hash(t.translate(op.arg, **kwargs))
+
+
+_SHA2_BITS = {"sha224": 224, "sha256": 256, "sha384": 384, "sha512": 512}
+
+
+@compiles(ops.HashString)
+def compile_hash_string(t, op, **kwargs):
+    arg = t.translate(op.arg, **kwargs)
+    how = t.translate(op.how, raw=True, **kwargs)
+    try:
+        return F.sha2(arg, _SHA2_BITS[how])
+    except KeyError:
+        return getattr(F, how)(arg)

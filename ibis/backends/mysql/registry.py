@@ -116,6 +116,16 @@ def _json_get_item(t, op):
     return sa.func.json_extract(arg, path)
 
 
+def _hash_string_bytes(t, op):
+    how = op.how.value
+
+    arg = t.translate(op.arg)
+    if how in ("sha224", "sha256", "sha384", "sha512"):
+        hash_length = int(how[3:])
+        return sa.func.sha2(arg, hash_length)
+    return getattr(sa.func, how)(arg)
+
+
 operation_registry.update(
     {
         ops.Literal: _literal,
@@ -182,5 +192,7 @@ operation_registry.update(
         ),
         ops.DayOfWeekName: fixed_arity(lambda arg: sa.func.dayname(arg), 1),
         ops.JSONGetItem: _json_get_item,
+        ops.HashBytes: _hash_string_bytes,
+        ops.HashString: _hash_string_bytes,
     }
 )

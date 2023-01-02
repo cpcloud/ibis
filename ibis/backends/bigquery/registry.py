@@ -551,6 +551,10 @@ def _nth_value(t, op):
     return f'NTH_VALUE({arg}, {nth_op.value + 1})'
 
 
+def _hash_string_bytes(t, op):
+    return f"{op.how.value.upper()}({t.translate(op.arg)})"
+
+
 OPERATION_REGISTRY = {
     **operation_registry,
     # Literal
@@ -612,6 +616,8 @@ OPERATION_REGISTRY = {
     ops.TimestampSub: _timestamp_op("TIMESTAMP_SUB", {"h", "m", "s", "ms", "us"}),
     ops.TimestampTruncate: _truncate("TIMESTAMP", _timestamp_units),
     ops.Fingerprint: fixed_arity("FARM_FINGERPRINT", 1),
+    ops.HashString: _hash_string_bytes,
+    ops.HashBytes: _hash_string_bytes,
     ops.StringReplace: fixed_arity("REPLACE", 3),
     ops.StringSplit: fixed_arity("SPLIT", 2),
     ops.StringConcat: _string_concat,

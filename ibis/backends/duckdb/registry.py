@@ -25,7 +25,10 @@ from ibis.backends.postgres.registry import (
 
 operation_registry = {
     op: operation_registry[op]
-    for op in operation_registry.keys() - geospatial_functions.keys()
+    for op in (
+        operation_registry.keys()
+        - {ops.HashBytes, ops.HashString, *geospatial_functions.keys()}
+    )
 }
 
 

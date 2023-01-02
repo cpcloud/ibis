@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import inspect
 import math
 import operator
@@ -279,6 +280,19 @@ def _ibis_sqlite_pi():
 @udf
 def _ibis_sqlite_e():
     return math.e
+
+
+@udf
+def _ibis_sqlite_hash_string(s: str | None, how: str):
+    return _ibis_sqlite_hash_bytes(s.encode(), how)
+
+
+@udf
+def _ibis_sqlite_hash_bytes(b: bytes | None, how: str):
+    if b is None:
+        return b
+    hash_func = getattr(hashlib, how)
+    return hash_func(b).digest()
 
 
 class _ibis_sqlite_var:

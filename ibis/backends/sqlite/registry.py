@@ -315,5 +315,7 @@ operation_registry.update(
         ops.E: fixed_arity(sa.func._ibis_sqlite_e, 0),
         ops.TypeOf: unary(sa.func.typeof),
         ops.Literal: _literal,
+        ops.HashString: fixed_arity(sa.func._ibis_sqlite_hash_string, 2),
+        ops.HashBytes: fixed_arity(sa.func._ibis_sqlite_hash_bytes, 2),
     }
 )

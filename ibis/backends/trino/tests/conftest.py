@@ -130,6 +130,12 @@ class TestConf(BackendTest, RoundAwayFromZero):
     def awards_players(self):
         return self._remap_column_names("awards_players")
 
+    @staticmethod
+    def convert_hashed_data(raw):
+        import base64
+
+        return raw.map(lambda x: base64.b64encode(x).decode())
+
 
 @pytest.fixture(scope='session')
 def con(tmp_path_factory, data_directory, script_directory, worker_id):

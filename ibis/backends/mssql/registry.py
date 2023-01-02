@@ -111,6 +111,16 @@ def _timestamp_truncate(t, op):
     return sa.func.datetrunc(sa.text(_truncate_precisions[unit]), arg)
 
 
+def _hash_string(t, op):
+    how = op.how.value
+
+    arg = t.translate(op.arg)
+    if how in ("sha224", "sha256", "sha384", "sha512"):
+        hash_length = int(how[3:])
+        return sa.func.sha2(arg, hash_length)
+    return getattr(sa.func, how)(arg)
+
+
 operation_registry = sqlalchemy_operation_registry.copy()
 operation_registry.update(sqlalchemy_window_functions_registry)
 

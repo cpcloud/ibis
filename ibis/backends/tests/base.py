@@ -205,3 +205,7 @@ class BackendTest(abc.ABC):
 
     def make_context(self, params: Mapping[ir.Value, Any] | None = None):
         return self.api.compiler.make_context(params=params)
+
+    @staticmethod
+    def convert_hashed_data(raw):
+        return raw

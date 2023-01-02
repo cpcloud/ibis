@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import binascii
 import os
 from datetime import datetime, timezone
 
@@ -222,6 +223,10 @@ class TestConf(BackendTest, RoundAwayFromZero):
     @staticmethod
     def connect(data_directory):
         return get_pyspark_testing_client(data_directory)
+
+    @staticmethod
+    def convert_hashed_data(raw):
+        return raw.map(lambda x: binascii.hexlify(x).decode())
 
 
 @pytest.fixture(scope='session')

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import binascii
 import os
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,10 @@ class TestConf(BackendTest, RoundHalfToEven):
             database=IBIS_TEST_MYSQL_DB,
             port=MYSQL_PORT,
         )
+
+    @staticmethod
+    def convert_hashed_data(raw):
+        return raw.map(lambda x: binascii.hexlify(x).decode())
 
 
 @pytest.fixture(scope='session')

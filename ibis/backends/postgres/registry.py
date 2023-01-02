@@ -459,6 +459,18 @@ def _binary_variance_reduction(func):
     return variance_compiler
 
 
+def _hash_string(t, op):
+    arg = t.translate(op.arg)
+    how = op.how.value
+    return sa.func.encode(getattr(sa.func, how)(sa.func.convert_to(arg, "UTF8")), "hex")
+
+
+def _hash_bytes(t, op):
+    arg = t.translate(op.arg)
+    how = op.how.value
+    return sa.func.encode(getattr(sa.func, how)(arg), "hex")
+
+
 operation_registry.update(
     {
         ops.Literal: _literal,
@@ -587,5 +599,7 @@ operation_registry.update(
         ops.MapMerge: fixed_arity(operator.add, 2),
         ops.MapLength: unary(lambda arg: sa.func.cardinality(arg.keys())),
         ops.Map: fixed_arity(pg.hstore, 2),
+        ops.HashString: _hash_string,
+        ops.HashBytes: _hash_bytes,
     }
 )

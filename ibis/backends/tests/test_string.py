@@ -1,3 +1,6 @@
+import hashlib
+
+import pandas.testing as tm
 import pytest
 from pytest import param
 
@@ -476,3 +479,15 @@ def test_parse_url(con, result_func, expected):
     expr = result_func(ibis.literal(url).name("url"))
     result = con.execute(expr)
     assert result == expected
+
+
+@pytest.mark.notimpl(
+    ["dask", "datafusion", "duckdb", "impala", "mssql", "pandas", "polars", "snowflake"]
+)
+def test_hash_string(backend, alltypes, df):
+    expr = alltypes.string_col.hash().name("hashed")
+    result = expr.execute()
+    hash_func = hashlib.sha256
+    raw_expected = df.string_col.map(lambda v: hash_func(v.encode()).digest())
+    expected = backend.convert_hashed_data(raw_expected).rename("hashed")
+    tm.assert_series_equal(result, expected)

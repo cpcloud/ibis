@@ -161,11 +161,26 @@ def _unnest(t, op):
     return sa.cast(sa.func.nullif(col, ""), type_=sqla_type)
 
 
+def _hash_string(t, op):
+    how = op.how.value
+
+    arg = t.translate(op.arg)
+    if how in ("sha224", "sha256", "sha384", "sha512"):
+        hash_length = int(how[3:])
+        return sa.func.sha2(arg, hash_length)
+    return getattr(sa.func, how)(arg)
+
+
 _TIMESTAMP_UNITS_TO_SCALE = {"s": 0, "ms": 3, "us": 6, "ns": 9}
 
 _SF_POS_INF = sa.func.to_double("Inf")
 _SF_NEG_INF = sa.func.to_double("-Inf")
 _SF_NAN = sa.func.to_double("NaN")
+
+
+_SF_POS_INF = sa.cast(sa.literal("Inf"), sa.FLOAT)
+_SF_NEG_INF = -_SF_POS_INF
+_SF_NAN = sa.cast(sa.literal("NaN"), sa.FLOAT)
 
 operation_registry.update(
     {
@@ -294,6 +309,8 @@ operation_registry.update(
             *itertools.chain.from_iterable(zip(op.names, map(t.translate, op.values)))
         ),
         ops.Unnest: _unnest,
+        ops.Fingerprint: fixed_arity(sa.func.hash, 1),
+        ops.HashString: _hash_string,
     }
 )
 
