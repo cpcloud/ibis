@@ -84,9 +84,9 @@ def test_day_of_week(case, dtype, snapshot):
         param(b"test of hash", dt.binary, id="binary"),
     ],
 )
-def test_hash(case, dtype, snapshot):
+def test_fingerprint(case, dtype, snapshot):
     var = ibis.literal(case, type=dtype)
-    expr = var.hash(how="farm_fingerprint")
+    expr = var.fingerprint()
     snapshot.assert_match(to_sql(expr), "out.sql")
 
 
