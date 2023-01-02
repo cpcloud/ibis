@@ -283,6 +283,7 @@ def column(inner, arg, **kwargs):
 
 
 any = value(None)
+binary = value(dt.binary)
 double = value(dt.double)
 string = value(dt.string)
 boolean = value(dt.boolean)
