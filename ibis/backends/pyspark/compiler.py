@@ -1926,7 +1926,7 @@ def compile_argmax(t, op, **kwargs):
 
 @compiles(ops.Fingerprint)
 def compile_fingerprint(t, op, **kwargs):
-    return F.hash(t.translate(op.arg, **kwargs))
+    return F.cast(pt.LongType(), F.hash(t.translate(op.arg, **kwargs)))
 
 
 _SHA2_BITS = {"sha224": 224, "sha256": 256, "sha384": 384, "sha512": 512}
