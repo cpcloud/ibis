@@ -154,8 +154,11 @@ def _unnest(t, op):
 
 
 def _hash_string(t, op):
-    how = op.how.value
-    return getattr(sa.func, how)(sa.cast(t.translate(op.arg), sa.VARBINARY))
+    return getattr(sa.func, op.how.value)(sa.cast(t.translate(op.arg), sa.VARBINARY))
+
+
+def _hash_bytes(t, op):
+    return getattr(sa.func, op.how.value)(t.translate(op.arg))
 
 
 operation_registry.update(
@@ -313,6 +316,7 @@ operation_registry.update(
         ops.TypeOf: unary(sa.func.typeof),
         ops.Unnest: _unnest,
         ops.HashString: _hash_string,
+        ops.HashBytes: _hash_bytes,
     }
 )
 
