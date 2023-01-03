@@ -1,5 +1,6 @@
 import hashlib
 
+import numpy as np
 import pandas.testing as tm
 import pytest
 from pytest import param
@@ -491,3 +492,25 @@ def test_hash_string(backend, alltypes, df):
     raw_expected = df.string_col.map(lambda v: hash_func(v.encode()).digest())
     expected = backend.convert_hashed_data(raw_expected).rename("hashed")
     tm.assert_series_equal(result, expected)
+
+
+@pytest.mark.notimpl(
+    [
+        "dask",
+        "datafusion",
+        "duckdb",
+        "mssql",
+        "mysql",
+        "pandas",
+        "polars",
+        "postgres",
+        "sqlite",
+        "trino",
+    ]
+)
+def test_fingerprint(alltypes):
+    expr = alltypes.string_col.fingerprint().name("fp")
+    result = expr.execute()
+    assert result.name == "fp"
+    assert not result.empty
+    assert result.dtype == np.int64
