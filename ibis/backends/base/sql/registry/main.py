@@ -351,7 +351,6 @@ operation_registry = {
     ops.DateTruncate: timestamp.truncate,
     ops.IntervalFromInteger: timestamp.interval_from_integer,
     # Other operations
-    ops.E: lambda *args: 'e()',
     ops.Literal: literal,
     ops.NullLiteral: null_literal,
     ops.Cast: cast,
