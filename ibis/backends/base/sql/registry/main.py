@@ -84,21 +84,14 @@ def sign(translator, op):
     return f'sign({translated_arg})'
 
 
+_VALID_HOWS = frozenset(("md5", "sha1", "sha256", "sha512"))
+
+
 def hashbytes(translator, op):
-    how = op.how
-
-    arg_formatted = translator.translate(op.arg)
-
-    if how == 'md5':
-        return f'md5({arg_formatted})'
-    elif how == 'sha1':
-        return f'sha1({arg_formatted})'
-    elif how == 'sha256':
-        return f'sha256({arg_formatted})'
-    elif how == 'sha512':
-        return f'sha512({arg_formatted})'
-    else:
+    if (how := op.how) not in _VALID_HOWS:
         raise NotImplementedError(how)
+
+    return f"{how}({translator.translate(op.arg)})"
 
 
 def log(translator, op):
