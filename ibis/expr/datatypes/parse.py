@@ -130,7 +130,9 @@ def parse(text: str) -> dt.DataType:
         .combine_dict(dict)
     )
 
-    timestamp_no_tz_args = LPAREN.then(parsy.seq(scale=timestamp_scale).skip(RPAREN))
+    timestamp_no_tz_args = LPAREN.then(
+        timestamp_scale.map(lambda scale: dict(timezone=None, scale=scale)).skip(RPAREN)
+    )
 
     timestamp = spaceless_string("timestamp").then(
         parsy.alt(timestamp_tz_args, timestamp_no_tz_args)
@@ -140,42 +142,17 @@ def parse(text: str) -> dt.DataType:
 
     @parsy.generate
     def angle_type():
-        yield LANGLE
-        value_type = yield ty
-        yield RANGLE
-        return value_type
+        return (yield LANGLE.then(ty).skip(RANGLE))
 
-    timestamp_no_tz_args = LPAREN.then(
-        timestamp_scale.map(lambda scale: dict(timezone=None, scale=scale)).skip(RPAREN)
+    interval = spaceless_string("interval").then(
+        parsy.seq(
+            value_type=angle_type.optional(),
+            unit=parened_string.optional(default="s"),
+        ).combine_dict(dt.Interval)
     )
 
-    @parsy.generate
-    def interval():
-        yield spaceless_string("interval")
-        value_type = yield angle_type.optional()
-        unit = yield parened_string.optional()
-        return dt.Interval(
-            value_type=value_type,
-            unit=unit if unit is not None else "s",
-        )
-
-    timestamp = spaceless_string("timestamp").then(
-        parsy.alt(timestamp_tz_args, timestamp_no_tz_args)
-        .optional(default={})
-        .combine_dict(dt.Timestamp)
-    )
-
-    @parsy.generate
-    def array():
-        yield spaceless_string("array")
-        value_type = yield angle_type
-        return dt.Array(value_type)
-
-    @parsy.generate
-    def set():
-        yield spaceless_string("set")
-        value_type = yield angle_type
-        return dt.Set(value_type)
+    array = spaceless_string("array").then(angle_type.map(dt.Array))
+    set = spaceless_string("set").then(angle_type.map(dt.Set))
 
     @parsy.generate
     def map():
