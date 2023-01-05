@@ -112,17 +112,12 @@ def parse(text: str) -> dt.DataType:
         .result(dt.string)
     )
 
-    @parsy.generate
-    def decimal():
-        yield spaceless_string("decimal")
-        precision, scale = (
-            yield LPAREN.then(
-                parsy.seq(spaceless(PRECISION).skip(COMMA), spaceless(SCALE))
-            )
-            .skip(RPAREN)
-            .optional()
-        ) or (None, None)
-        return dt.Decimal(precision=precision, scale=scale)
+    decimal = spaceless_string("decimal").then(
+        LPAREN.then(parsy.seq(spaceless(PRECISION).skip(COMMA), spaceless(SCALE)))
+        .skip(RPAREN)
+        .optional(default=(None, None))
+        .combine(dt.Decimal)
+    )
 
     parened_string = LPAREN.then(RAW_STRING).skip(RPAREN)
     timestamp_scale = SINGLE_DIGIT.map(int)
