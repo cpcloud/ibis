@@ -106,12 +106,11 @@ def parse(text: str) -> dt.DataType:
         | geotype_parser("multipoint").combine_dict(dt.MultiPoint)
     )
 
-    @parsy.generate
-    def varchar_or_char():
-        yield spaceless_string("varchar", "char").then(
-            LPAREN.then(RAW_NUMBER).skip(RPAREN).optional()
-        )
-        return dt.String()
+    varchar_or_char = (
+        spaceless_string("varchar", "char")
+        .then(LPAREN.then(RAW_NUMBER).skip(RPAREN).optional())
+        .result(dt.string)
+    )
 
     @parsy.generate
     def decimal():
