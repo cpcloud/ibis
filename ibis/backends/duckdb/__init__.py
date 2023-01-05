@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
-from ibis.backends.base.sql.alchemy import BaseAlchemyBackend
+from ibis.backends.base.sql.alchemy import BaseAlchemyBackend, to_sqla_type
 from ibis.backends.duckdb.compiler import DuckDBSQLCompiler
 from ibis.backends.duckdb.datatypes import parse
 
