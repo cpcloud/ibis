@@ -145,6 +145,10 @@ def parse(text: str) -> dt.DataType:
         yield RANGLE
         return value_type
 
+    timestamp_no_tz_args = LPAREN.then(
+        timestamp_scale.map(lambda scale: dict(timezone=None, scale=scale)).skip(RPAREN)
+    )
+
     @parsy.generate
     def interval():
         yield spaceless_string("interval")
@@ -154,6 +158,12 @@ def parse(text: str) -> dt.DataType:
             value_type=value_type,
             unit=unit if unit is not None else "s",
         )
+
+    timestamp = spaceless_string("timestamp").then(
+        parsy.alt(timestamp_tz_args, timestamp_no_tz_args)
+        .optional(default={})
+        .combine_dict(dt.Timestamp)
+    )
 
     @parsy.generate
     def array():
