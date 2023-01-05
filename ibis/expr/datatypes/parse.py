@@ -62,37 +62,14 @@ def parse(text: str) -> dt.DataType:
     srid = NUMBER
     geotype = spaceless_string("geography") | spaceless_string("geometry")
 
-    @parsy.generate
-    def srid_geotype():
-        yield SEMICOLON
-        sr = yield srid
-        yield COLON
-        gt = yield geotype
-        return (gt, sr)
+    srid_geotype = SEMICOLON.then(parsy.seq(srid=srid.skip(COLON), geotype=geotype))
+    geotype_part = COLON.then(parsy.seq(geotype=geotype))
+    srid_part = SEMICOLON.then(parsy.seq(srid=srid))
 
-    @parsy.generate
-    def geotype_part():
-        yield COLON
-        gt = yield geotype
-        return (gt, None)
-
-    @parsy.generate
-    def srid_part():
-        yield SEMICOLON
-        sr = yield srid
-        return (None, sr)
-
-    def geotype_parser(name, type):
-        name_parser = spaceless_string(name)
-        geosubtype_parser = srid_geotype | geotype_part | srid_part
-
-        @parsy.generate
-        def parser():
-            yield name_parser
-            gt_sr = yield geosubtype_parser.optional()
-            return type(*gt_sr) if gt_sr is not None else type()
-
-        return parser
+    def geotype_parser(name):
+        return spaceless_string(name).then(
+            parsy.alt(srid_geotype, geotype_part, srid_part).optional(default={})
+        )
 
     primitive = (
         spaceless_string("boolean").result(dt.boolean)  # docprecated
@@ -121,12 +98,12 @@ def parse(text: str) -> dt.DataType:
         | spaceless_string("geometry").result(dt.GeoSpatial(geotype='geometry'))
         | spaceless_string("geography").result(dt.GeoSpatial(geotype='geography'))
         | spaceless_string("null").result(dt.null)
-        | geotype_parser("linestring", dt.LineString)
-        | geotype_parser("polygon", dt.Polygon)
-        | geotype_parser("point", dt.Point)
-        | geotype_parser("multilinestring", dt.MultiLineString)
-        | geotype_parser("multipolygon", dt.MultiPolygon)
-        | geotype_parser("multipoint", dt.MultiPoint)
+        | geotype_parser("linestring").combine_dict(dt.LineString)
+        | geotype_parser("polygon").combine_dict(dt.Polygon)
+        | geotype_parser("point").combine_dict(dt.Point)
+        | geotype_parser("multilinestring").combine_dict(dt.MultiLineString)
+        | geotype_parser("multipolygon").combine_dict(dt.MultiPolygon)
+        | geotype_parser("multipoint").combine_dict(dt.MultiPoint)
     )
 
     @parsy.generate
