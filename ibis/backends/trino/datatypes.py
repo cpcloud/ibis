@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import parsy as p
+from functools import partial
+
+import parsy
 import sqlalchemy as sa
 from sqlalchemy.ext.compiler import compiles
 from trino.sqlalchemy.datatype import DOUBLE, JSON, MAP, ROW, TIMESTAMP
@@ -44,14 +46,17 @@ from ibis.expr.datatypes import (
 )
 
 
-def parse(text: str, default_decimal_parameters=(18, 3)) -> DataType:
+def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
     """Parse a Trino type into an ibis data type."""
 
-    @p.generate
-    def timestamp():
-        yield spaceless_string("timestamp")
-        yield LPAREN.then(SINGLE_DIGIT.map(int)).skip(RPAREN).optional()
-        return Timestamp(timezone="UTC")
+    timestamp = (
+        spaceless_string("timestamp")
+        .then(LPAREN)
+        .then(parsy.seq(scale=SINGLE_DIGIT.map(int)))
+        .skip(RPAREN)
+        .optional()
+        .combine_dict(partial(Timestamp, timezone="UTC"))
+    )
 
     primitive = (
         spaceless_string("interval").result(Interval())
@@ -72,56 +77,38 @@ def parse(text: str, default_decimal_parameters=(18, 3)) -> DataType:
         | spaceless_string("ipaddress").result(inet)
     )
 
-    @p.generate
-    def decimal():
-        yield spaceless_string("decimal", "numeric")
-        prec_scale = (
-            yield LPAREN.then(
-                p.seq(PRECISION.skip(COMMA), SCALE).combine(
-                    lambda prec, scale: (prec, scale)
-                )
-            )
-            .skip(RPAREN)
-            .optional()
-        ) or default_decimal_parameters
-        return Decimal(*prec_scale)
+    decimal = (
+        spaceless_string("decimal", "numeric")
+        .then(LPAREN)
+        .then(parsy.seq(precision=PRECISION.skip(COMMA), scale=SCALE))
+        .skip(RPAREN)
+        .optional(dict(precision=default_precision, scale=default_scale))
+        .combine_dict(Decimal)
+    )
 
-    @p.generate
-    def angle_type():
-        yield LPAREN
-        value_type = yield ty
-        yield RPAREN
-        return value_type
+    ty = parsy.forward_declaration()
 
-    @p.generate
-    def array():
-        yield spaceless_string("array")
-        value_type = yield angle_type
-        return Array(value_type)
+    angle_type = LPAREN.then(ty).skip(RPAREN)
 
-    @p.generate
-    def map():
-        yield spaceless_string("map")
-        yield LPAREN
-        key_type = yield primitive
-        yield COMMA
-        value_type = yield ty
-        yield RPAREN
-        return Map(key_type, value_type)
+    array = spaceless_string("array").then(angle_type).map(Array)
+
+    map = (
+        spaceless_string("map")
+        .then(LPAREN)
+        .then(parsy.seq(primitive.skip(COMMA), ty).combine(Map))
+        .then(RPAREN)
+    )
 
     field = spaceless(FIELD)
 
-    @p.generate
-    def struct():
-        yield spaceless_string("row")
-        yield LPAREN
-        field_names_types = yield (
-            p.seq(field, ty).combine(lambda field, ty: (field, ty)).sep_by(COMMA)
-        )
-        yield RPAREN
-        return Struct.from_tuples(field_names_types)
+    struct = (
+        spaceless_string("row")
+        .then(LPAREN)
+        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(Struct.from_tuples))
+        .skip(RPAREN)
+    )
 
-    ty = primitive | decimal | array | map | struct
+    ty.become(primitive | decimal | array | map | struct)
     return ty.parse(text)
 
 

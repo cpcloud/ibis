@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import parsy as p
+import parsy
 import toolz
 
 from ibis import util
 from ibis.common.parsing import (
     COMMA,
     FIELD,
-    LANGLE,
     LBRACKET,
     LPAREN,
     PRECISION,
-    RANGLE,
     RBRACKET,
     RPAREN,
     SCALE,
@@ -46,7 +44,7 @@ from ibis.expr.datatypes import (
 )
 
 
-def parse(text: str, default_decimal_parameters=(18, 3)) -> DataType:
+def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
     """Parse a DuckDB type into an ibis data type."""
     primitive = (
         spaceless_string("interval").result(Interval())
@@ -89,68 +87,45 @@ def parse(text: str, default_decimal_parameters=(18, 3)) -> DataType:
         | spaceless_string("json").result(json)
     )
 
-    @p.generate
-    def decimal():
-        yield spaceless_string("decimal", "numeric")
-        prec_scale = (
-            yield LPAREN.then(
-                p.seq(PRECISION.skip(COMMA), SCALE).combine(
-                    lambda prec, scale: (prec, scale)
-                )
+    decimal = spaceless_string("decimal", "numeric").then(
+        LPAREN.then(
+            parsy.seq(precision=PRECISION.skip(COMMA), scale=SCALE).combine_dict(
+                Decimal
             )
-            .skip(RPAREN)
-            .optional()
-        ) or default_decimal_parameters
-        return Decimal(*prec_scale)
+        )
+        .skip(RPAREN)
+        .optional(Decimal(precision=default_precision, scale=default_scale))
+    )
 
-    @p.generate
-    def angle_type():
-        yield LANGLE
-        value_type = yield ty
-        yield RANGLE
-        return value_type
+    ty = parsy.forward_declaration()
+    non_pg_array_type = parsy.forward_declaration()
 
-    @p.generate
-    def list_array():
-        yield spaceless_string("list")
-        value_type = yield angle_type
-        return Array(value_type)
+    parened_type = LPAREN.then(ty).skip(RPAREN)
+    list_array = spaceless_string("list").then(parened_type).map(Array)
+    brackets = LBRACKET.then(RBRACKET)
 
-    @p.generate
-    def brackets():
-        yield spaceless(LBRACKET)
-        yield spaceless(RBRACKET)
+    pg_array = parsy.seq(non_pg_array_type, brackets.at_least(1).map(len)).map(
+        lambda value_type, ndims: toolz.nth(ndims, toolz.iterate(Array, value_type))
+    )
 
-    @p.generate
-    def pg_array():
-        value_type = yield non_pg_array_type
-        n = len((yield brackets.at_least(1)))
-        return toolz.nth(n, toolz.iterate(Array, value_type))
-
-    @p.generate
-    def map():
-        yield spaceless_string("map")
-        yield LANGLE
-        key_type = yield primitive
-        yield COMMA
-        value_type = yield ty
-        yield RANGLE
-        return Map(key_type, value_type)
+    map = (
+        spaceless_string("map")
+        .then(LPAREN)
+        .then(parsy.seq(primitive.skip(COMMA), ty).combine(Map))
+        .skip(RPAREN)
+    )
 
     field = spaceless(FIELD)
 
-    @p.generate
-    def struct():
-        yield spaceless_string("struct")
-        yield LPAREN
-        field_names_types = yield (
-            p.seq(field, ty).combine(lambda field, ty: (field, ty)).sep_by(COMMA)
-        )
-        yield RPAREN
-        return Struct.from_tuples(field_names_types)
+    struct = (
+        spaceless_string("struct")
+        .then(LPAREN)
+        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(Struct.from_tuples))
+        .skip(RPAREN)
+    )
 
-    non_pg_array_type = primitive | decimal | list_array | map | struct
-    ty = pg_array | non_pg_array_type
+    non_pg_array_type.become(primitive | decimal | list_array | map | struct)
+    ty.become(pg_array | non_pg_array_type)
     return ty.parse(text)
 
 

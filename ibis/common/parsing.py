@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+from functools import partial
 
 import parsy
 
@@ -18,26 +19,26 @@ def spaceless(parser):
 
 def spaceless_string(*strings: str):
     return spaceless(
-        parsy.alt(*(parsy.string(string, transform=str.lower) for string in strings))
+        parsy.alt(*map(partial(parsy.string, transform=str.lower), strings))
     )
 
 
-RAW_NUMBER = parsy.decimal_digit.at_least(1).concat()
-SINGLE_DIGIT = parsy.decimal_digit
+SINGLE_DIGIT = parsy.decimal_digit.desc("single digit")
+RAW_NUMBER = SINGLE_DIGIT.at_least(1).concat().desc("decimal number")
 PRECISION = SCALE = NUMBER = RAW_NUMBER.map(int)
 
-LPAREN = spaceless_string("(")
-RPAREN = spaceless_string(")")
+LPAREN = spaceless_string("(").desc("left parenthesis")
+RPAREN = spaceless_string(")").desc("right parenthesis")
 
-LBRACKET = spaceless_string("[")
-RBRACKET = spaceless_string("]")
+LBRACKET = spaceless_string("[").desc("left square bracket [")
+RBRACKET = spaceless_string("]").desc("right square bracket ]")
 
-LANGLE = spaceless_string("<")
-RANGLE = spaceless_string(">")
+LANGLE = spaceless_string("<").desc("left angle bracket")
+RANGLE = spaceless_string(">").desc("right angle bracket")
 
-COMMA = spaceless_string(",")
-COLON = spaceless_string(":")
-SEMICOLON = spaceless_string(";")
+COMMA = spaceless_string(",").desc("comma")
+COLON = spaceless_string(":").desc("colon")
+SEMICOLON = spaceless_string(";").desc("semicolon")
 
-RAW_STRING = parsy.regex(_STRING_REGEX).map(ast.literal_eval)
-FIELD = parsy.regex("[a-zA-Z_][a-zA-Z_0-9]*")
+RAW_STRING = parsy.regex(_STRING_REGEX).map(ast.literal_eval).desc("string")
+FIELD = parsy.regex("[a-zA-Z_][a-zA-Z_0-9]*").desc("field name")

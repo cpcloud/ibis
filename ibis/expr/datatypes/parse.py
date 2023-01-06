@@ -66,10 +66,9 @@ def parse(text: str) -> dt.DataType:
     geotype_part = COLON.then(parsy.seq(geotype=geotype))
     srid_part = SEMICOLON.then(parsy.seq(srid=srid))
 
-    def geotype_parser(name):
-        return spaceless_string(name).then(
-            parsy.alt(srid_geotype, geotype_part, srid_part).optional(default={})
-        )
+    geotype_parser = lambda name: spaceless_string(name).then(
+        (srid_geotype | geotype_part | srid_part).optional(default={})
+    )
 
     primitive = (
         spaceless_string("boolean").result(dt.boolean)  # docprecated
@@ -98,6 +97,12 @@ def parse(text: str) -> dt.DataType:
         | spaceless_string("geometry").result(dt.GeoSpatial(geotype='geometry'))
         | spaceless_string("geography").result(dt.GeoSpatial(geotype='geography'))
         | spaceless_string("null").result(dt.null)
+        | spaceless_string("json").result(dt.json)
+        | spaceless_string("uuid").result(dt.uuid)
+        | spaceless_string("macaddr").result(dt.macaddr)
+        | spaceless_string("inet").result(dt.inet)
+        | spaceless_string("geography").result(dt.geography)
+        | spaceless_string("geometry").result(dt.geometry)
         | geotype_parser("linestring").combine_dict(dt.LineString)
         | geotype_parser("polygon").combine_dict(dt.Polygon)
         | geotype_parser("point").combine_dict(dt.Point)
@@ -122,69 +127,54 @@ def parse(text: str) -> dt.DataType:
     parened_string = LPAREN.then(RAW_STRING).skip(RPAREN)
     timestamp_scale = SINGLE_DIGIT.map(int)
 
-    timestamp_tz_args = (
-        LPAREN.then(
-            parsy.seq(timezone=RAW_STRING, scale=COMMA.then(timestamp_scale).optional())
-        )
-        .skip(RPAREN)
-        .combine_dict(dict)
-    )
+    timestamp_tz_args = LPAREN.then(
+        parsy.seq(timezone=RAW_STRING, scale=COMMA.then(timestamp_scale).optional())
+    ).skip(RPAREN)
 
-    timestamp_no_tz_args = LPAREN.then(
-        timestamp_scale.map(lambda scale: dict(timezone=None, scale=scale)).skip(RPAREN)
-    )
+    timestamp_no_tz_args = LPAREN.then(parsy.seq(scale=timestamp_scale)).skip(RPAREN)
 
     timestamp = spaceless_string("timestamp").then(
-        parsy.alt(timestamp_tz_args, timestamp_no_tz_args)
+        (timestamp_tz_args | timestamp_no_tz_args)
         .optional(default={})
         .combine_dict(dt.Timestamp)
     )
 
-    @parsy.generate
-    def angle_type():
-        return (yield LANGLE.then(ty).skip(RANGLE))
+    ty = parsy.forward_declaration()
+
+    angle_type = LANGLE.then(ty).skip(RANGLE)
 
     interval = spaceless_string("interval").then(
         parsy.seq(
-            value_type=angle_type.optional(),
-            unit=parened_string.optional(default="s"),
+            value_type=angle_type.optional(), unit=parened_string.optional()
         ).combine_dict(dt.Interval)
     )
 
     array = spaceless_string("array").then(angle_type.map(dt.Array))
     set = spaceless_string("set").then(angle_type.map(dt.Set))
 
-    @parsy.generate
-    def map():
-        yield spaceless_string("map")
-        yield LANGLE
-        key_type = yield primitive
-        yield COMMA
-        value_type = yield ty
-        yield RANGLE
-        return dt.Map(key_type, value_type)
+    map = (
+        spaceless_string("map")
+        .then(LANGLE)
+        .then(parsy.seq(primitive.skip(COMMA), ty))
+        .skip(RANGLE)
+        .combine(dt.Map)
+    )
 
-    spaceless_field = spaceless(FIELD)
-
-    @parsy.generate
-    def struct():
-        yield spaceless_string("struct")
-        yield LANGLE
-        field_names_types = yield (
-            parsy.seq(spaceless_field.skip(COLON), ty)
-            .combine(lambda field, ty: (field, ty))
+    struct = (
+        spaceless_string("struct")
+        .then(LANGLE)
+        .then(
+            parsy.seq(spaceless(FIELD).skip(COLON), ty)
+            .map(tuple)
             .sep_by(COMMA)
+            .map(dt.Struct.from_tuples)
         )
-        yield RANGLE
-        return dt.Struct.from_tuples(field_names_types)
+        .skip(RANGLE)
+    )
 
-    @parsy.generate
-    def nullable():
-        yield spaceless_string("!")
-        parsed_ty = yield ty
-        return parsed_ty(nullable=False)
+    nullable = spaceless_string("!").then(ty).map(lambda typ: typ(nullable=False))
 
-    ty = (
+    ty.become(
         nullable
         | timestamp
         | primitive
@@ -195,14 +185,10 @@ def parse(text: str) -> dt.DataType:
         | set
         | map
         | struct
-        | spaceless_string("json").result(dt.json)
-        | spaceless_string("uuid").result(dt.uuid)
-        | spaceless_string("macaddr").result(dt.macaddr)
-        | spaceless_string("inet").result(dt.inet)
-        | spaceless_string("geography").result(dt.geography)
-        | spaceless_string("geometry").result(dt.geometry)
-        | spaceless_string("int").result(dt.int64)
+        # must come after struct because `str` is strict subset of `struct`
         | spaceless_string("str").result(dt.string)
+        # must come after struct because `int` is strict subset of `interval`
+        | spaceless_string("int").result(dt.int64)
     )
 
     return ty.parse(text)
@@ -213,4 +199,4 @@ def from_string(value: str) -> dt.DataType:
     try:
         return parse(value)
     except SyntaxError:
-        raise IbisTypeError(f'{value!r} cannot be parsed as a datatype')
+        raise IbisTypeError(f'{value!r} cannot be parsed as an ibis datatype')

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
-import parsy as p
+import parsy
 import sqlalchemy as sa
 from snowflake.sqlalchemy import (
     ARRAY,
@@ -45,12 +46,13 @@ from ibis.expr.datatypes import (
 )
 
 
-def parse(text: str, default_decimal_parameters=(38, 0)) -> DataType:
+def parse(text: str, default_precision: int = 38, default_scale: int = 0) -> DataType:
     """Parse a Snowflake type into an ibis data type."""
 
-    @p.generate
-    def varchar():
-        yield spaceless_string(
+    optional_parened_number = LPAREN.then(NUMBER).then(RPAREN).optional()
+
+    varchar = (
+        spaceless_string(
             "varchar",
             "char varying",
             "character",
@@ -62,47 +64,34 @@ def parse(text: str, default_decimal_parameters=(38, 0)) -> DataType:
             "nvarchar2",
             "nvarchar",
         )
-        yield optional_parend_number
-        return string
+        .then(optional_parened_number)
+        .result(string)
+    )
 
-    @p.generate
-    def optional_parend_number():
-        yield LPAREN.then(NUMBER).then(RPAREN).optional()
+    decimal = (
+        spaceless_string("number", "decimal", "numeric")
+        .then(LPAREN)
+        .then(parsy.seq(PRECISION.skip(COMMA), SCALE).map(tuple))
+        .skip(RPAREN)
+        .optional(default=(default_precision, default_scale))
+        .combine(
+            lambda precision, scale: int64 if not scale else Decimal(precision, scale)
+        )
+    )
 
-    @p.generate
-    def decimal():
-        yield spaceless_string("number", "decimal", "numeric")
-        prec_scale = (
-            yield LPAREN.then(
-                p.seq(PRECISION.skip(COMMA), SCALE).combine(
-                    lambda prec, scale: (prec, scale)
-                )
-            )
-            .skip(RPAREN)
-            .optional()
-        ) or default_decimal_parameters
-        prec, scale = prec_scale
-        if scale == 0:
-            return int64
-        return Decimal(prec, scale)
+    timestamp_ntz = spaceless_string("timestamp_ntz").then(
+        parsy.seq(scale=optional_parened_number).combine_dict(Timestamp)
+    )
 
-    @p.generate
-    def timestamp_ntz():
-        yield spaceless_string("timestamp_ntz")
-        yield optional_parend_number
-        return Timestamp()
+    timestamp_ltz_tz = spaceless_string("timestamp_ltz", "timestamp_tz").then(
+        parsy.seq(scale=optional_parened_number).combine_dict(
+            partial(Timestamp, timezone="UTC")
+        )
+    )
 
-    @p.generate
-    def timestamp_ltz_tz():
-        yield spaceless_string("timestamp_ltz", "timestamp_tz")
-        yield optional_parend_number
-        return Timestamp(timezone="UTC")
-
-    @p.generate
-    def timestamp():
-        yield spaceless_string("timestamp")
-        yield optional_parend_number
-        return Timestamp()
+    timestamp = spaceless_string("timestamp").then(
+        parsy.seq(scale=optional_parened_number).combine_dict(Timestamp)
+    )
 
     ty = (
         spaceless_string("boolean").result(boolean)

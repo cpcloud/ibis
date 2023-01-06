@@ -29,10 +29,7 @@ def parse(text: str) -> dt.DataType:
     parened_string = LPAREN.then(RAW_STRING).skip(RPAREN)
 
     datetime64_args = LPAREN.then(
-        parsy.seq(
-            scale=parsy.decimal_digit.map(int).optional(),
-            timezone=COMMA.then(RAW_STRING).optional(),
-        )
+        parsy.seq(scale=NUMBER.optional(), timezone=COMMA.then(RAW_STRING).optional())
     ).skip(RPAREN)
 
     datetime64 = spaceless_string("datetime64").then(
@@ -84,116 +81,103 @@ def parse(text: str) -> dt.DataType:
         ).result(dt.String(nullable=False))
     )
 
-    @parsy.generate
-    def nullable():
-        yield spaceless_string("nullable")
-        yield LPAREN
-        parsed_ty = yield ty
-        yield RPAREN
-        return parsed_ty(nullable=True)
+    ty = parsy.forward_declaration()
 
-    @parsy.generate
-    def fixed_string():
-        yield spaceless_string("fixedstring")
-        yield LPAREN
-        yield NUMBER
-        yield RPAREN
-        return dt.String(nullable=False)
+    nullable = (
+        spaceless_string("nullable")
+        .then(LPAREN)
+        .then(ty)
+        .map(lambda ty: ty(nullable=True))
+        .skip(RPAREN)
+    )
 
-    @parsy.generate
-    def decimal():
-        yield spaceless_string("decimal", "numeric")
-        precision, scale = yield LPAREN.then(
-            parsy.seq(PRECISION.skip(COMMA), SCALE)
-        ).skip(RPAREN)
-        return dt.Decimal(precision, scale, nullable=False)
+    fixed_string = (
+        spaceless_string("fixedstring")
+        .then(LPAREN)
+        .then(NUMBER)
+        .then(RPAREN)
+        .result(dt.String(nullable=False))
+    )
 
-    @parsy.generate
-    def paren_type():
-        yield LPAREN
-        value_type = yield ty
-        yield RPAREN
-        return value_type
-
-    @parsy.generate
-    def array():
-        yield spaceless_string("array")
-        value_type = yield paren_type
-        return dt.Array(value_type, nullable=False)
-
-    @parsy.generate
-    def map():
-        yield spaceless_string("map")
-        yield LPAREN
-        key_type = yield ty
-        yield COMMA
-        value_type = yield ty
-        yield RPAREN
-        return dt.Map(key_type, value_type, nullable=False)
-
-    at_least_one_space = parsy.regex(r"\s+")
-
-    @parsy.generate
-    def nested():
-        yield spaceless_string("nested")
-        yield LPAREN
-
-        field_names_types = yield (
-            parsy.seq(SPACES.then(FIELD.skip(at_least_one_space)), ty)
-            .combine(lambda field, ty: (field, dt.Array(ty, nullable=False)))
-            .sep_by(COMMA)
-        )
-        yield RPAREN
-        return dt.Struct.from_tuples(field_names_types, nullable=False)
-
-    @parsy.generate
-    def struct():
-        yield spaceless_string("tuple")
-        yield LPAREN
-        field_names_types = yield (
-            parsy.seq(
-                SPACES.then(FIELD.skip(at_least_one_space).optional()),
-                ty,
+    decimal = spaceless_string("decimal", "numeric").then(
+        LPAREN.then(
+            parsy.seq(precision=PRECISION.skip(COMMA), scale=SCALE).combine_dict(
+                partial(dt.Decimal, nullable=False)
             )
-            .combine(lambda field, ty: (field, ty))
+        ).skip(RPAREN)
+    )
+
+    array = (
+        spaceless_string("array")
+        .then(LPAREN)
+        .then(ty)
+        .skip(RPAREN)
+        .map(partial(dt.Array, nullable=False))
+    )
+
+    map = (
+        spaceless_string("map")
+        .then(LPAREN)
+        .then(parsy.seq(key_type=ty.skip(COMMA), value_type=ty))
+        .combine_dict(partial(dt.Map, nullable=False))
+        .skip(RPAREN)
+    )
+
+    nested = (
+        spaceless_string("nested")
+        .then(LPAREN)
+        .then(
+            parsy.seq(
+                SPACES.then(FIELD.skip(parsy.whitespace)),
+                ty.map(partial(dt.Array, nullable=False)),
+            )
+            .map(tuple)
+            .sep_by(COMMA)
+            .map(partial(dt.Struct.from_tuples, nullable=False))
+        )
+        .skip(RPAREN)
+    )
+
+    struct = (
+        spaceless_string("tuple")
+        .then(LPAREN)
+        .then(
+            parsy.seq(SPACES.then(FIELD.skip(parsy.whitespace).optional()), ty)
+            .map(tuple)
             .sep_by(COMMA)
         )
-        yield RPAREN
-        return dt.Struct.from_tuples(
-            [
-                (field_name if field_name is not None else f"f{i:d}", typ)
-                for i, (field_name, typ) in enumerate(field_names_types)
-            ],
-            nullable=False,
+        .skip(RPAREN)
+        .map(
+            lambda pairs: dt.Struct.from_dict(
+                {
+                    name if name is not None else f"f{i:d}": typ
+                    for i, (name, typ) in enumerate(pairs)
+                },
+                nullable=False,
+            )
         )
+    )
 
-    @parsy.generate
-    def enum_value():
-        yield SPACES
-        key = yield RAW_STRING
-        yield spaceless_string('=')
-        value = yield parsy.digit.at_least(1).concat()
-        return (key, int(value))
+    lowcardinality = (
+        spaceless_string("LowCardinality").then(LPAREN).then(ty).skip(RPAREN)
+    )
 
-    @parsy.generate
-    def lowcardinality():
-        yield spaceless_string('LowCardinality')
-        yield LPAREN
-        r = yield ty
-        yield RPAREN
-        return r
+    enum = (
+        spaceless_string("enum")
+        .then(NUMBER)
+        .then(LPAREN)
+        .then(
+            SPACES.then(
+                parsy.seq(RAW_STRING.skip(spaceless_string("=")), NUMBER).map(tuple)
+            )
+            .sep_by(COMMA)
+            .map(dict)
+        )
+        .skip(RPAREN)
+        .result(dt.String(nullable=False))
+    )
 
-    @parsy.generate
-    def enum():
-        yield spaceless_string('enum')
-        enumsz = yield parsy.digit.at_least(1).concat()
-        enumsz = int(enumsz)
-        yield LPAREN
-        yield enum_value.sep_by(COMMA).map(dict)  # ignore values
-        yield RPAREN
-        return dt.String(nullable=False)
-
-    ty = (
+    ty.become(
         nullable
         | nested
         | primitive
