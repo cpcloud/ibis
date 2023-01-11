@@ -22,9 +22,12 @@ from ibis.util import deprecated
 
 
 @functools.lru_cache(maxsize=None)
-def _make_parser(*, default_precision: int, default_scale: int):
+def _make_parser(
+    *, default_precision: int, default_scale: int, default_timestamp_scale: int
+):
+    timestamp_utc = dt.timestamp(timezone="UTC")
     primitive = parsy.alt(
-        spaceless_string("interval").result(dt.Interval()),
+        spaceless_string("interval").result(dt.interval),
         spaceless_string("bigint", "int8", "long").result(dt.int64),
         spaceless_string("boolean", "bool", "logical").result(dt.boolean),
         spaceless_string("blob", "bytea", "binary", "varbinary").result(dt.binary),
@@ -32,14 +35,15 @@ def _make_parser(*, default_precision: int, default_scale: int):
         spaceless_string("real", "float4", "float").result(dt.float32),
         spaceless_string("smallint", "int2", "short").result(dt.int16),
         spaceless_string(
-            "timestamp with time zone",
-            "timestamp_tz",
-            "timestamp_sec",
-            "timestamp_ms",
-            "timestamp_ns",
-            "timestamp",
-            "datetime",
-        ).result(dt.Timestamp(timezone="UTC")),
+            "timestamp with time zone", "timestamp_tz", "timestamptz"
+        ).result(timestamp_utc(scale=default_timestamp_scale)),
+        spaceless_string("timestamp_sec", "timestamp_s").result(timestamp_utc(scale=0)),
+        spaceless_string("timestamp_ms").result(timestamp_utc(scale=3)),
+        spaceless_string("timestamp_us").result(timestamp_utc(scale=6)),
+        spaceless_string("timestamp_ns").result(timestamp_utc(scale=9)),
+        spaceless_string("timestamp", "datetime").result(
+            timestamp_utc(scale=default_timestamp_scale)
+        ),
         spaceless_string("date").result(dt.date),
         spaceless_string("time").result(dt.time),
         spaceless_string("tinyint", "int1").result(dt.int8),
@@ -100,10 +104,17 @@ def _make_parser(*, default_precision: int, default_scale: int):
 
 @functools.lru_cache(maxsize=100)
 def parse(
-    text: str, default_precision: int = 18, default_scale: int = 3
+    text: str,
+    default_precision: int = 18,
+    default_scale: int = 3,
+    default_timestamp_scale: int = 6,
 ) -> dt.DataType:
     """Parse a DuckDB type into an ibis data type."""
-    ty = _make_parser(default_precision=default_precision, default_scale=default_scale)
+    ty = _make_parser(
+        default_precision=default_precision,
+        default_scale=default_scale,
+        default_timestamp_scale=default_timestamp_scale,
+    )
     return ty.parse(text)
 
 
