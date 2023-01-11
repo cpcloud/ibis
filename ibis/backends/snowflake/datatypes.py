@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -17,10 +18,6 @@ from snowflake.sqlalchemy.snowdialect import SnowflakeDialect
 
 import ibis.expr.datatypes as dt
 from ibis.backends.base.sql.alchemy import to_sqla_type
-
-if TYPE_CHECKING:
-    from ibis.expr.datatypes import DataType
-
 from ibis.common.parsing import (
     COMMA,
     LPAREN,
@@ -45,10 +42,12 @@ from ibis.expr.datatypes import (
     time,
 )
 
+if TYPE_CHECKING:
+    from ibis.expr.datatypes import DataType
 
-def parse(text: str, default_precision: int = 38, default_scale: int = 0) -> DataType:
-    """Parse a Snowflake type into an ibis data type."""
 
+@functools.lru_cache(maxsize=None)
+def _make_parser(*, default_precision: int, default_scale: int):
     optional_parened_number = LPAREN.then(NUMBER).then(RPAREN).optional()
 
     varchar = (
@@ -124,6 +123,12 @@ def parse(text: str, default_precision: int = 38, default_scale: int = 0) -> Dat
         | varchar
         | decimal
     )
+    return ty
+
+
+def parse(text: str, default_precision: int = 38, default_scale: int = 0) -> DataType:
+    """Parse a Snowflake type into an ibis data type."""
+    ty = _make_parser(default_precision=default_precision, default_scale=default_scale)
     return ty.parse(text)
 
 

@@ -27,38 +27,8 @@ from ibis.common.parsing import (
 )
 
 
-@public
-@functools.lru_cache(maxsize=100)
-def parse(text: str) -> dt.DataType:
-    """Parse a type from a [`str`][str] `text`.
-
-    The default `maxsize` parameter for caching is chosen to cache the most
-    commonly used types--there are about 30--along with some capacity for less
-    common but repeatedly-used complex types.
-
-    Parameters
-    ----------
-    text
-        The type string to parse
-
-    Examples
-    --------
-    Parse an array type from a string
-
-    >>> import ibis
-    >>> import ibis.expr.datatypes as dt
-    >>> dt.parse("array<int64>")
-    Array(value_type=Int64(nullable=True), nullable=True)
-
-    You can avoid parsing altogether by constructing objects directly
-
-    >>> import ibis
-    >>> import ibis.expr.datatypes as dt
-    >>> ty = dt.parse("array<int64>")
-    >>> ty == dt.Array(dt.int64)
-    True
-    """
-
+@functools.lru_cache(maxsize=None)
+def _make_parser():
     srid = NUMBER
     geotype = spaceless_string("geography") | spaceless_string("geometry")
 
@@ -190,7 +160,41 @@ def parse(text: str) -> dt.DataType:
         # must come after struct because `int` is strict subset of `interval`
         | spaceless_string("int").result(dt.int64)
     )
+    return ty
 
+
+@public
+@functools.lru_cache(maxsize=100)
+def parse(text: str) -> dt.DataType:
+    """Parse a type from a [`str`][str] `text`.
+
+    The default `maxsize` parameter for caching is chosen to cache the most
+    commonly used types--there are about 30--along with some capacity for less
+    common but repeatedly-used complex types.
+
+    Parameters
+    ----------
+    text
+        The type string to parse
+
+    Examples
+    --------
+    Parse an array type from a string
+
+    >>> import ibis
+    >>> import ibis.expr.datatypes as dt
+    >>> dt.parse("array<int64>")
+    Array(value_type=Int64(nullable=True), nullable=True)
+
+    You can avoid parsing altogether by constructing objects directly
+
+    >>> import ibis
+    >>> import ibis.expr.datatypes as dt
+    >>> ty = dt.parse("array<int64>")
+    >>> ty == dt.Array(dt.int64)
+    True
+    """
+    ty = _make_parser()
     return ty.parse(text)
 
 

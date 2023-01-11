@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from functools import partial
 
 import parsy
@@ -46,9 +47,8 @@ from ibis.expr.datatypes import (
 )
 
 
-def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
-    """Parse a Trino type into an ibis data type."""
-
+@functools.lru_cache(maxsize=None)
+def _make_parser(*, default_precision: int, default_scale: int):
     timestamp = (
         spaceless_string("timestamp")
         .then(LPAREN)
@@ -109,6 +109,14 @@ def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> Dat
     )
 
     ty.become(primitive | decimal | array | map | struct)
+    return ty
+
+
+@functools.lru_cache(maxsize=100)
+def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
+    """Parse a Trino type into an ibis data type."""
+
+    ty = _make_parser(default_precision=default_precision, default_scale=default_scale)
     return ty.parse(text)
 
 

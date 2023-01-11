@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+
 import parsy
 import toolz
 
@@ -44,8 +46,8 @@ from ibis.expr.datatypes import (
 )
 
 
-def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
-    """Parse a DuckDB type into an ibis data type."""
+@functools.lru_cache(maxsize=None)
+def _make_parser(*, default_precision: int, default_scale: int):
     primitive = (
         spaceless_string("interval").result(Interval())
         | spaceless_string("bigint", "int8", "long").result(int64)
@@ -126,6 +128,13 @@ def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> Dat
 
     non_pg_array_type.become(primitive | decimal | list_array | map | struct)
     ty.become(pg_array | non_pg_array_type)
+    return ty
+
+
+@functools.lru_cache(maxsize=100)
+def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
+    """Parse a DuckDB type into an ibis data type."""
+    ty = _make_parser(default_precision=default_precision, default_scale=default_scale)
     return ty.parse(text)
 
 

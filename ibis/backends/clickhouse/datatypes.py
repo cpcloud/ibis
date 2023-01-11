@@ -25,7 +25,8 @@ def _bool_type():
     return getattr(getattr(ibis.options, "clickhouse", None), "bool_type", "Boolean")
 
 
-def parse(text: str) -> dt.DataType:
+@functools.lru_cache(maxsize=None)
+def _make_parser():
     parened_string = LPAREN.then(RAW_STRING).skip(RPAREN)
 
     datetime64_args = LPAREN.then(
@@ -192,6 +193,11 @@ def parse(text: str) -> dt.DataType:
         | spaceless_string("Object('json')").result(dt.json(nullable=False))
         | spaceless_string("JSON").result(dt.json(nullable=False))
     )
+
+
+@functools.lru_cache(maxsize=100)
+def parse(text: str) -> dt.DataType:
+    ty = _make_parser()
     return ty.parse(text)
 
 
