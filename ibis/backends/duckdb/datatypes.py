@@ -5,7 +5,6 @@ import functools
 import parsy
 import toolz
 
-from ibis import util
 from ibis.common.parsing import (
     COMMA,
     FIELD,
@@ -44,6 +43,7 @@ from ibis.expr.datatypes import (
     uint64,
     uuid,
 )
+from ibis.util import deprecated
 
 
 @functools.lru_cache(maxsize=None)
@@ -139,7 +139,7 @@ def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> Dat
     return ty.parse(text)
 
 
-@util.deprecated(
+@deprecated(
     instead=f"use {parse.__module__}.{parse.__name__}", as_of="4.0", removed_in="5.0"
 )
 def parse_type(*args, **kwargs):
