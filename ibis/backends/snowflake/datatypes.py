@@ -27,20 +27,6 @@ from ibis.common.parsing import (
     SCALE,
     spaceless_string,
 )
-from ibis.expr.datatypes import (
-    Array,
-    Decimal,
-    Map,
-    Timestamp,
-    binary,
-    boolean,
-    date,
-    float64,
-    int64,
-    json,
-    string,
-    time,
-)
 
 if TYPE_CHECKING:
     from ibis.expr.datatypes import DataType
@@ -48,7 +34,7 @@ if TYPE_CHECKING:
 
 @functools.lru_cache(maxsize=None)
 def _make_parser(*, default_precision: int, default_scale: int):
-    optional_parened_number = LPAREN.then(NUMBER).then(RPAREN).optional()
+    optional_numeric_arg = LPAREN.then(NUMBER).then(RPAREN).optional()
 
     varchar = (
         spaceless_string(
@@ -63,8 +49,8 @@ def _make_parser(*, default_precision: int, default_scale: int):
             "nvarchar2",
             "nvarchar",
         )
-        .then(optional_parened_number)
-        .result(string)
+        .then(optional_numeric_arg)
+        .result(dt.string)
     )
 
     decimal = (
@@ -74,56 +60,47 @@ def _make_parser(*, default_precision: int, default_scale: int):
         .skip(RPAREN)
         .optional(default=(default_precision, default_scale))
         .combine(
-            lambda precision, scale: int64 if not scale else Decimal(precision, scale)
+            lambda precision, scale: dt.int64
+            if not scale
+            else dt.Decimal(precision, scale)
         )
     )
 
     timestamp_ntz = spaceless_string("timestamp_ntz").then(
-        parsy.seq(scale=optional_parened_number).combine_dict(Timestamp)
+        parsy.seq(scale=optional_numeric_arg).combine_dict(dt.Timestamp)
     )
 
     timestamp_ltz_tz = spaceless_string("timestamp_ltz", "timestamp_tz").then(
-        parsy.seq(scale=optional_parened_number).combine_dict(
-            partial(Timestamp, timezone="UTC")
+        parsy.seq(scale=optional_numeric_arg).combine_dict(
+            partial(dt.Timestamp, timezone="UTC")
         )
     )
 
     timestamp = spaceless_string("timestamp").then(
-        parsy.seq(scale=optional_parened_number).combine_dict(Timestamp)
+        parsy.seq(scale=optional_numeric_arg).combine_dict(dt.Timestamp)
     )
 
-    ty = parsy.alt(
-        spaceless_string("boolean").result(boolean),
-        spaceless_string("binary", "varbinary").result(binary),
+    return parsy.alt(
+        spaceless_string("boolean").result(dt.boolean),
+        spaceless_string("binary", "varbinary").result(dt.binary),
         spaceless_string(
-            "double precision",
-            "double",
-            "float8",
-            "float4",
-            "float",
-            "real",
-        ).result(float64),
+            "double precision", "double", "float8", "float4", "float", "real"
+        ).result(dt.float64),
         spaceless_string(
-            "integer",
-            "int",
-            "bigint",
-            "smallint",
-            "tinyint",
-            "byteint",
-        ).result(int64),
-        spaceless_string("datetime").result(Timestamp()),
-        spaceless_string("date").result(date),
+            "integer", "int", "bigint", "smallint", "tinyint", "byteint"
+        ).result(dt.int64),
+        spaceless_string("datetime").result(dt.Timestamp()),
+        spaceless_string("date").result(dt.date),
         timestamp_ntz,
         timestamp_ltz_tz,
         timestamp,
-        spaceless_string("time").result(time),
-        spaceless_string("object").result(Map(string, json)),
-        spaceless_string("array").result(Array(json)),
-        spaceless_string("variant").result(json),
+        spaceless_string("time").result(dt.time),
+        spaceless_string("array").result(dt.Array(dt.json)),
+        spaceless_string("variant").result(dt.json),
+        spaceless_string("object").result(dt.Map(dt.string, dt.json)),
         varchar,
         decimal,
     )
-    return ty
 
 
 def parse(text: str, default_precision: int = 38, default_scale: int = 0) -> DataType:

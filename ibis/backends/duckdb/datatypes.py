@@ -5,6 +5,7 @@ import functools
 import parsy
 import toolz
 
+import ibis.expr.datatypes as dt
 from ibis.common.parsing import (
     COMMA,
     FIELD,
@@ -17,50 +18,19 @@ from ibis.common.parsing import (
     spaceless,
     spaceless_string,
 )
-from ibis.expr.datatypes import (
-    Array,
-    DataType,
-    Decimal,
-    Interval,
-    Map,
-    Struct,
-    Timestamp,
-    binary,
-    boolean,
-    date,
-    float32,
-    float64,
-    int8,
-    int16,
-    int32,
-    int64,
-    json,
-    string,
-    time,
-    uint8,
-    uint16,
-    uint32,
-    uint64,
-    uuid,
-)
 from ibis.util import deprecated
 
 
 @functools.lru_cache(maxsize=None)
 def _make_parser(*, default_precision: int, default_scale: int):
     primitive = parsy.alt(
-        spaceless_string("interval").result(Interval()),
-        spaceless_string("bigint", "int8", "long").result(int64),
-        spaceless_string("boolean", "bool", "logical").result(boolean),
-        spaceless_string(
-            "blob",
-            "bytea",
-            "binary",
-            "varbinary",
-        ).result(binary),
-        spaceless_string("double", "float8").result(float64),
-        spaceless_string("real", "float4", "float").result(float32),
-        spaceless_string("smallint", "int2", "short").result(int16),
+        spaceless_string("interval").result(dt.Interval()),
+        spaceless_string("bigint", "int8", "long").result(dt.int64),
+        spaceless_string("boolean", "bool", "logical").result(dt.boolean),
+        spaceless_string("blob", "bytea", "binary", "varbinary").result(dt.binary),
+        spaceless_string("double", "float8").result(dt.float64),
+        spaceless_string("real", "float4", "float").result(dt.float32),
+        spaceless_string("smallint", "int2", "short").result(dt.int16),
         spaceless_string(
             "timestamp with time zone",
             "timestamp_tz",
@@ -69,51 +39,47 @@ def _make_parser(*, default_precision: int, default_scale: int):
             "timestamp_ns",
             "timestamp",
             "datetime",
-        ).result(Timestamp(timezone="UTC")),
-        spaceless_string("date").result(date),
-        spaceless_string("time").result(time),
-        spaceless_string("tinyint", "int1").result(int8),
-        spaceless_string("integer", "int4", "int", "signed").result(int32),
-        spaceless_string("ubigint").result(uint64),
-        spaceless_string("usmallint").result(uint16),
-        spaceless_string("uinteger").result(uint32),
-        spaceless_string("utinyint").result(uint8),
-        spaceless_string("uuid").result(uuid),
-        spaceless_string(
-            "varchar",
-            "char",
-            "bpchar",
-            "text",
-            "string",
-        ).result(string),
-        spaceless_string("json").result(json),
+        ).result(dt.Timestamp(timezone="UTC")),
+        spaceless_string("date").result(dt.date),
+        spaceless_string("time").result(dt.time),
+        spaceless_string("tinyint", "int1").result(dt.int8),
+        spaceless_string("integer", "int4", "int", "signed").result(dt.int32),
+        spaceless_string("ubigint").result(dt.uint64),
+        spaceless_string("usmallint").result(dt.uint16),
+        spaceless_string("uinteger").result(dt.uint32),
+        spaceless_string("utinyint").result(dt.uint8),
+        spaceless_string("uuid").result(dt.uuid),
+        spaceless_string("varchar", "string", "bpchar", "char", "text").result(
+            dt.string
+        ),
+        spaceless_string("json").result(dt.json),
     )
 
     decimal = spaceless_string("decimal", "numeric").then(
         LPAREN.then(
             parsy.seq(precision=PRECISION.skip(COMMA), scale=SCALE).combine_dict(
-                Decimal
+                dt.Decimal
             )
         )
         .skip(RPAREN)
-        .optional(Decimal(precision=default_precision, scale=default_scale))
+        .optional(dt.Decimal(precision=default_precision, scale=default_scale))
     )
 
     ty = parsy.forward_declaration()
     non_pg_array_type = parsy.forward_declaration()
 
     parened_type = LPAREN.then(ty).skip(RPAREN)
-    list_array = spaceless_string("list").then(parened_type).map(Array)
+    list_array = spaceless_string("list").then(parened_type).map(dt.Array)
     brackets = LBRACKET.then(RBRACKET)
 
     pg_array = parsy.seq(non_pg_array_type, brackets.at_least(1).map(len)).map(
-        lambda value_type, ndims: toolz.nth(ndims, toolz.iterate(Array, value_type))
+        lambda value_type, ndims: toolz.nth(ndims, toolz.iterate(dt.Array, value_type))
     )
 
     map = (
         spaceless_string("map")
         .then(LPAREN)
-        .then(parsy.seq(primitive.skip(COMMA), ty).combine(Map))
+        .then(parsy.seq(primitive.skip(COMMA), ty).combine(dt.Map))
         .skip(RPAREN)
     )
 
@@ -122,7 +88,7 @@ def _make_parser(*, default_precision: int, default_scale: int):
     struct = (
         spaceless_string("struct")
         .then(LPAREN)
-        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(Struct.from_tuples))
+        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(dt.Struct.from_tuples))
         .skip(RPAREN)
     )
 
@@ -133,7 +99,9 @@ def _make_parser(*, default_precision: int, default_scale: int):
 
 
 @functools.lru_cache(maxsize=100)
-def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
+def parse(
+    text: str, default_precision: int = 18, default_scale: int = 3
+) -> dt.DataType:
     """Parse a DuckDB type into an ibis data type."""
     ty = _make_parser(default_precision=default_precision, default_scale=default_scale)
     return ty.parse(text)

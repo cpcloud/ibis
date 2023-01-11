@@ -22,29 +22,6 @@ from ibis.common.parsing import (
     spaceless,
     spaceless_string,
 )
-from ibis.expr.datatypes import (
-    Array,
-    DataType,
-    Decimal,
-    Interval,
-    Map,
-    Struct,
-    Timestamp,
-    binary,
-    boolean,
-    date,
-    float32,
-    float64,
-    inet,
-    int8,
-    int16,
-    int32,
-    int64,
-    json,
-    string,
-    time,
-    uuid,
-)
 
 
 @functools.lru_cache(maxsize=None)
@@ -52,50 +29,55 @@ def _make_parser(*, default_precision: int, default_scale: int):
     timestamp = (
         spaceless_string("timestamp")
         .then(LPAREN)
-        .then(parsy.seq(scale=SINGLE_DIGIT.map(int)))
+        .then(
+            parsy.seq(scale=SINGLE_DIGIT.map(int)).combine_dict(
+                partial(dt.Timestamp, timezone="UTC")
+            )
+        )
         .skip(RPAREN)
         .optional()
-        .combine_dict(partial(Timestamp, timezone="UTC"))
     )
 
     primitive = parsy.alt(
-        spaceless_string("interval").result(Interval()),
-        spaceless_string("bigint").result(int64),
-        spaceless_string("boolean").result(boolean),
-        spaceless_string("varbinary").result(binary),
-        spaceless_string("double").result(float64),
-        spaceless_string("real").result(float32),
-        spaceless_string("smallint").result(int16),
+        spaceless_string("interval").result(dt.Interval()),
+        spaceless_string("bigint").result(dt.int64),
+        spaceless_string("boolean").result(dt.boolean),
+        spaceless_string("varbinary").result(dt.binary),
+        spaceless_string("double").result(dt.float64),
+        spaceless_string("real").result(dt.float32),
+        spaceless_string("smallint").result(dt.int16),
         timestamp,
-        spaceless_string("date").result(date),
-        spaceless_string("time").result(time),
-        spaceless_string("tinyint").result(int8),
-        spaceless_string("integer").result(int32),
-        spaceless_string("uuid").result(uuid),
-        spaceless_string("varchar", "char").result(string),
-        spaceless_string("json").result(json),
-        spaceless_string("ipaddress").result(inet),
+        spaceless_string("date").result(dt.date),
+        spaceless_string("time").result(dt.time),
+        spaceless_string("tinyint").result(dt.int8),
+        spaceless_string("integer").result(dt.int32),
+        spaceless_string("uuid").result(dt.uuid),
+        spaceless_string("varchar", "char").result(dt.string),
+        spaceless_string("json").result(dt.json),
+        spaceless_string("ipaddress").result(dt.inet),
     )
 
     decimal = (
         spaceless_string("decimal", "numeric")
         .then(LPAREN)
-        .then(parsy.seq(precision=PRECISION.skip(COMMA), scale=SCALE))
+        .then(
+            parsy.seq(precision=PRECISION.skip(COMMA), scale=SCALE)
+            .optional(dict(precision=default_precision, scale=default_scale))
+            .combine_dict(dt.Decimal)
+        )
         .skip(RPAREN)
-        .optional(dict(precision=default_precision, scale=default_scale))
-        .combine_dict(Decimal)
     )
 
     ty = parsy.forward_declaration()
 
     angle_type = LPAREN.then(ty).skip(RPAREN)
 
-    array = spaceless_string("array").then(angle_type).map(Array)
+    array = spaceless_string("array").then(angle_type.map(dt.Array))
 
     map = (
         spaceless_string("map")
         .then(LPAREN)
-        .then(parsy.seq(primitive.skip(COMMA), ty).combine(Map))
+        .then(parsy.seq(primitive.skip(COMMA), ty).combine(dt.Map))
         .then(RPAREN)
     )
 
@@ -104,7 +86,7 @@ def _make_parser(*, default_precision: int, default_scale: int):
     struct = (
         spaceless_string("row")
         .then(LPAREN)
-        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(Struct.from_tuples))
+        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(dt.Struct.from_tuples))
         .skip(RPAREN)
     )
 
@@ -113,7 +95,9 @@ def _make_parser(*, default_precision: int, default_scale: int):
 
 
 @functools.lru_cache(maxsize=100)
-def parse(text: str, default_precision: int = 18, default_scale: int = 3) -> DataType:
+def parse(
+    text: str, default_precision: int = 18, default_scale: int = 3
+) -> dt.DataType:
     """Parse a Trino type into an ibis data type."""
 
     ty = _make_parser(default_precision=default_precision, default_scale=default_scale)
