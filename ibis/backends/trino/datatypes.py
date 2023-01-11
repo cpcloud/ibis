@@ -58,23 +58,23 @@ def _make_parser(*, default_precision: int, default_scale: int):
         .combine_dict(partial(Timestamp, timezone="UTC"))
     )
 
-    primitive = (
-        spaceless_string("interval").result(Interval())
-        | spaceless_string("bigint").result(int64)
-        | spaceless_string("boolean").result(boolean)
-        | spaceless_string("varbinary").result(binary)
-        | spaceless_string("double").result(float64)
-        | spaceless_string("real").result(float32)
-        | spaceless_string("smallint").result(int16)
-        | timestamp
-        | spaceless_string("date").result(date)
-        | spaceless_string("time").result(time)
-        | spaceless_string("tinyint").result(int8)
-        | spaceless_string("integer").result(int32)
-        | spaceless_string("uuid").result(uuid)
-        | spaceless_string("varchar", "char").result(string)
-        | spaceless_string("json").result(json)
-        | spaceless_string("ipaddress").result(inet)
+    primitive = parsy.alt(
+        spaceless_string("interval").result(Interval()),
+        spaceless_string("bigint").result(int64),
+        spaceless_string("boolean").result(boolean),
+        spaceless_string("varbinary").result(binary),
+        spaceless_string("double").result(float64),
+        spaceless_string("real").result(float32),
+        spaceless_string("smallint").result(int16),
+        timestamp,
+        spaceless_string("date").result(date),
+        spaceless_string("time").result(time),
+        spaceless_string("tinyint").result(int8),
+        spaceless_string("integer").result(int32),
+        spaceless_string("uuid").result(uuid),
+        spaceless_string("varchar", "char").result(string),
+        spaceless_string("json").result(json),
+        spaceless_string("ipaddress").result(inet),
     )
 
     decimal = (
@@ -108,7 +108,7 @@ def _make_parser(*, default_precision: int, default_scale: int):
         .skip(RPAREN)
     )
 
-    ty.become(primitive | decimal | array | map | struct)
+    ty.become(parsy.alt(primitive, decimal, array, map, struct))
     return ty
 
 

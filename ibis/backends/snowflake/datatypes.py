@@ -92,36 +92,36 @@ def _make_parser(*, default_precision: int, default_scale: int):
         parsy.seq(scale=optional_parened_number).combine_dict(Timestamp)
     )
 
-    ty = (
-        spaceless_string("boolean").result(boolean)
-        | spaceless_string("binary", "varbinary").result(binary)
-        | spaceless_string(
+    ty = parsy.alt(
+        spaceless_string("boolean").result(boolean),
+        spaceless_string("binary", "varbinary").result(binary),
+        spaceless_string(
             "double precision",
             "double",
             "float8",
             "float4",
             "float",
             "real",
-        ).result(float64)
-        | spaceless_string(
+        ).result(float64),
+        spaceless_string(
             "integer",
             "int",
             "bigint",
             "smallint",
             "tinyint",
             "byteint",
-        ).result(int64)
-        | spaceless_string("datetime").result(Timestamp())
-        | spaceless_string("date").result(date)
-        | timestamp_ntz
-        | timestamp_ltz_tz
-        | timestamp
-        | spaceless_string("time").result(time)
-        | spaceless_string("object").result(Map(string, json))
-        | spaceless_string("array").result(Array(json))
-        | spaceless_string("variant").result(json)
-        | varchar
-        | decimal
+        ).result(int64),
+        spaceless_string("datetime").result(Timestamp()),
+        spaceless_string("date").result(date),
+        timestamp_ntz,
+        timestamp_ltz_tz,
+        timestamp,
+        spaceless_string("time").result(time),
+        spaceless_string("object").result(Map(string, json)),
+        spaceless_string("array").result(Array(json)),
+        spaceless_string("variant").result(json),
+        varchar,
+        decimal,
     )
     return ty
 

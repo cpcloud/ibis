@@ -30,55 +30,55 @@ from ibis.common.parsing import (
 @functools.lru_cache(maxsize=None)
 def _make_parser():
     srid = NUMBER
-    geotype = spaceless_string("geography") | spaceless_string("geometry")
+    geotype = spaceless_string("geography", "geometry")
 
     srid_geotype = SEMICOLON.then(parsy.seq(srid=srid.skip(COLON), geotype=geotype))
     geotype_part = COLON.then(parsy.seq(geotype=geotype))
     srid_part = SEMICOLON.then(parsy.seq(srid=srid))
 
     geotype_parser = lambda name: spaceless_string(name).then(
-        (srid_geotype | geotype_part | srid_part).optional(default={})
+        parsy.alt(srid_geotype, geotype_part, srid_part).optional(default={})
     )
 
-    primitive = (
-        spaceless_string("boolean").result(dt.boolean)  # docprecated
-        | spaceless_string("bool").result(dt.boolean)
-        | spaceless_string("int8").result(dt.int8)
-        | spaceless_string("int16").result(dt.int16)
-        | spaceless_string("int32").result(dt.int32)
-        | spaceless_string("int64").result(dt.int64)
-        | spaceless_string("uint8").result(dt.uint8)
-        | spaceless_string("uint16").result(dt.uint16)
-        | spaceless_string("uint32").result(dt.uint32)
-        | spaceless_string("uint64").result(dt.uint64)
-        | spaceless_string("halffloat").result(dt.float16)  # docprecated
-        | spaceless_string("double").result(dt.float64)  # docprecated
-        | spaceless_string("float16").result(dt.float16)
-        | spaceless_string("float32").result(dt.float32)
-        | spaceless_string("float64").result(dt.float64)
-        | spaceless_string("float").result(dt.float64)
-        | spaceless_string("string").result(dt.string)
-        | spaceless_string("binary").result(dt.binary)  # docprecated
-        | spaceless_string("bytes").result(dt.binary)
-        | spaceless_string("timestamp").result(dt.Timestamp())
-        | spaceless_string("time").result(dt.time)
-        | spaceless_string("date").result(dt.date)
-        | spaceless_string("category").result(dt.category)
-        | spaceless_string("geometry").result(dt.GeoSpatial(geotype='geometry'))
-        | spaceless_string("geography").result(dt.GeoSpatial(geotype='geography'))
-        | spaceless_string("null").result(dt.null)
-        | spaceless_string("json").result(dt.json)
-        | spaceless_string("uuid").result(dt.uuid)
-        | spaceless_string("macaddr").result(dt.macaddr)
-        | spaceless_string("inet").result(dt.inet)
-        | spaceless_string("geography").result(dt.geography)
-        | spaceless_string("geometry").result(dt.geometry)
-        | geotype_parser("linestring").combine_dict(dt.LineString)
-        | geotype_parser("polygon").combine_dict(dt.Polygon)
-        | geotype_parser("point").combine_dict(dt.Point)
-        | geotype_parser("multilinestring").combine_dict(dt.MultiLineString)
-        | geotype_parser("multipolygon").combine_dict(dt.MultiPolygon)
-        | geotype_parser("multipoint").combine_dict(dt.MultiPoint)
+    primitive = parsy.alt(
+        spaceless_string("boolean").result(dt.boolean),  # docprecated
+        spaceless_string("bool").result(dt.boolean),
+        spaceless_string("int8").result(dt.int8),
+        spaceless_string("int16").result(dt.int16),
+        spaceless_string("int32").result(dt.int32),
+        spaceless_string("int64").result(dt.int64),
+        spaceless_string("uint8").result(dt.uint8),
+        spaceless_string("uint16").result(dt.uint16),
+        spaceless_string("uint32").result(dt.uint32),
+        spaceless_string("uint64").result(dt.uint64),
+        spaceless_string("halffloat").result(dt.float16),  # docprecated
+        spaceless_string("double").result(dt.float64),  # docprecated
+        spaceless_string("float16").result(dt.float16),
+        spaceless_string("float32").result(dt.float32),
+        spaceless_string("float64").result(dt.float64),
+        spaceless_string("float").result(dt.float64),
+        spaceless_string("string").result(dt.string),
+        spaceless_string("binary").result(dt.binary),  # docprecated
+        spaceless_string("bytes").result(dt.binary),
+        spaceless_string("timestamp").result(dt.Timestamp()),
+        spaceless_string("time").result(dt.time),
+        spaceless_string("date").result(dt.date),
+        spaceless_string("category").result(dt.category),
+        spaceless_string("geometry").result(dt.geometry),
+        spaceless_string("geography").result(dt.geography),
+        spaceless_string("null").result(dt.null),
+        spaceless_string("json").result(dt.json),
+        spaceless_string("uuid").result(dt.uuid),
+        spaceless_string("macaddr").result(dt.macaddr),
+        spaceless_string("inet").result(dt.inet),
+        spaceless_string("geography").result(dt.geography),
+        spaceless_string("geometry").result(dt.geometry),
+        geotype_parser("linestring").combine_dict(dt.LineString),
+        geotype_parser("polygon").combine_dict(dt.Polygon),
+        geotype_parser("point").combine_dict(dt.Point),
+        geotype_parser("multilinestring").combine_dict(dt.MultiLineString),
+        geotype_parser("multipolygon").combine_dict(dt.MultiPolygon),
+        geotype_parser("multipoint").combine_dict(dt.MultiPoint),
     )
 
     varchar_or_char = (
@@ -104,7 +104,7 @@ def _make_parser():
     timestamp_no_tz_args = LPAREN.then(parsy.seq(scale=timestamp_scale)).skip(RPAREN)
 
     timestamp = spaceless_string("timestamp").then(
-        (timestamp_tz_args | timestamp_no_tz_args)
+        parsy.alt(timestamp_tz_args, timestamp_no_tz_args)
         .optional(default={})
         .combine_dict(dt.Timestamp)
     )
@@ -145,20 +145,22 @@ def _make_parser():
     nullable = spaceless_string("!").then(ty).map(lambda typ: typ(nullable=False))
 
     ty.become(
-        nullable
-        | timestamp
-        | primitive
-        | decimal
-        | varchar_or_char
-        | interval
-        | array
-        | set
-        | map
-        | struct
-        # must come after struct because `str` is strict subset of `struct`
-        | spaceless_string("str").result(dt.string)
-        # must come after struct because `int` is strict subset of `interval`
-        | spaceless_string("int").result(dt.int64)
+        parsy.alt(
+            nullable,
+            timestamp,
+            primitive,
+            decimal,
+            varchar_or_char,
+            interval,
+            array,
+            set,
+            map,
+            struct,
+            # must come after struct because `str` is strict subset of `struct`
+            spaceless_string("str").result(dt.string),
+            # must come after struct because `int` is strict subset of `interval`
+            spaceless_string("int").result(dt.int64),
+        )
     )
     return ty
 

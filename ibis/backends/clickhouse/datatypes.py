@@ -45,29 +45,31 @@ def _make_parser():
         )
     )
 
-    primitive = (
-        datetime64
-        | datetime
-        | spaceless_string("null", "nothing").result(dt.null)
-        | spaceless_string("bigint", "int64").result(dt.Int64(nullable=False))
-        | spaceless_string("double", "float64").result(dt.Float64(nullable=False))
-        | spaceless_string("float32", "float").result(dt.Float32(nullable=False))
-        | spaceless_string("smallint", "int16", "int2").result(dt.Int16(nullable=False))
-        | spaceless_string("date32", "date").result(dt.Date(nullable=False))
-        | spaceless_string("time").result(dt.Time(nullable=False))
-        | spaceless_string("tinyint", "int8", "int1").result(dt.Int8(nullable=False))
-        | spaceless_string("boolean", "bool").result(
+    primitive = parsy.alt(
+        datetime64,
+        datetime,
+        spaceless_string("null", "nothing").result(dt.null),
+        spaceless_string("bigint", "int64").result(dt.Int64(nullable=False)),
+        spaceless_string("double", "float64").result(dt.Float64(nullable=False)),
+        spaceless_string("float32", "float").result(dt.Float32(nullable=False)),
+        spaceless_string("smallint", "int16", "int2").result(dt.Int16(nullable=False)),
+        spaceless_string("date32", "date").result(dt.Date(nullable=False)),
+        spaceless_string("time").result(dt.Time(nullable=False)),
+        spaceless_string("tinyint", "int8", "int1", "boolean", "bool").result(
+            dt.Int8(nullable=False)
+        ),
+        spaceless_string("boolean", "bool").result(
             getattr(dt, _bool_type())(nullable=False)
-        )
-        | spaceless_string("integer", "int32", "int4", "int").result(
+        ),
+        spaceless_string("integer", "int32", "int4", "int").result(
             dt.Int32(nullable=False)
-        )
-        | spaceless_string("uint64").result(dt.UInt64(nullable=False))
-        | spaceless_string("uint32").result(dt.UInt32(nullable=False))
-        | spaceless_string("uint16").result(dt.UInt16(nullable=False))
-        | spaceless_string("uint8").result(dt.UInt8(nullable=False))
-        | spaceless_string("uuid").result(dt.UUID(nullable=False))
-        | spaceless_string(
+        ),
+        spaceless_string("uint64").result(dt.UInt64(nullable=False)),
+        spaceless_string("uint32").result(dt.UInt32(nullable=False)),
+        spaceless_string("uint16").result(dt.UInt16(nullable=False)),
+        spaceless_string("uint8").result(dt.UInt8(nullable=False)),
+        spaceless_string("uuid").result(dt.UUID(nullable=False)),
+        spaceless_string(
             "longtext",
             "mediumtext",
             "tinytext",
@@ -79,7 +81,7 @@ def _make_parser():
             "varchar",
             "char",
             "string",
-        ).result(dt.String(nullable=False))
+        ).result(dt.String(nullable=False)),
     )
 
     ty = parsy.forward_declaration()
@@ -87,16 +89,13 @@ def _make_parser():
     nullable = (
         spaceless_string("nullable")
         .then(LPAREN)
-        .then(ty)
-        .map(lambda ty: ty(nullable=True))
+        .then(ty.map(lambda ty: ty(nullable=True)))
         .skip(RPAREN)
     )
 
     fixed_string = (
         spaceless_string("fixedstring")
-        .then(LPAREN)
-        .then(NUMBER)
-        .then(RPAREN)
+        .then(LPAREN.then(NUMBER).skip(RPAREN))
         .result(dt.String(nullable=False))
     )
 
@@ -111,16 +110,18 @@ def _make_parser():
     array = (
         spaceless_string("array")
         .then(LPAREN)
-        .then(ty)
+        .then(ty.map(partial(dt.Array, nullable=False)))
         .skip(RPAREN)
-        .map(partial(dt.Array, nullable=False))
     )
 
     map = (
         spaceless_string("map")
         .then(LPAREN)
-        .then(parsy.seq(key_type=ty.skip(COMMA), value_type=ty))
-        .combine_dict(partial(dt.Map, nullable=False))
+        .then(
+            parsy.seq(key_type=ty.skip(COMMA), value_type=ty).combine_dict(
+                partial(dt.Map, nullable=False)
+            )
+        )
         .skip(RPAREN)
     )
 
@@ -179,19 +180,21 @@ def _make_parser():
     )
 
     ty.become(
-        nullable
-        | nested
-        | primitive
-        | fixed_string
-        | decimal
-        | array
-        | map
-        | struct
-        | enum
-        | lowcardinality
-        | spaceless_string("IPv4", "IPv6").result(dt.inet(nullable=False))
-        | spaceless_string("Object('json')").result(dt.json(nullable=False))
-        | spaceless_string("JSON").result(dt.json(nullable=False))
+        parsy.alt(
+            nullable,
+            nested,
+            primitive,
+            fixed_string,
+            decimal,
+            array,
+            map,
+            struct,
+            enum,
+            lowcardinality,
+            spaceless_string("IPv4", "IPv6").result(dt.inet(nullable=False)),
+            spaceless_string("Object('json')").result(dt.json(nullable=False)),
+            spaceless_string("JSON").result(dt.json(nullable=False)),
+        )
     )
 
 
