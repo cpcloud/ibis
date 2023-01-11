@@ -56,7 +56,7 @@ def _make_parser(*, default_precision: int, default_scale: int):
     decimal = (
         spaceless_string("number", "decimal", "numeric")
         .then(LPAREN)
-        .then(parsy.seq(PRECISION.skip(COMMA), SCALE).map(tuple))
+        .then(parsy.seq(PRECISION.skip(COMMA), SCALE))
         .skip(RPAREN)
         .optional(default=(default_precision, default_scale))
         .combine(

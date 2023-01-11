@@ -41,8 +41,7 @@ def _make_parser():
     )
 
     primitive = parsy.alt(
-        spaceless_string("boolean").result(dt.boolean),  # docprecated
-        spaceless_string("bool").result(dt.boolean),
+        spaceless_string("boolean", "bool").result(dt.boolean),  # docprecated: boolean
         spaceless_string("int8").result(dt.int8),
         spaceless_string("int16").result(dt.int16),
         spaceless_string("int32").result(dt.int32),
@@ -51,15 +50,15 @@ def _make_parser():
         spaceless_string("uint16").result(dt.uint16),
         spaceless_string("uint32").result(dt.uint32),
         spaceless_string("uint64").result(dt.uint64),
-        spaceless_string("halffloat").result(dt.float16),  # docprecated
-        spaceless_string("double").result(dt.float64),  # docprecated
-        spaceless_string("float16").result(dt.float16),
+        spaceless_string("halffloat", "float16").result(  # docprecated: halffloat
+            dt.float16
+        ),
         spaceless_string("float32").result(dt.float32),
-        spaceless_string("float64").result(dt.float64),
-        spaceless_string("float").result(dt.float64),
+        spaceless_string("double", "float64", "float").result(  # docprecated: double
+            dt.float64
+        ),
         spaceless_string("string").result(dt.string),
-        spaceless_string("binary").result(dt.binary),  # docprecated
-        spaceless_string("bytes").result(dt.binary),
+        spaceless_string("binary", "bytes").result(dt.binary),  # docprecated: binary
         spaceless_string("timestamp").result(dt.Timestamp()),
         spaceless_string("time").result(dt.time),
         spaceless_string("date").result(dt.date),
@@ -135,7 +134,6 @@ def _make_parser():
         .then(LANGLE)
         .then(
             parsy.seq(spaceless(FIELD).skip(COLON), ty)
-            .map(tuple)
             .sep_by(COMMA)
             .map(dt.Struct.from_tuples)
         )

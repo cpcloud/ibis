@@ -133,7 +133,6 @@ def _make_parser():
                 SPACES.then(FIELD.skip(parsy.whitespace)),
                 ty.map(partial(dt.Array, nullable=False)),
             )
-            .map(tuple)
             .sep_by(COMMA)
             .map(partial(dt.Struct.from_tuples, nullable=False))
         )
@@ -144,9 +143,9 @@ def _make_parser():
         spaceless_string("tuple")
         .then(LPAREN)
         .then(
-            parsy.seq(SPACES.then(FIELD.skip(parsy.whitespace).optional()), ty)
-            .map(tuple)
-            .sep_by(COMMA)
+            parsy.seq(SPACES.then(FIELD.skip(parsy.whitespace).optional()), ty).sep_by(
+                COMMA
+            )
         )
         .skip(RPAREN)
         .map(
@@ -170,10 +169,8 @@ def _make_parser():
         .then(LPAREN)
         .then(
             SPACES.then(
-                parsy.seq(RAW_STRING.skip(spaceless_string("=")), NUMBER).map(tuple)
-            )
-            .sep_by(COMMA)
-            .map(dict)
+                parsy.seq(RAW_STRING.skip(spaceless_string("=")), NUMBER)
+            ).sep_by(COMMA)
         )
         .skip(RPAREN)
         .result(dt.String(nullable=False))

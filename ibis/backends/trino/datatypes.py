@@ -86,7 +86,7 @@ def _make_parser(*, default_precision: int, default_scale: int):
     struct = (
         spaceless_string("row")
         .then(LPAREN)
-        .then(parsy.seq(field, ty).map(tuple).sep_by(COMMA).map(dt.Struct.from_tuples))
+        .then(parsy.seq(field, ty).sep_by(COMMA).map(dt.Struct.from_tuples))
         .skip(RPAREN)
     )
 
