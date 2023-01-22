@@ -4,8 +4,7 @@ from typing import Iterable
 
 import sqlalchemy as sa
 from multipledispatch import Dispatcher
-from sqlalchemy.dialects import mysql, postgresql, sqlite
-from sqlalchemy.dialects.mysql.base import MySQLDialect
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.dialects.sqlite.base import SQLiteDialect
 from sqlalchemy.engine.default import DefaultDialect
@@ -245,11 +244,6 @@ def sa_integer(_, satype, nullable=True):
     return dt.Int32(nullable=nullable)
 
 
-@dt.dtype.register(Dialect, mysql.TINYINT)
-def sa_mysql_tinyint(_, satype, nullable=True):
-    return dt.Int8(nullable=nullable)
-
-
 @dt.dtype.register(Dialect, sa.types.BigInteger)
 def sa_bigint(_, satype, nullable=True):
     return dt.Int64(nullable=nullable)
@@ -355,29 +349,12 @@ def sa_postgres_interval(_, satype, nullable=True):
     return dt.Interval(unit=unit, nullable=nullable)
 
 
-@dt.dtype.register(MySQLDialect, mysql.DOUBLE)
-def sa_mysql_double(_, satype, nullable=True):
-    # TODO: handle asdecimal=True
-    return dt.Float64(nullable=nullable)
-
-
 @dt.dtype.register(Dialect, sa.types.String)
 def sa_string(_, satype, nullable=True):
     return dt.String(nullable=nullable)
 
 
 @dt.dtype.register(Dialect, sa.LargeBinary)
-@dt.dtype.register(
-    MySQLDialect,
-    (
-        mysql.TINYBLOB,
-        mysql.MEDIUMBLOB,
-        mysql.BLOB,
-        mysql.LONGBLOB,
-        mysql.BINARY,
-        mysql.VARBINARY,
-    ),
-)
 def sa_binary(_, satype, nullable=True):
     return dt.Binary(nullable=nullable)
 

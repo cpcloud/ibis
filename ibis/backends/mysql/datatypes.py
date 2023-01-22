@@ -173,6 +173,7 @@ def sa_mysql_numeric(_, satype, nullable=True):
 
 
 @dt.dtype.register(MySQLDialect, mysql.YEAR)
+@dt.dtype.register(MySQLDialect, mysql.TINYINT)
 def sa_mysql_tinyint(_, satype, nullable=True):
     return dt.Int8(nullable=nullable)
 
@@ -209,3 +210,24 @@ def sa_mysql_datetime(_, satype, nullable=True):
 @dt.dtype.register(MySQLDialect, mysql.SET)
 def sa_mysql_set(_, satype, nullable=True):
     return dt.Set(dt.string, nullable=nullable)
+
+
+@dt.dtype.register(MySQLDialect, mysql.DOUBLE)
+def sa_mysql_double(_, satype, nullable=True):
+    # TODO: handle asdecimal=True
+    return dt.Float64(nullable=nullable)
+
+
+@dt.dtype.register(
+    MySQLDialect,
+    (
+        mysql.TINYBLOB,
+        mysql.MEDIUMBLOB,
+        mysql.BLOB,
+        mysql.LONGBLOB,
+        mysql.BINARY,
+        mysql.VARBINARY,
+    ),
+)
+def sa_binary(_, satype, nullable=True):
+    return dt.Binary(nullable=nullable)
