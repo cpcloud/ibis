@@ -313,9 +313,9 @@ def sa_array(dialect, satype, nullable=True):
     return dt.Array(dt.dtype(dialect, satype.value_type), nullable=nullable)
 
 
-@sch.infer.register((sa.Table, sa.sql.TableClause))
+@sch.infer.register(sa.sql.TableClause)
 def schema_from_table(
-    table: sa.Table,
+    table: sa.sql.TableClause,
     schema: sch.Schema | None = None,
     dialect: sa.engine.interfaces.Dialect | None = None,
 ) -> sch.Schema:
