@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Iterable
 
 import sqlalchemy as sa
+import sqlalchemy.types as sat
 from multipledispatch import Dispatcher
 from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.types import UserDefinedType
 
 import ibis.expr.datatypes as dt
 import ibis.expr.schema as sch
@@ -17,9 +17,9 @@ if geospatial_supported:
     import geoalchemy2 as ga
 
 
-class ArrayType(UserDefinedType):
-    def __init__(self, value_type: sa.types.TypeEngine):
-        self.value_type = sa.types.to_instance(value_type)
+class ArrayType(sat.UserDefinedType):
+    def __init__(self, value_type: sat.TypeEngine):
+        self.value_type = sat.to_instance(value_type)
 
 
 @compiles(ArrayType, "default")
@@ -27,12 +27,12 @@ def compiles_array(element, compiler, **kw):
     return f"ARRAY({compiler.process(element.value_type, **kw)})"
 
 
-class StructType(UserDefinedType):
+class StructType(sat.UserDefinedType):
     def __init__(
         self,
-        pairs: Iterable[tuple[str, sa.types.TypeEngine]],
+        pairs: Iterable[tuple[str, sat.TypeEngine]],
     ):
-        self.pairs = [(name, sa.types.to_instance(type)) for name, type in pairs]
+        self.pairs = [(name, sat.to_instance(type)) for name, type in pairs]
 
 
 @compiles(StructType, "default")
@@ -43,10 +43,10 @@ def compiles_struct(element, compiler, **kw):
     return f"STRUCT({content})"
 
 
-class MapType(UserDefinedType):
-    def __init__(self, key_type: sa.types.TypeEngine, value_type: sa.types.TypeEngine):
-        self.key_type = sa.types.to_instance(key_type)
-        self.value_type = sa.types.to_instance(value_type)
+class MapType(sat.UserDefinedType):
+    def __init__(self, key_type: sat.TypeEngine, value_type: sat.TypeEngine):
+        self.key_type = sat.to_instance(key_type)
+        self.value_type = sat.to_instance(value_type)
 
 
 @compiles(MapType, "default")
@@ -56,19 +56,19 @@ def compiles_map(element, compiler, **kw):
     return f"MAP({key_type}, {value_type})"
 
 
-class UInt64(sa.types.Integer):
+class UInt64(sat.Integer):
     pass
 
 
-class UInt32(sa.types.Integer):
+class UInt32(sat.Integer):
     pass
 
 
-class UInt16(sa.types.Integer):
+class UInt16(sat.Integer):
     pass
 
 
-class UInt8(sa.types.Integer):
+class UInt8(sat.Integer):
     pass
 
 
@@ -118,7 +118,7 @@ def table_from_schema(name, meta, schema, database: str | None = None):
 
 # TODO(cleanup)
 ibis_type_to_sqla = {
-    dt.Null: sa.types.NullType,
+    dt.Null: sat.NullType,
     dt.Date: sa.Date,
     dt.Time: sa.Time,
     dt.Boolean: sa.Boolean,
@@ -157,7 +157,7 @@ def _default(_, itype):
 
 @to_sqla_type.register(Dialect, dt.Decimal)
 def _decimal(_, itype):
-    return sa.types.NUMERIC(itype.precision, itype.scale)
+    return sat.NUMERIC(itype.precision, itype.scale)
 
 
 @to_sqla_type.register(Dialect, dt.Timestamp)
@@ -184,12 +184,12 @@ def _map(dialect, itype):
     )
 
 
-@dt.dtype.register(Dialect, sa.types.NullType)
+@dt.dtype.register(Dialect, sat.NullType)
 def sa_null(_, satype, nullable=True):
     return dt.null
 
 
-@dt.dtype.register(Dialect, sa.types.Boolean)
+@dt.dtype.register(Dialect, sat.Boolean)
 def sa_boolean(_, satype, nullable=True):
     return dt.Boolean(nullable=nullable)
 
@@ -201,7 +201,7 @@ _FLOAT_PREC_TO_TYPE = {
 }
 
 
-@dt.dtype.register(Dialect, sa.types.Float)
+@dt.dtype.register(Dialect, sat.Float)
 def sa_float(_, satype, nullable=True):
     precision = satype.precision
     if (typ := _FLOAT_PREC_TO_TYPE.get(precision)) is not None:
@@ -209,22 +209,22 @@ def sa_float(_, satype, nullable=True):
     return dt.Decimal(precision, satype.scale, nullable=nullable)
 
 
-@dt.dtype.register(Dialect, sa.types.Numeric)
+@dt.dtype.register(Dialect, sat.Numeric)
 def sa_numeric(_, satype, nullable=True):
     return dt.Decimal(satype.precision, satype.scale, nullable=nullable)
 
 
-@dt.dtype.register(Dialect, sa.types.SmallInteger)
+@dt.dtype.register(Dialect, sat.SmallInteger)
 def sa_smallint(_, satype, nullable=True):
     return dt.Int16(nullable=nullable)
 
 
-@dt.dtype.register(Dialect, sa.types.Integer)
+@dt.dtype.register(Dialect, sat.Integer)
 def sa_integer(_, satype, nullable=True):
     return dt.Int32(nullable=nullable)
 
 
-@dt.dtype.register(Dialect, sa.types.BigInteger)
+@dt.dtype.register(Dialect, sat.BigInteger)
 def sa_bigint(_, satype, nullable=True):
     return dt.Int64(nullable=nullable)
 
@@ -276,7 +276,7 @@ if geospatial_supported:
             return ga.types._GISType
 
 
-@dt.dtype.register(Dialect, sa.types.String)
+@dt.dtype.register(Dialect, sa.String)
 def sa_string(_, satype, nullable=True):
     return dt.String(nullable=nullable)
 
