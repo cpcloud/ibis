@@ -4,8 +4,7 @@ from typing import Iterable
 
 import sqlalchemy as sa
 from multipledispatch import Dispatcher
-from sqlalchemy.dialects import mssql, mysql, postgresql, sqlite
-from sqlalchemy.dialects.mssql.base import MSDialect
+from sqlalchemy.dialects import mysql, postgresql, sqlite
 from sqlalchemy.dialects.mysql.base import MySQLDialect
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.dialects.sqlite.base import SQLiteDialect
@@ -81,14 +80,26 @@ class UInt8(sa.types.Integer):
 @compiles(UInt32, "postgresql")
 @compiles(UInt16, "postgresql")
 @compiles(UInt8, "postgresql")
+@compiles(UInt64, "mssql")
+@compiles(UInt32, "mssql")
+@compiles(UInt16, "mssql")
+@compiles(UInt8, "mssql")
 @compiles(UInt64, "mysql")
 @compiles(UInt32, "mysql")
 @compiles(UInt16, "mysql")
 @compiles(UInt8, "mysql")
+@compiles(UInt64, "snowflake")
+@compiles(UInt32, "snowflake")
+@compiles(UInt16, "snowflake")
+@compiles(UInt8, "snowflake")
 @compiles(UInt64, "sqlite")
 @compiles(UInt32, "sqlite")
 @compiles(UInt16, "sqlite")
 @compiles(UInt8, "sqlite")
+@compiles(UInt64, "trino")
+@compiles(UInt32, "trino")
+@compiles(UInt16, "trino")
+@compiles(UInt8, "trino")
 def compile_uint(element, compiler, **kw):
     dialect_name = compiler.dialect.name
     raise TypeError(
@@ -203,12 +214,6 @@ def sa_boolean(_, satype, nullable=True):
     return dt.Boolean(nullable=nullable)
 
 
-@dt.dtype.register(MySQLDialect, (sa.NUMERIC, mysql.NUMERIC))
-def sa_mysql_numeric(_, satype, nullable=True):
-    # https://dev.mysql.com/doc/refman/8.0/en/fixed-point-types.html
-    return dt.Decimal(satype.precision or 10, satype.scale or 0, nullable=nullable)
-
-
 _FLOAT_PREC_TO_TYPE = {
     11: dt.Float16,
     24: dt.Float32,
@@ -241,44 +246,16 @@ def sa_integer(_, satype, nullable=True):
 
 
 @dt.dtype.register(Dialect, mysql.TINYINT)
-@dt.dtype.register(MSDialect, mssql.TINYINT)
-@dt.dtype.register(MySQLDialect, mysql.YEAR)
 def sa_mysql_tinyint(_, satype, nullable=True):
     return dt.Int8(nullable=nullable)
 
 
-@dt.dtype.register(MSDialect, mssql.BIT)
-def sa_mssql_bit(_, satype, nullable=True):
-    return dt.Boolean(nullable=nullable)
-
-
-@dt.dtype.register(MySQLDialect, mysql.BIT)
-def sa_mysql_bit(_, satype, nullable=True):
-    if 1 <= (length := satype.length) <= 8:
-        return dt.Int8(nullable=nullable)
-    elif 9 <= length <= 16:
-        return dt.Int16(nullable=nullable)
-    elif 17 <= length <= 32:
-        return dt.Int32(nullable=nullable)
-    elif 33 <= length <= 64:
-        return dt.Int64(nullable=nullable)
-    else:
-        raise ValueError(f"Invalid MySQL BIT length: {length:d}")
-
-
 @dt.dtype.register(Dialect, sa.types.BigInteger)
-@dt.dtype.register(MSDialect, mssql.MONEY)
 def sa_bigint(_, satype, nullable=True):
     return dt.Int64(nullable=nullable)
 
 
-@dt.dtype.register(MSDialect, mssql.SMALLMONEY)
-def sa_mssql_smallmoney(_, satype, nullable=True):
-    return dt.Int32(nullable=nullable)
-
-
 @dt.dtype.register(Dialect, sa.REAL)
-@dt.dtype.register(MySQLDialect, mysql.FLOAT)
 def sa_real(_, satype, nullable=True):
     return dt.Float32(nullable=nullable)
 
@@ -291,7 +268,6 @@ def sa_double(_, satype, nullable=True):
 
 
 @dt.dtype.register(PGDialect, postgresql.UUID)
-@dt.dtype.register(MSDialect, mssql.UNIQUEIDENTIFIER)
 def sa_uuid(_, satype, nullable=True):
     return dt.UUID(nullable=nullable)
 
@@ -315,21 +291,6 @@ def sa_inet(_, satype, nullable=True):
 @dt.dtype.register(PGDialect, postgresql.JSONB)
 def sa_json(_, satype, nullable=True):
     return dt.JSON(nullable=nullable)
-
-
-@dt.dtype.register(MySQLDialect, mysql.TIMESTAMP)
-def sa_mysql_timestamp(_, satype, nullable=True):
-    return dt.Timestamp(timezone="UTC", nullable=nullable)
-
-
-@dt.dtype.register(MySQLDialect, mysql.DATETIME)
-def sa_mysql_datetime(_, satype, nullable=True):
-    return dt.Timestamp(nullable=nullable)
-
-
-@dt.dtype.register(MySQLDialect, mysql.SET)
-def sa_mysql_set(_, satype, nullable=True):
-    return dt.Set(dt.string, nullable=nullable)
 
 
 if geospatial_supported:
@@ -406,7 +367,6 @@ def sa_string(_, satype, nullable=True):
 
 
 @dt.dtype.register(Dialect, sa.LargeBinary)
-@dt.dtype.register(MSDialect, (mssql.BINARY, mssql.TIMESTAMP))
 @dt.dtype.register(
     MySQLDialect,
     (
@@ -436,20 +396,6 @@ def sa_date(_, satype, nullable=True):
 def sa_datetime(_, satype, nullable=True, default_timezone='UTC'):
     timezone = default_timezone if satype.timezone else None
     return dt.Timestamp(timezone=timezone, nullable=nullable)
-
-
-@dt.dtype.register(MSDialect, mssql.DATETIMEOFFSET)
-def _datetimeoffset(_, sa_type, nullable=True):
-    if (prec := sa_type.precision) is None:
-        prec = 7
-    return dt.Timestamp(scale=prec, timezone="UTC", nullable=nullable)
-
-
-@dt.dtype.register(MSDialect, mssql.DATETIME2)
-def _datetime2(_, sa_type, nullable=True):
-    if (prec := sa_type.precision) is None:
-        prec = 7
-    return dt.Timestamp(scale=prec, nullable=nullable)
 
 
 @dt.dtype.register(PGDialect, sa.ARRAY)

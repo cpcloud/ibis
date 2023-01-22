@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from functools import partial
 
+import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
+from sqlalchemy.dialects.mysql.base import MySQLDialect
+
 import ibis.expr.datatypes as dt
 
 # binary character set
@@ -160,3 +164,48 @@ class _FieldFlags:
     @property
     def is_num(self) -> bool:
         return (self.NUM & self.value) != 0
+
+
+@dt.dtype.register(MySQLDialect, (sa.NUMERIC, mysql.NUMERIC))
+def sa_mysql_numeric(_, satype, nullable=True):
+    # https://dev.mysql.com/doc/refman/8.0/en/fixed-point-types.html
+    return dt.Decimal(satype.precision or 10, satype.scale or 0, nullable=nullable)
+
+
+@dt.dtype.register(MySQLDialect, mysql.YEAR)
+def sa_mysql_tinyint(_, satype, nullable=True):
+    return dt.Int8(nullable=nullable)
+
+
+@dt.dtype.register(MySQLDialect, mysql.BIT)
+def sa_mysql_bit(_, satype, nullable=True):
+    if 1 <= (length := satype.length) <= 8:
+        return dt.Int8(nullable=nullable)
+    elif 9 <= length <= 16:
+        return dt.Int16(nullable=nullable)
+    elif 17 <= length <= 32:
+        return dt.Int32(nullable=nullable)
+    elif 33 <= length <= 64:
+        return dt.Int64(nullable=nullable)
+    else:
+        raise ValueError(f"Invalid MySQL BIT length: {length:d}")
+
+
+@dt.dtype.register(MySQLDialect, mysql.FLOAT)
+def sa_real(_, satype, nullable=True):
+    return dt.Float32(nullable=nullable)
+
+
+@dt.dtype.register(MySQLDialect, mysql.TIMESTAMP)
+def sa_mysql_timestamp(_, satype, nullable=True):
+    return dt.Timestamp(timezone="UTC", nullable=nullable)
+
+
+@dt.dtype.register(MySQLDialect, mysql.DATETIME)
+def sa_mysql_datetime(_, satype, nullable=True):
+    return dt.Timestamp(nullable=nullable)
+
+
+@dt.dtype.register(MySQLDialect, mysql.SET)
+def sa_mysql_set(_, satype, nullable=True):
+    return dt.Set(dt.string, nullable=nullable)
