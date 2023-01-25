@@ -29,6 +29,9 @@ REWRITES = {
     ops.Mean: bq_mean,
     ops.Any: toolz.identity,
     ops.All: toolz.identity,
-    ops.NotAny: toolz.identity,
-    ops.NotAll: toolz.identity,
+    ops.NotAny: lambda op: ops.All(ops.Not(op.arg)),
+    ops.NotAll: lambda op: ops.Any(ops.Not(op.arg)),
+    ops.FloorDivide: lambda op: ops.Cast(
+        ops.Floor(ops.Divide(op.left, op.right)), op.output_dtype
+    ),
 }
