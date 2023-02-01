@@ -1,2 +1,2 @@
-SELECT BIT_XOR(if(t0.`bigint_col` > 0, t0.`int_col`, NULL)) AS `tmp`
-FROM functional_alltypes t0
+SELECT bit_xor(CASE WHEN (`t0`.`bigint_col` > 0) THEN `t0`.`int_col` ELSE NULL END) AS `BitXor_int_col_Greater_bigint_col_0_` 
+FROM `functional_alltypes` AS `t0`

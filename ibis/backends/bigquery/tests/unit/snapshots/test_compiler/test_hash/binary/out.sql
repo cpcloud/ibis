@@ -1,1 +1,1 @@
-SELECT farm_fingerprint(FROM_BASE64('dGVzdCBvZiBoYXNo')) AS `tmp`
+SELECT farm_fingerprint(from_base64('dGVzdCBvZiBoYXNo')) AS `Hash_b_test_of_hash_`

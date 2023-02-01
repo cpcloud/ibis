@@ -1,5 +1,9 @@
-SELECT t0.*
-FROM t0 t0
-EXCEPT DISTINCT
-SELECT t0.*
-FROM t1 t0
+WITH `anon_1` AS 
+(SELECT `t0`.`a` AS `a` 
+FROM `t0` AS `t0`), 
+`anon_2` AS 
+(SELECT `t0`.`a` AS `a` 
+FROM `t1` AS `t0`)
+ SELECT `anon_1`.`a` 
+FROM `anon_1` EXCEPT SELECT `anon_2`.`a` 
+FROM `anon_2`

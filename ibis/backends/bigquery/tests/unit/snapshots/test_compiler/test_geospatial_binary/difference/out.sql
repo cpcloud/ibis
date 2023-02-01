@@ -1,2 +1,2 @@
-SELECT ST_DIFFERENCE(t0.`geog0`, t0.`geog1`) AS `tmp`
-FROM t t0
+SELECT ST_AsEWKB(ST_Difference(`t0`.`geog0`, `t0`.`geog1`)) AS `tmp` 
+FROM `t` AS `t0`

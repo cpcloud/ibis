@@ -1,1 +1,1 @@
-SELECT sha512(FROM_BASE64('dGVzdA==')) AS `tmp`
+SELECT sha512(from_base64('dGVzdA==')) AS `tmp`

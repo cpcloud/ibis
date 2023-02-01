@@ -16,6 +16,7 @@ from google.cloud import bigquery as bq
 import ibis
 import ibis.expr.datatypes as dt
 from ibis.backends.bigquery import EXTERNAL_DATA_SCOPES, Backend
+from ibis.backends.bigquery.compiler import BigQueryDialect
 from ibis.backends.bigquery.datatypes import ibis_type_to_bigquery_type
 from ibis.backends.conftest import TEST_TABLES
 from ibis.backends.tests.base import BackendTest, RoundAwayFromZero, UnorderedComparator
@@ -33,13 +34,21 @@ def ibis_type_to_bq_field(typ: dt.DataType) -> Mapping[str, Any]:
 
 @ibis_type_to_bq_field.register(dt.DataType)
 def _(typ: dt.DataType) -> Mapping[str, Any]:
-    return {"field_type": ibis_type_to_bigquery_type(typ)}
+    return {
+        "field_type": str(
+            ibis_type_to_bigquery_type(typ).compile(dialect=BigQueryDialect())
+        )
+    }
 
 
 @ibis_type_to_bq_field.register(dt.Array)
 def _(typ: dt.Array) -> Mapping[str, Any]:
     return {
-        "field_type": ibis_type_to_bigquery_type(typ.value_type),
+        "field_type": str(
+            ibis_type_to_bigquery_type(typ.value_type).compile(
+                dialect=BigQueryDialect()
+            )
+        ),
         "mode": "REPEATED",
     }
 

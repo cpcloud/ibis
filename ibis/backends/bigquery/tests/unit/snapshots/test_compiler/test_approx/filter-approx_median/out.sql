@@ -1,2 +1,2 @@
-SELECT APPROX_QUANTILES(if(t0.`month` > 0, t0.`double_col`, NULL), 2)[OFFSET(1)] AS `tmp`
-FROM functional_alltypes t0
+SELECT (approx_quantiles(CASE WHEN (`t0`.`month` > 0) THEN `t0`.`double_col` ELSE NULL END, 2))[OFFSET(1)] AS `ApproxMedian_double_col_Greater_month_0_` 
+FROM `functional_alltypes` AS `t0`

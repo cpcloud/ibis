@@ -1,5 +1,9 @@
-SELECT t0.*
-FROM functional_alltypes t0
-UNION DISTINCT
-SELECT t0.*
-FROM functional_alltypes t0
+WITH `anon_1` AS 
+(SELECT `t0`.`index` AS `index`, `t0`.`Unnamed_0` AS `Unnamed_0`, `t0`.`id` AS `id`, `t0`.`bool_col` AS `bool_col`, `t0`.`tinyint_col` AS `tinyint_col`, `t0`.`smallint_col` AS `smallint_col`, `t0`.`int_col` AS `int_col`, `t0`.`bigint_col` AS `bigint_col`, `t0`.`float_col` AS `float_col`, `t0`.`double_col` AS `double_col`, `t0`.`date_string_col` AS `date_string_col`, `t0`.`string_col` AS `string_col`, `t0`.`timestamp_col` AS `timestamp_col`, `t0`.`year` AS `year`, `t0`.`month` AS `month` 
+FROM `functional_alltypes` AS `t0`), 
+`anon_2` AS 
+(SELECT `t0`.`index` AS `index`, `t0`.`Unnamed_0` AS `Unnamed_0`, `t0`.`id` AS `id`, `t0`.`bool_col` AS `bool_col`, `t0`.`tinyint_col` AS `tinyint_col`, `t0`.`smallint_col` AS `smallint_col`, `t0`.`int_col` AS `int_col`, `t0`.`bigint_col` AS `bigint_col`, `t0`.`float_col` AS `float_col`, `t0`.`double_col` AS `double_col`, `t0`.`date_string_col` AS `date_string_col`, `t0`.`string_col` AS `string_col`, `t0`.`timestamp_col` AS `timestamp_col`, `t0`.`year` AS `year`, `t0`.`month` AS `month` 
+FROM `functional_alltypes` AS `t0`)
+ SELECT `anon_1`.`index`, `anon_1`.`Unnamed_0`, `anon_1`.`id`, `anon_1`.`bool_col`, `anon_1`.`tinyint_col`, `anon_1`.`smallint_col`, `anon_1`.`int_col`, `anon_1`.`bigint_col`, `anon_1`.`float_col`, `anon_1`.`double_col`, `anon_1`.`date_string_col`, `anon_1`.`string_col`, `anon_1`.`timestamp_col`, `anon_1`.`year`, `anon_1`.`month` 
+FROM `anon_1` UNION DISTINCT SELECT `anon_2`.`index`, `anon_2`.`Unnamed_0`, `anon_2`.`id`, `anon_2`.`bool_col`, `anon_2`.`tinyint_col`, `anon_2`.`smallint_col`, `anon_2`.`int_col`, `anon_2`.`bigint_col`, `anon_2`.`float_col`, `anon_2`.`double_col`, `anon_2`.`date_string_col`, `anon_2`.`string_col`, `anon_2`.`timestamp_col`, `anon_2`.`year`, `anon_2`.`month` 
+FROM `anon_2`

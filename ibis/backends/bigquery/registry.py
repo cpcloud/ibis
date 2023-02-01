@@ -3,34 +3,42 @@
 from __future__ import annotations
 
 import base64
-import datetime
-from typing import Literal
+import operator
+from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
+import sqlalchemy as sa
+import sqlalchemy_bigquery as sab
 from multipledispatch import Dispatcher
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.functions import GenericFunction
 
 import ibis
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
-from ibis.backends.base.sql import compiler
-from ibis.backends.base.sql.registry import (
+from ibis.backends.base.sql.alchemy.registry import _literal as literal
+from ibis.backends.base.sql.alchemy.registry import (
     fixed_arity,
-    literal,
-    operation_registry,
     reduction,
+    sqlalchemy_operation_registry,
+    sqlalchemy_window_functions_registry,
     unary,
 )
 from ibis.backends.bigquery.datatypes import ibis_type_to_bigquery_type
 
+if TYPE_CHECKING:
+    from ibis.backends.bigquery.compiler import BigQueryExprTranslator
+
 
 def _extract_field(sql_attr):
     def extract_field_formatter(translator, op):
-        arg = translator.translate(op.args[0])
+        arg = translator.translate(op.arg)
         if sql_attr == "epochseconds":
-            return f"UNIX_SECONDS({arg})"
+            return sa.func.unix_seconds(arg)
         else:
-            return f"EXTRACT({sql_attr} from {arg})"
+            return sa.extract(sql_attr, arg)
 
     return extract_field_formatter
 
@@ -38,88 +46,87 @@ def _extract_field(sql_attr):
 bigquery_cast = Dispatcher("bigquery_cast")
 
 
-@bigquery_cast.register(str, dt.Timestamp, dt.Integer)
-def bigquery_cast_timestamp_to_integer(compiled_arg, from_, to):
+@bigquery_cast.register(dt.Timestamp, dt.Integer)
+def bigquery_cast_timestamp_to_integer(from_, to):
     """Convert TIMESTAMP to INT64 (seconds since Unix epoch)."""
-    return f"UNIX_MICROS({compiled_arg})"
+    return sa.func.unix_micros
 
 
-@bigquery_cast.register(str, dt.Integer, dt.Timestamp)
-def bigquery_cast_integer_to_timestamp(compiled_arg, from_, to):
+@bigquery_cast.register(dt.Integer, dt.Timestamp)
+def bigquery_cast_integer_to_timestamp(from_, to):
     """Convert INT64 (seconds since Unix epoch) to Timestamp."""
-    return f"TIMESTAMP_SECONDS({compiled_arg})"
+    return sa.func.timestamp_seconds
 
 
 @bigquery_cast.register(str, dt.Interval, dt.Integer)
-def bigquery_cast_interval_to_integer(compiled_arg, from_, to):
-    return f"EXTRACT({from_.resolution.upper()} from {compiled_arg})"
+def bigquery_cast_interval_to_integer(from_, to):
+    return partial(sa.extract, from_.resolution.upper())
 
 
-@bigquery_cast.register(str, dt.DataType, dt.DataType)
-def bigquery_cast_generate(compiled_arg, from_, to):
+@bigquery_cast.register(dt.DataType, dt.DataType)
+def bigquery_cast_generate(from_, to):
     """Cast to desired type."""
-    sql_type = ibis_type_to_bigquery_type(to)
-    return f"CAST({compiled_arg} AS {sql_type})"
+    return lambda arg: sa.cast(arg, ibis_type_to_bigquery_type(to))
 
 
-@bigquery_cast.register(str, dt.DataType)
-def bigquery_cast_generate_simple(compiled_arg, to):
-    return bigquery_cast(compiled_arg, to, to)
+@bigquery_cast.register(dt.DataType)
+def bigquery_cast_generate_simple(to):
+    return bigquery_cast(to, to)
 
 
 def _cast(translator, op):
     arg, target_type = op.args
     arg_formatted = translator.translate(arg)
     input_dtype = arg.output_dtype
-    return bigquery_cast(arg_formatted, input_dtype, target_type)
+    return bigquery_cast(input_dtype, target_type)(arg_formatted)
 
 
-def integer_to_timestamp(translator: compiler.ExprTranslator, op) -> str:
+def integer_to_timestamp(translator: BigQueryExprTranslator, op) -> str:
     """Interprets an integer as a timestamp."""
     arg = translator.translate(op.arg)
     unit = op.unit
 
     if unit == "s":
-        return f"TIMESTAMP_SECONDS({arg})"
+        return sa.func.timestamp_seconds(arg)
     elif unit == "ms":
-        return f"TIMESTAMP_MILLIS({arg})"
+        return sa.func.timestamp_millis(arg)
     elif unit == "us":
-        return f"TIMESTAMP_MICROS({arg})"
+        return sa.func.timestamp_micros(arg)
     elif unit == "ns":
         # Timestamps are represented internally as elapsed microseconds, so some
         # rounding is required if an integer represents nanoseconds.
         # https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#timestamp_type
-        return f"TIMESTAMP_MICROS(CAST(ROUND({arg} / 1000) AS INT64))"
+        return sa.func.timestamp_micros(sa.cast(sa.func.round(arg / 1000), sa.BIGINT))
 
     raise NotImplementedError(f"cannot cast unit {unit}")
 
 
-def _struct_field(translator, op):
-    arg = translator.translate(op.arg)
-    return f"{arg}.`{op.field}`"
+class _struct_column(GenericFunction):
+    def __init__(self, fields, *, type: sab.STRUCT) -> None:
+        super().__init__()
+        self.fields = fields
+        self.type = type
 
 
-def _struct_column(translator, op):
-    cols = (
-        f'{translator.translate(value)} AS {name}'
-        for name, value, in zip(op.names, op.values)
+@compiles(_struct_column, "bigquery")
+def compiles_struct_column(element, compiler, **kw):
+    args = ", ".join(
+        f"{compiler.process(value, **kw)} AS {name}"
+        for name, value in element.fields.items()
     )
-    return "STRUCT({})".format(", ".join(cols))
+    return f"STRUCT({args})"
 
 
-def _array_concat(translator, op):
-    return "ARRAY_CONCAT({})".format(", ".join(map(translator.translate, op.args)))
+class _array_column(GenericFunction):
+    def __init__(self, elements, *, type) -> None:
+        self.elements = elements
+        self.type = type
 
 
-def _array_column(translator, op):
-    return "[{}]".format(", ".join(map(translator.translate, op.cols)))
-
-
-def _array_index(translator, op):
-    # SAFE_OFFSET returns NULL if out of bounds
-    arg = translator.translate(op.arg)
-    index = translator.translate(op.index)
-    return f"{arg}[SAFE_OFFSET({index})]"
+@compiles(_array_column, "bigquery")
+def compiles_array_column(element, compiler, **kw):
+    args = ", ".join(compiler.process(value, **kw) for value in element.elements)
+    return f"[{args}]"
 
 
 def _hash(translator, op):
@@ -128,7 +135,7 @@ def _hash(translator, op):
     arg_formatted = translator.translate(arg)
 
     if how == "farm_fingerprint":
-        return f"farm_fingerprint({arg_formatted})"
+        return sa.func.farm_fingerprint(arg_formatted)
     else:
         raise NotImplementedError(how)
 
@@ -141,8 +148,8 @@ def _string_find(translator, op):
     if end is not None:
         raise NotImplementedError("end not implemented for string find")
 
-    return "STRPOS({}, {}) - 1".format(
-        translator.translate(haystack), translator.translate(needle)
+    return (
+        sa.func.strpos(translator.translate(haystack), translator.translate(needle)) - 1
     )
 
 
@@ -154,28 +161,28 @@ def _translate_pattern(translator, op):
 def _regex_search(translator, op):
     arg = translator.translate(op.arg)
     regex = _translate_pattern(translator, op.pattern)
-    return f"REGEXP_CONTAINS({arg}, {regex})"
+    return sa.func.regexp_contains(arg, regex)
 
 
 def _regex_extract(translator, op):
     arg = translator.translate(op.arg)
     regex = _translate_pattern(translator, op.pattern)
     index = translator.translate(op.index)
-    matches = f"REGEXP_CONTAINS({arg}, {regex})"
-    extract = f"REGEXP_EXTRACT_ALL({arg}, {regex})[SAFE_ORDINAL({index})]"
-    return f"IF({matches}, IF(COALESCE({index}, 0) = 0, {arg}, {extract}), NULL)"
+    matches = sa.func.regexp_contains(arg, regex)
+    extract = sa.func.regexp_extract_all(arg, regex)[sa.func.safe_ordinal(index)]
+    if_ = getattr(sa.func, "if")
+    return if_(matches, if_(sa.func.coalesce(index, 0) == 0, arg, extract), sa.null())
 
 
 def _regex_replace(translator, op):
     arg = translator.translate(op.arg)
     regex = _translate_pattern(translator, op.pattern)
     replacement = translator.translate(op.replacement)
-    return f"REGEXP_REPLACE({arg}, {regex}, {replacement})"
+    return sa.func.regexp_replace(arg, regex, replacement)
 
 
 def _string_concat(translator, op):
-    args = ", ".join(map(translator.translate, op.arg))
-    return f"CONCAT({args})"
+    return sa.func.concat(*map(translator.translate, op.arg))
 
 
 def _string_join(translator, op):
@@ -187,12 +194,12 @@ def _string_join(translator, op):
 
 def _string_ascii(translator, op):
     arg = translator.translate(op.arg)
-    return f"TO_CODE_POINTS({arg})[SAFE_OFFSET(0)]"
+    return sa.func.to_code_points(arg)[1]
 
 
 def _string_right(translator, op):
     arg, nchars = map(translator.translate, op.args)
-    return f"SUBSTR({arg}, -LEAST(LENGTH({arg}), {nchars}))"
+    return sa.func.substr(arg, -sa.func.least(sa.func.length(arg), nchars))
 
 
 def _string_substring(translator, op):
@@ -200,12 +207,12 @@ def _string_substring(translator, op):
     if (length := getattr(length, "value", None)) is not None and length < 0:
         raise ValueError("Length parameter must be a non-negative value.")
 
-    base_substring = operation_registry[ops.Substring]
+    base_substring = sqlalchemy_operation_registry[ops.Substring]
     return base_substring(translator, op)
 
 
 def _array_literal_format(op):
-    return str(list(op.value))
+    return sa.literal_column(str(list(op.value)))
 
 
 def _log(translator, op):
@@ -213,55 +220,51 @@ def _log(translator, op):
     arg_formatted = translator.translate(arg)
 
     if base is None:
-        return f"ln({arg_formatted})"
+        return sa.func.ln(arg_formatted)
 
     base_formatted = translator.translate(base)
-    return f"log({arg_formatted}, {base_formatted})"
+    return sa.func.log(arg_formatted, base_formatted)
 
 
 def _literal(translator, op):
+    value = op.value
     dtype = op.output_dtype
     if dtype.is_decimal():
-        value = op.value
         if value.is_nan():
-            return "CAST('NaN' AS FLOAT64)"
+            return sa.cast(sa.literal("NaN"), ibis_type_to_bigquery_type(dtype))
         if value.is_infinite():
             prefix = "-" * value.is_signed()
-            return f"CAST('{prefix}inf' AS FLOAT64)"
+            return sa.cast(
+                sa.literal(f"{prefix}inf"), ibis_type_to_bigquery_type(dtype)
+            )
         else:
-            return f"{ibis_type_to_bigquery_type(dtype)} '{op.value}'"
+            return sa.cast(sa.literal(op.value), ibis_type_to_bigquery_type(dtype))
     elif dtype.is_uuid():
         return translator.translate(ops.Literal(str(op.value), dtype=dt.str))
 
     if isinstance(dtype, dt.Numeric):
-        value = op.value
         if not np.isfinite(value):
-            return f"CAST({str(value)!r} AS FLOAT64)"
+            return sa.cast(sa.literal(value), ibis_type_to_bigquery_type(dtype))
 
     # special case literal timestamp, date, and time scalars
     if isinstance(op, ops.Literal):
-        value = op.value
-        if isinstance(dtype, dt.Date):
-            if isinstance(value, datetime.datetime):
-                raw_value = value.date()
-            else:
-                raw_value = value
-            return f"DATE '{raw_value}'"
-        elif isinstance(dtype, dt.Timestamp):
-            return f"TIMESTAMP '{value}'"
-        elif isinstance(dtype, dt.Time):
+        if dtype.is_date():
+            return sa.cast(sa.literal(value), sa.DATE())
+        elif dtype.is_timestamp():
+            return sa.cast(sa.literal(value), sa.TIMESTAMP())
+        elif dtype.is_time():
             # TODO: define extractors on TimeValue expressions
-            return f"TIME '{value}'"
-        elif isinstance(dtype, dt.Binary):
-            return "FROM_BASE64('{}')".format(
-                base64.b64encode(value).decode(encoding="utf-8")
-            )
+            return sa.cast(sa.literal(value), sa.TIME())
+        elif dtype.is_binary():
+            return sa.func.from_base64(base64.b64encode(value).decode(encoding="utf-8"))
         elif dtype.is_struct():
-            cols = (
-                f'{translator.translate(ops.Literal(op.value[name], dtype=type_))} AS {name}'
-                for name, type_ in zip(dtype.names, dtype.types)
+            return _struct_column(
+                {
+                    key: translator.translate(ops.Literal(val, dtype=dtype[key]))
+                    for key, val in value.items()
+                },
+                type=translator.get_sqla_type(dtype),
             )
-            return "STRUCT({})".format(", ".join(cols))
 
     try:
         return literal(translator, op)
@@ -282,7 +285,7 @@ def _arbitrary(translator, op):
             f"{how!r} value not supported for arbitrary in BigQuery"
         )
 
-    return f"ANY_VALUE({translator.translate(arg)})"
+    return sa.func.any_value(translator.translate(arg))
 
 
 _date_units = {
@@ -314,7 +317,8 @@ def _truncate(kind, units):
                 "BigQuery does not support truncating {} values to unit "
                 "{!r}".format(arg.output_dtype, unit)
             )
-        return f"{kind}_TRUNC({trans_arg}, {valid_unit})"
+        func = getattr(sa.func, f"{kind}_trunc")
+        return func(trans_arg, valid_unit)
 
     return truncator
 
@@ -329,19 +333,18 @@ def _timestamp_op(func, units):
                 "BigQuery does not allow binary operation "
                 "{} with INTERVAL offset {}".format(func, unit)
             )
-        formatted_arg = translator.translate(arg)
-        formatted_offset = translator.translate(offset)
-        result = f"{func}({formatted_arg}, {formatted_offset})"
-        return result
+        return func(translator.translate(arg), translator.translate(offset))
 
     return _formatter
 
 
 def _geo_boundingbox(dimension_name):
     def _formatter(translator, op):
-        geog = op.args[0]
+        geog = op.arg
         geog_formatted = translator.translate(geog)
-        return f"ST_BOUNDINGBOX({geog_formatted}).{dimension_name}"
+        return sa.func.st_boundingbox(geog_formatted).op(".")(
+            sa.literal_column(dimension_name)
+        )
 
     return _formatter
 
@@ -354,64 +357,61 @@ def _geo_simplify(translator, op):
             "must pass preserve_collapsed=False"
         )
     geog, tolerance = map(translator.translate, (geog, tolerance))
-    return f"ST_SIMPLIFY({geog}, {tolerance})"
-
-
-STRFTIME_FORMAT_FUNCTIONS = {
-    dt.Date: "DATE",
-    dt.Time: "TIME",
-    dt.Timestamp: "TIMESTAMP",
-}
+    return sa.func.st_simplify(geog, tolerance)
 
 
 def bigquery_day_of_week_index(t, op):
     """Convert timestamp to day-of-week integer."""
-    arg = op.args[0]
-    arg_formatted = t.translate(arg)
-    return f"MOD(EXTRACT(DAYOFWEEK FROM {arg_formatted}) + 5, 7)"
+    arg = t.translate(op.arg)
+    return sa.func.mod(sa.extract('DAYOFWEEK', arg) + 5, 7)
+
+
+class _format_cast(GenericFunction):
+    def __init__(self, arg, fmt: str) -> None:
+        super().__init__()
+        self.arg = arg
+        self.fmt = fmt
+
+
+@compiles(_format_cast, "bigquery")
+def compiles_format_cast(element, compiler, **kw):
+    arg = compiler.process(element.arg, **kw)
+    return f"cast({arg} AS {element.fmt})"
 
 
 def bigquery_day_of_week_name(t, op):
     """Convert timestamp to day-of-week name."""
-    return f"INITCAP(CAST({t.translate(op.arg)} AS STRING FORMAT 'DAY'))"
+    return sa.func.initcap(_format_cast(t.translate(op.arg), "STRING FORMAT 'DAY'"))
 
 
 def bigquery_compiles_divide(t, op):
     """Floating point division."""
-    return f"IEEE_DIVIDE({t.translate(op.left)}, {t.translate(op.right)})"
+    return sa.func.ieee_divide(t.translate(op.left), t.translate(op.right))
 
 
 def compiles_strftime(translator, op):
     """Timestamp formatting."""
-    arg = op.arg
-    format_str = op.format_str
-    arg_type = arg.output_dtype
-    strftime_format_func_name = STRFTIME_FORMAT_FUNCTIONS[type(arg_type)]
-    fmt_string = translator.translate(format_str)
-    arg_formatted = translator.translate(arg)
-    if isinstance(arg_type, dt.Timestamp):
-        return "FORMAT_{}({}, {}, {!r})".format(
-            strftime_format_func_name,
-            fmt_string,
-            arg_formatted,
-            arg_type.timezone if arg_type.timezone is not None else "UTC",
-        )
-    return "FORMAT_{}({}, {})".format(
-        strftime_format_func_name, fmt_string, arg_formatted
-    )
+    dtype = op.arg.output_dtype
+    fmt_string = translator.translate(op.format_str)
+    arg_formatted = translator.translate(op.arg)
+    func = getattr(sa.func, f"format_{dtype.__class__.__name__.lower()}")
+    args = [fmt_string, arg_formatted]
+    if dtype.is_timestamp():
+        args.append(tz if (tz := dtype.timezone) is not None else "UTC")
+    return func(*args)
 
 
 def compiles_string_to_timestamp(translator, op):
     """Timestamp parsing."""
     fmt_string = translator.translate(op.format_str)
     arg_formatted = translator.translate(op.arg)
-    return f"PARSE_TIMESTAMP({fmt_string}, {arg_formatted})"
+    return sa.func.parse_timestamp(fmt_string, arg_formatted)
 
 
 def compiles_floor(t, op):
     bigquery_type = ibis_type_to_bigquery_type(op.output_dtype)
     arg = op.arg
-    return f"CAST(FLOOR({t.translate(arg)}) AS {bigquery_type})"
+    return sa.cast(sa.func.floor(t.translate(arg)), bigquery_type)
 
 
 def compiles_approx(translator, op):
@@ -421,7 +421,9 @@ def compiles_approx(translator, op):
     if where is not None:
         arg = ops.Where(where, arg, ibis.NA)
 
-    return f"APPROX_QUANTILES({translator.translate(arg)}, 2)[OFFSET(1)]"
+    return sa.func.approx_quantiles(
+        translator.translate(arg), 2, type_=sa.ARRAY(sab.FLOAT64())
+    )[1]
 
 
 def compiles_covar_corr(func):
@@ -439,88 +441,101 @@ def compiles_covar_corr(func):
         right = translator.translate(
             ops.Cast(right, dt.int64) if right.output_dtype.is_boolean() else right
         )
-        return f"{func}({left}, {right})"
+        return func(left, right)
 
     return translate
 
 
 def _covar(translator, op):
-    how = op.how[:4].upper()
-    assert how in ("POP", "SAMP"), 'how not in ("POP", "SAMP")'
-    return compiles_covar_corr(f"COVAR_{how}")(translator, op)
+    how = op.how[:4].lower()
+    assert how in ("pop", "samp"), 'how not in ("POP", "SAMP")'
+    return compiles_covar_corr(getattr(sa.func, f"covar_{how}"))(translator, op)
 
 
 def _corr(translator, op):
     if (how := op.how) == "sample":
         raise ValueError(f"Correlation with how={how!r} is not supported.")
-    return compiles_covar_corr("CORR")(translator, op)
-
-
-def bigquery_compile_any(translator, op):
-    return f"LOGICAL_OR({translator.translate(op.arg)})"
-
-
-def bigquery_compile_notany(translator, op):
-    return f"LOGICAL_AND(NOT ({translator.translate(op.arg)}))"
-
-
-def bigquery_compile_all(translator, op):
-    return f"LOGICAL_AND({translator.translate(op.arg)})"
-
-
-def bigquery_compile_notall(translator, op):
-    return f"LOGICAL_OR(NOT ({translator.translate(op.arg)}))"
+    return compiles_covar_corr(sa.func.corr)(translator, op)
 
 
 def _identical_to(t, op):
     left = t.translate(op.left)
     right = t.translate(op.right)
-    return f"{left} IS NOT DISTINCT FROM {right}"
+    return left.op("IS NOT DISTINCT FROM")(right)
 
 
 def _floor_divide(t, op):
     left = t.translate(op.left)
     right = t.translate(op.right)
-    return bigquery_cast(f"FLOOR(IEEE_DIVIDE({left}, {right}))", op.output_dtype)
+    return bigquery_cast(op.output_dtype)(
+        sa.func.floor(sa.func.ieee_divide(left, right))
+    )
 
 
 def _log2(t, op):
-    return f"LOG({t.translate(op.arg)}, 2)"
+    return sa.func.log(t.translate(op.arg), 2)
 
 
 def _is_nan(t, op):
-    return f"IS_NAN({t.translate(op.arg)})"
+    return sa.func.is_nan(t.translate(op.arg))
 
 
 def _is_inf(t, op):
-    return f"IS_INF({t.translate(op.arg)})"
+    return sa.func.is_inf(t.translate(op.arg))
 
 
 def _nullifzero(t, op):
-    casted = bigquery_cast('0', op.output_dtype)
-    return f"NULLIF({t.translate(op.arg)}, {casted})"
+    return sa.func.nullif(t.translate(op.arg), 0)
 
 
 def _zeroifnull(t, op):
-    casted = bigquery_cast('0', op.output_dtype)
-    return f"COALESCE({t.translate(op.arg)}, {casted})"
+    return sa.func.coalesce(t.translate(op.arg), 0)
+
+
+class _array_agg_func(GenericFunction):
+    def __init__(
+        self, arg, *, ignore_nulls=True, order_by=None, limit: int | None = None
+    ):
+        super().__init__(arg)
+        self.ignore_nulls = ignore_nulls
+        self.order_by = order_by
+        self.limit = limit
+
+
+@compiles(_array_agg_func, "bigquery")
+def compiles_array_agg(element, compiler, **kw):
+    arg = compiler.function_argspec(element)
+    args = [arg]
+
+    if element.ignore_nulls:
+        args.append("IGNORE NULLS")
+
+    if (order_by := element.order_by) is not None:
+        args.append(f"ORDER BY {compiler.process(order_by, **kw)}")
+
+    if (limit := element.limit) is not None:
+        args.append(f"LIMIT {limit}")
+
+    return f"ARRAY_AGG({' '.join(args)})"
 
 
 def _array_agg(t, op):
     arg = op.arg
     if (where := op.where) is not None:
         arg = ops.Where(where, arg, ibis.NA)
-    return f"ARRAY_AGG({t.translate(arg)} IGNORE NULLS)"
+    return _array_agg_func(t.translate(arg), ignore_nulls=True)
 
 
-def _arg_min_max(sort_dir: Literal["ASC", "DESC"]):
+def _arg_min_max(sort_func):
     def translate(t, op: ops.ArgMin | ops.ArgMax) -> str:
         arg = op.arg
         if (where := op.where) is not None:
             arg = ops.Where(where, arg, None)
         arg = t.translate(arg)
         key = t.translate(op.key)
-        return f"ARRAY_AGG({arg} IGNORE NULLS ORDER BY {key} {sort_dir} LIMIT 1)[SAFE_OFFSET(0)]"
+        return _array_agg_func(
+            arg, ignore_nulls=True, order_by=sort_func(key), limit=1
+        )[1]
 
     return translate
 
@@ -529,33 +544,59 @@ def _array_repeat(t, op):
     start = step = 1
     times = t.translate(op.times)
     arg = t.translate(op.arg)
-    array_length = f"ARRAY_LENGTH({arg})"
-    stop = f"GREATEST({times}, 0) * {array_length}"
-    idx = f"COALESCE(NULLIF(MOD(i, {array_length}), 0), {array_length})"
-    series = f"GENERATE_ARRAY({start}, {stop}, {step})"
-    return f"ARRAY(SELECT {arg}[SAFE_ORDINAL({idx})] FROM UNNEST({series}) AS i)"
+    array_length = sa.func.array_length(arg)
+    stop = sa.func.greatest(times, 0) * array_length
+    series = sa.func.unnest(sa.func.generate_array(start, stop, step)).column_valued(
+        "i"
+    )
+    idx = sa.func.coalesce(
+        sa.func.nullif(sa.func.mod(series.c.i, array_length), 0), array_length
+    )
+    return sa.func.array(sa.select(arg[idx - 1]).scalar_subquery())
 
 
 def _neg_idx_to_pos(array, idx):
-    return f"IF({idx} < 0, ARRAY_LENGTH({array}) + {idx}, {idx})"
+    if_ = getattr(sa.func, "if")
+    return if_(idx < 0, sa.func.array_length(array) + idx, idx)
+
+
+class _unnest(GenericFunction):
+    def __init__(self, arg, *, with_offset: str | None = None) -> None:
+        super().__init__(arg)
+        self.with_offset = with_offset
+
+        columns = [sa.Column("el", arg.type)]
+        if with_offset is not None:
+            columns.append(sa.Column(with_offset, sa.BIGINT))
+
+        self.type = sa.sql.sqltypes.TableValueType(*columns)
+
+
+@compiles(_unnest, "bigquery")
+def compiles_bigquery_unnest(element, compiler, **kw):
+    arg = compiler.visit_table_valued_alias(element, **kw)
+
+    args = [arg]
+    if (with_offset := element.with_offset) is not None:
+        args.append(f"WITH OFFSET {with_offset}")
+    return " ".join(args)
 
 
 def _array_slice(t, op):
     arg = t.translate(op.arg)
-    cond = [f"index >= {_neg_idx_to_pos(arg, t.translate(op.start))}"]
+    elements = _unnest(arg, with_offset="index")
+    index = elements.c.index
+    cond = index >= _neg_idx_to_pos(arg, t.translate(op.start))
     if op.stop:
-        cond.append(f"index < {_neg_idx_to_pos(arg, t.translate(op.stop))}")
-    return (
-        f"ARRAY("
-        f"SELECT el "
-        f"FROM UNNEST({arg}) AS el WITH OFFSET index "
-        f"WHERE {' AND '.join(cond)}"
-        f")"
-    )
+        cond &= index < _neg_idx_to_pos(arg, t.translate(op.stop))
+    return sa.func.array(sa.select(elements.c.el).where(cond).scalar_subquery())
 
 
 def _capitalize(t, op):
-    return f"CONCAT(UPPER(SUBSTR({t.translate(op.arg)}, 1, 1)), SUBSTR({t.translate(op.arg)}, 2))"
+    arg = t.translate(op.arg)
+    return sa.func.concat(
+        sa.func.upper(sa.func.substr(arg, 1, 1), sa.func.substr(arg, 2))
+    )
 
 
 def _nth_value(t, op):
@@ -564,7 +605,19 @@ def _nth_value(t, op):
     if not isinstance(nth_op := op.nth, ops.Literal):
         raise TypeError(f"Bigquery nth must be a literal; got {type(op.nth)}")
 
-    return f'NTH_VALUE({arg}, {nth_op.value + 1})'
+    return sa.func.nth_value(arg, nth_op.value + 1)
+
+
+@compiles(sa.sql.selectable.TableValuedAlias, "bigquery")
+def compiles_tv_alias(element, compiler, **kw):
+    # HACK: workaround bigquery's workaround ¯\_(ツ)_/¯
+    return sa.sql.compiler.SQLCompiler.visit_table_valued_alias(compiler, element, **kw)
+
+
+def _hash_bytes(translator, op):
+    if (how := op.how) not in ("md5", "sha1", "sha256", "sha512"):
+        raise NotImplementedError(how)
+    return getattr(sa.func, how)(translator.translate(op.arg))
 
 
 def _interval_multiply(t, op):
@@ -575,22 +628,23 @@ def _interval_multiply(t, op):
 
     left, right = t.translate(op.left), t.translate(op.right)
     unit = op.left.output_dtype.resolution.upper()
-    return f"INTERVAL EXTRACT({unit} from {left}) * {right} {unit}"
+    return sa.text(f"INTERVAL EXTRACT({unit} from {left}) * {right} {unit}")
 
 
 OPERATION_REGISTRY = {
-    **operation_registry,
+    **sqlalchemy_operation_registry,
+    **sqlalchemy_window_functions_registry,
     # Literal
     ops.Literal: _literal,
     # Logical
-    ops.Any: bigquery_compile_any,
-    ops.All: bigquery_compile_all,
-    ops.IfNull: fixed_arity("IFNULL", 2),
-    ops.NullIf: fixed_arity("NULLIF", 2),
+    ops.Any: reduction(sa.func.logical_or),
+    ops.All: reduction(sa.func.logical_and),
+    ops.NotAny: reduction(lambda arg: sa.not_(sa.func.logical_or(arg))),
+    ops.NotAll: reduction(lambda arg: sa.not_(sa.func.logical_and(arg))),
+    ops.IfNull: fixed_arity(sa.func.ifnull, 2),
+    ops.NullIf: fixed_arity(sa.func.nullif, 2),
     ops.NullIfZero: _nullifzero,
     ops.ZeroIfNull: _zeroifnull,
-    ops.NotAny: bigquery_compile_notany,
-    ops.NotAll: bigquery_compile_notall,
     # Reductions
     ops.ApproxMedian: compiles_approx,
     ops.Covariance: _covar,
@@ -598,22 +652,22 @@ OPERATION_REGISTRY = {
     # Math
     ops.Divide: bigquery_compiles_divide,
     ops.Floor: compiles_floor,
-    ops.Modulus: fixed_arity("MOD", 2),
-    ops.Sign: unary("SIGN"),
-    ops.Degrees: lambda t, op: f"(180 * {t.translate(op.arg)} / ACOS(-1))",
-    ops.Radians: lambda t, op: f"(ACOS(-1) * {t.translate(op.arg)} / 180)",
-    ops.BitwiseNot: lambda t, op: f"~ {t.translate(op.arg)}",
-    ops.BitwiseXor: lambda t, op: f"{t.translate(op.left)} ^ {t.translate(op.right)}",
-    ops.BitwiseOr: lambda t, op: f"{t.translate(op.left)} | {t.translate(op.right)}",
-    ops.BitwiseAnd: lambda t, op: f"{t.translate(op.left)} & {t.translate(op.right)}",
-    ops.BitwiseLeftShift: lambda t, op: f"{t.translate(op.left)} << {t.translate(op.right)}",
-    ops.BitwiseRightShift: lambda t, op: f"{t.translate(op.left)} >> {t.translate(op.right)}",
+    ops.Modulus: fixed_arity(sa.func.mod, 2),
+    ops.Sign: unary(sa.func.sign),
+    ops.Degrees: unary(lambda arg: 180 * arg / sa.func.acos(-1)),
+    ops.Radians: unary(lambda arg: sa.func.acos(-1) * arg / 180),
+    ops.BitwiseNot: unary(lambda arg: ~arg),
+    ops.BitwiseXor: fixed_arity(operator.xor, 2),
+    ops.BitwiseOr: fixed_arity(operator.or_, 2),
+    ops.BitwiseAnd: fixed_arity(operator.and_, 2),
+    ops.BitwiseLeftShift: fixed_arity(operator.lshift, 2),
+    ops.BitwiseRightShift: fixed_arity(operator.rshift, 2),
     # Temporal functions
-    ops.Date: unary("DATE"),
-    ops.DateFromYMD: fixed_arity("DATE", 3),
-    ops.DateAdd: _timestamp_op("DATE_ADD", {"D", "W", "M", "Q", "Y"}),
-    ops.DateSub: _timestamp_op("DATE_SUB", {"D", "W", "M", "Q", "Y"}),
-    ops.DateTruncate: _truncate("DATE", _date_units),
+    ops.Date: unary(sa.func.date),
+    ops.DateFromYMD: fixed_arity(sa.func.date, 3),
+    ops.DateAdd: _timestamp_op(sa.func.date_add, {"D", "W", "M", "Q", "Y"}),
+    ops.DateSub: _timestamp_op(sa.func.date_sub, {"D", "W", "M", "Q", "Y"}),
+    ops.DateTruncate: _truncate("date", _date_units),
     ops.DayOfWeekIndex: bigquery_day_of_week_index,
     ops.DayOfWeekName: bigquery_day_of_week_name,
     ops.ExtractEpochSeconds: _extract_field("epochseconds"),
@@ -629,19 +683,20 @@ OPERATION_REGISTRY = {
     ops.ExtractMillisecond: _extract_field("millisecond"),
     ops.Strftime: compiles_strftime,
     ops.StringToTimestamp: compiles_string_to_timestamp,
-    ops.Time: unary("TIME"),
-    ops.TimeFromHMS: fixed_arity("TIME", 3),
-    ops.TimeTruncate: _truncate("TIME", _timestamp_units),
-    ops.TimestampAdd: _timestamp_op("TIMESTAMP_ADD", {"h", "m", "s", "ms", "us"}),
+    ops.Time: unary(sa.func.time),
+    ops.TimeFromHMS: fixed_arity(sa.func.time, 3),
+    ops.TimeTruncate: _truncate("date", _timestamp_units),
+    ops.TimestampAdd: _timestamp_op(sa.func.timestamp_add, {"h", "m", "s", "ms", "us"}),
     ops.TimestampFromUNIX: integer_to_timestamp,
-    ops.TimestampFromYMDHMS: fixed_arity("DATETIME", 6),
-    ops.TimestampNow: fixed_arity("CURRENT_TIMESTAMP", 0),
-    ops.TimestampSub: _timestamp_op("TIMESTAMP_SUB", {"h", "m", "s", "ms", "us"}),
-    ops.TimestampTruncate: _truncate("TIMESTAMP", _timestamp_units),
+    ops.TimestampFromYMDHMS: fixed_arity(sa.func.datetime, 6),
+    ops.TimestampNow: fixed_arity(sa.func.current_timestamp, 0),
+    ops.TimestampSub: _timestamp_op(sa.func.timestamp_sub, {"h", "m", "s", "ms", "us"}),
+    ops.TimestampTruncate: _truncate("timestamp", _timestamp_units),
     ops.IntervalMultiply: _interval_multiply,
     ops.Hash: _hash,
-    ops.StringReplace: fixed_arity("REPLACE", 3),
-    ops.StringSplit: fixed_arity("SPLIT", 2),
+    ops.HashBytes: _hash_bytes,
+    ops.StringReplace: fixed_arity(sa.func.replace, 3),
+    ops.StringSplit: fixed_arity(sa.func.split, 2),
     ops.StringConcat: _string_concat,
     ops.StringJoin: _string_join,
     ops.StringAscii: _string_ascii,
@@ -649,79 +704,86 @@ OPERATION_REGISTRY = {
     ops.Substring: _string_substring,
     ops.StrRight: _string_right,
     ops.Capitalize: _capitalize,
-    ops.Translate: fixed_arity("TRANSLATE", 3),
-    ops.Repeat: fixed_arity("REPEAT", 2),
+    ops.Translate: fixed_arity(sa.func.translate, 3),
+    ops.Repeat: fixed_arity(sa.func.repeat, 2),
     ops.RegexSearch: _regex_search,
     ops.RegexExtract: _regex_extract,
     ops.RegexReplace: _regex_replace,
-    ops.GroupConcat: reduction("STRING_AGG"),
+    ops.GroupConcat: reduction(sa.func.string_agg),
     ops.Cast: _cast,
-    ops.StructField: _struct_field,
-    ops.StructColumn: _struct_column,
+    ops.StructField: lambda t, op: t.translate(op.arg).op(".")(op.field),
+    ops.StructColumn: lambda t, op: _struct_column(
+        dict(zip(op.names, op.values)), type=t.get_sqla_type(op.output_dtype)
+    ),
     ops.ArrayCollect: _array_agg,
-    ops.ArrayConcat: _array_concat,
-    ops.ArrayColumn: _array_column,
-    ops.ArrayIndex: _array_index,
-    ops.ArrayLength: unary("ARRAY_LENGTH"),
+    ops.ArrayConcat: lambda t, op: sa.func.array_concat(*map(t.translate, op.args)),
+    ops.ArrayColumn: lambda t, op: _array_column(
+        list(map(t.translate, op.cols)), type=t.get_sqla_type(op.output_dtype)
+    ),
+    ops.ArrayIndex: fixed_arity(lambda arr, idx: arr[idx], 2),
+    ops.ArrayLength: unary(sa.func.array_length),
     ops.ArrayRepeat: _array_repeat,
     ops.ArraySlice: _array_slice,
     ops.Log: _log,
     ops.Log2: _log2,
     ops.Arbitrary: _arbitrary,
     # Geospatial Columnar
-    ops.GeoUnaryUnion: unary("ST_UNION_AGG"),
+    ops.GeoUnaryUnion: unary(sa.func.st_union_agg),
     # Geospatial
-    ops.GeoArea: unary("ST_AREA"),
-    ops.GeoAsBinary: unary("ST_ASBINARY"),
-    ops.GeoAsText: unary("ST_ASTEXT"),
-    ops.GeoAzimuth: fixed_arity("ST_AZIMUTH", 2),
-    ops.GeoBuffer: fixed_arity("ST_BUFFER", 2),
-    ops.GeoCentroid: unary("ST_CENTROID"),
-    ops.GeoContains: fixed_arity("ST_CONTAINS", 2),
-    ops.GeoCovers: fixed_arity("ST_COVERS", 2),
-    ops.GeoCoveredBy: fixed_arity("ST_COVEREDBY", 2),
-    ops.GeoDWithin: fixed_arity("ST_DWITHIN", 3),
-    ops.GeoDifference: fixed_arity("ST_DIFFERENCE", 2),
-    ops.GeoDisjoint: fixed_arity("ST_DISJOINT", 2),
-    ops.GeoDistance: fixed_arity("ST_DISTANCE", 2),
-    ops.GeoEndPoint: unary("ST_ENDPOINT"),
-    ops.GeoEquals: fixed_arity("ST_EQUALS", 2),
-    ops.GeoGeometryType: unary("ST_GEOMETRYTYPE"),
-    ops.GeoIntersection: fixed_arity("ST_INTERSECTION", 2),
-    ops.GeoIntersects: fixed_arity("ST_INTERSECTS", 2),
-    ops.GeoLength: unary("ST_LENGTH"),
-    ops.GeoMaxDistance: fixed_arity("ST_MAXDISTANCE", 2),
-    ops.GeoNPoints: unary("ST_NUMPOINTS"),
-    ops.GeoPerimeter: unary("ST_PERIMETER"),
-    ops.GeoPoint: fixed_arity("ST_GEOGPOINT", 2),
-    ops.GeoPointN: fixed_arity("ST_POINTN", 2),
+    ops.GeoArea: unary(sa.func.st_area),
+    ops.GeoAsBinary: unary(sa.func.st_asbinary),
+    ops.GeoAsText: unary(sa.func.st_astext),
+    ops.GeoAzimuth: fixed_arity(sa.func.st_azimuth, 2),
+    ops.GeoBuffer: fixed_arity(sa.func.st_buffer, 2),
+    ops.GeoCentroid: unary(sa.func.st_centroid),
+    ops.GeoContains: fixed_arity(sa.func.st_contains, 2),
+    ops.GeoCovers: fixed_arity(sa.func.st_covers, 2),
+    ops.GeoCoveredBy: fixed_arity(sa.func.st_coveredby, 2),
+    ops.GeoDWithin: fixed_arity(sa.func.st_dwithin, 3),
+    ops.GeoDifference: fixed_arity(sa.func.st_difference, 2),
+    ops.GeoDisjoint: fixed_arity(sa.func.st_disjoint, 2),
+    ops.GeoDistance: fixed_arity(sa.func.st_distance, 2),
+    ops.GeoEndPoint: unary(sa.func.st_endpoint),
+    ops.GeoEquals: fixed_arity(sa.func.st_equals, 2),
+    ops.GeoGeometryType: unary(sa.func.st_geometrytype),
+    ops.GeoIntersection: fixed_arity(sa.func.st_intersection, 2),
+    ops.GeoIntersects: fixed_arity(sa.func.st_intersects, 2),
+    ops.GeoLength: unary(sa.func.st_length),
+    ops.GeoMaxDistance: fixed_arity(sa.func.st_maxdistance, 2),
+    ops.GeoNPoints: unary(sa.func.st_numpoints),
+    ops.GeoPerimeter: unary(sa.func.st_perimeter),
+    ops.GeoPoint: fixed_arity(sa.func.st_geogpoint, 2),
+    ops.GeoPointN: fixed_arity(sa.func.st_pointn, 2),
     ops.GeoSimplify: _geo_simplify,
-    ops.GeoStartPoint: unary("ST_STARTPOINT"),
-    ops.GeoTouches: fixed_arity("ST_TOUCHES", 2),
-    ops.GeoUnion: fixed_arity("ST_UNION", 2),
-    ops.GeoWithin: fixed_arity("ST_WITHIN", 2),
-    ops.GeoX: unary("ST_X"),
+    ops.GeoStartPoint: unary(sa.func.st_startpoint),
+    ops.GeoTouches: fixed_arity(sa.func.st_touches, 2),
+    ops.GeoUnion: fixed_arity(sa.func.st_union, 2),
+    ops.GeoWithin: fixed_arity(sa.func.st_within, 2),
+    ops.GeoX: unary(sa.func.st_x),
     ops.GeoXMax: _geo_boundingbox("xmax"),
     ops.GeoXMin: _geo_boundingbox("xmin"),
-    ops.GeoY: unary("ST_Y"),
+    ops.GeoY: unary(sa.func.ST_Y),
     ops.GeoYMax: _geo_boundingbox("ymax"),
     ops.GeoYMin: _geo_boundingbox("ymin"),
-    ops.BitAnd: reduction("BIT_AND"),
-    ops.BitOr: reduction("BIT_OR"),
-    ops.BitXor: reduction("BIT_XOR"),
-    ops.ApproxCountDistinct: reduction("APPROX_COUNT_DISTINCT"),
+    ops.BitAnd: reduction(sa.func.bit_and),
+    ops.BitOr: reduction(sa.func.bit_or),
+    ops.BitXor: reduction(sa.func.bit_xor),
+    ops.ApproxCountDistinct: reduction(sa.func.approx_count_distinct),
     ops.ApproxMedian: compiles_approx,
     ops.IdenticalTo: _identical_to,
     ops.FloorDivide: _floor_divide,
     ops.IsNan: _is_nan,
     ops.IsInf: _is_inf,
-    ops.ArgMin: _arg_min_max("ASC"),
-    ops.ArgMax: _arg_min_max("DESC"),
-    ops.Pi: lambda *_: "ACOS(-1)",
-    ops.E: lambda *_: "EXP(1)",
-    ops.RandomScalar: fixed_arity("RAND", 0),
+    ops.ArgMin: _arg_min_max(sa.asc),
+    ops.ArgMax: _arg_min_max(sa.desc),
+    ops.Pi: lambda *_: sa.func.acos(-1),
+    ops.E: lambda *_: sa.func.exp(1),
+    ops.RandomScalar: fixed_arity(sa.func.rand, 0),
     ops.NthValue: _nth_value,
-    ops.JSONGetItem: lambda t, op: f"{t.translate(op.arg)}[{t.translate(op.index)}]",
+    ops.JSONGetItem: fixed_arity(lambda arg, idx: arg[idx], 2),
+    ops.Unnest: lambda t, op: sa.func.unnest(t.translate(op.arg)).column_valued(
+        op.arg.name
+    ),
 }
 
 _invalid_operations = {

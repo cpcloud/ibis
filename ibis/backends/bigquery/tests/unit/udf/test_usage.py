@@ -4,7 +4,14 @@ from pytest import param
 import ibis
 import ibis.expr.datatypes as dt
 from ibis.backends.bigquery import udf
+from ibis.backends.bigquery.compiler import BigQueryDialect
 from ibis.backends.bigquery.udf import _udf_name_cache
+
+to_sql = lambda *args, **kwargs: str(
+    ibis.bigquery.compile(*args, **kwargs).compile(
+        dialect=BigQueryDialect(), compile_kwargs={"literal_binds": True}
+    )
+)
 
 
 def test_multiple_calls_redefinition(snapshot):
@@ -23,7 +30,7 @@ def test_multiple_calls_redefinition(snapshot):
 
     expr = expr + my_len(s)
 
-    sql = ibis.bigquery.compile(expr)
+    sql = to_sql(expr)
     snapshot.assert_match(sql, "out.sql")
 
 
@@ -45,7 +52,7 @@ def test_udf_determinism(snapshot, determinism):
     s = ibis.literal("abcd")
     expr = my_len(s)
 
-    sql = ibis.bigquery.compile(expr)
+    sql = to_sql(expr)
     snapshot.assert_match(sql, "out.sql")
 
 
@@ -62,7 +69,7 @@ def test_udf_sql(snapshot):
     s = ibis.literal("abcd")
     expr = format_t(s)
 
-    sql = ibis.bigquery.compile(expr)
+    sql = to_sql(expr)
     snapshot.assert_match(sql, "out.sql")
 
 

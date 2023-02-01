@@ -42,12 +42,12 @@ class _AlchemyTableSetFormatter(TableSetFormatter):
                 sqla_preds = [self._translate(pred) for pred in preds]
                 onclause = functools.reduce(sql.and_, sqla_preds)
             else:
-                onclause = None
+                onclause = sa.true()
 
             if jtype is ops.InnerJoin:
                 result = result.join(table, onclause)
             elif jtype is ops.CrossJoin:
-                result = result.join(table, sa.literal(True))
+                result = result.join(table, sa.true())
             elif jtype is ops.LeftJoin:
                 result = result.join(table, onclause, isouter=True)
             elif jtype is ops.RightJoin:

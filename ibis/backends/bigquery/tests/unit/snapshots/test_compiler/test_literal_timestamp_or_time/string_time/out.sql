@@ -1,1 +1,1 @@
-SELECT EXTRACT(hour from TIME '04:55:59') AS `tmp`
+SELECT EXTRACT(hour FROM TIME '04:55:59') AS `tmp`

@@ -75,6 +75,7 @@ shapely = { version = ">=1.6,<1.8|>=1.9,<3", optional = true }
 snowflake-connector-python = { version = ">=2.7.10,<3", optional = true }
 snowflake-sqlalchemy = { version = ">=1.4.1,<2", optional = true }
 sqlalchemy = { version = ">=1.4,<3", optional = true }
+sqlalchemy-bigquery = { version = ">=1.6,<2", optional = true, python = ">=3.8,<3.12" }
 sqlalchemy-views = { version = ">=0.3.1,<1", optional = true }
 trino = { version = ">=0.319,<1", optional = true, extras = ["sqlalchemy"] }
 
@@ -149,6 +150,7 @@ all = [
   "snowflake-connector-python",
   "snowflake-sqlalchemy",
   "sqlalchemy",
+  "sqlalchemy-bigquery",
   "sqlalchemy-views",
   "trino"
 ]
@@ -157,6 +159,8 @@ bigquery = [
   "google-cloud-bigquery",
   "google-cloud-bigquery-storage",
   "pydata-google-auth",
+  "sqlalchemy",
+  "sqlalchemy-bigquery",
 ]
 clickhouse = ["clickhouse-driver", "clickhouse-cityhash", "lz4"]
 dask = ["dask", "pyarrow", "regex"]
@@ -200,6 +204,9 @@ snowflake = "ibis.backends.snowflake"
 spark = "ibis.backends.pyspark"
 sqlite = "ibis.backends.sqlite"
 trino = "ibis.backends.trino"
+
+[tool.poetry.plugins."sqlalchemy.dialects"]
+ibisbigquery = "ibis.backends.bigquery.compiler:BigQueryDialect"
 
 [tool.pytest.ini_options]
 doctest_optionflags = [

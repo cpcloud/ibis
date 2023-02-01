@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-import re
 from functools import partial
 
+import sqlalchemy as sa
+import sqlalchemy_bigquery as sab
 import toolz
+from google.cloud import bigquery as bq
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy_bigquery._types import STRUCT_FIELD_TYPES, _get_sqla_column_type
 
 import ibis.common.graph as lin
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 from ibis.backends.base.sql import compiler as sql_compiler
+from ibis.backends.base.sql.alchemy.query_builder import AlchemyCompiler
+from ibis.backends.base.sql.alchemy.translator import AlchemyExprTranslator
 from ibis.backends.bigquery import operations, registry, rewrites
 
 
@@ -27,31 +33,6 @@ class BigQueryUDFDefinition(sql_compiler.DDL):
         return op.sql
 
 
-class BigQueryUnion(sql_compiler.Union):
-    """Union of tables."""
-
-    @classmethod
-    def keyword(cls, distinct):
-        """Use disctinct UNION if distinct is True."""
-        return "UNION DISTINCT" if distinct else "UNION ALL"
-
-
-class BigQueryIntersection(sql_compiler.Intersection):
-    """Intersection of tables."""
-
-    @classmethod
-    def keyword(cls, distinct):
-        return "INTERSECT DISTINCT" if distinct else "INTERSECT ALL"
-
-
-class BigQueryDifference(sql_compiler.Difference):
-    """Difference of tables."""
-
-    @classmethod
-    def keyword(cls, distinct):
-        return "EXCEPT DISTINCT" if distinct else "EXCEPT ALL"
-
-
 def find_bigquery_udf(op):
     """Filter which includes only UDFs from expression tree."""
     if type(op) in BigQueryExprTranslator._rewrites:
@@ -63,55 +44,44 @@ def find_bigquery_udf(op):
     return lin.proceed, result
 
 
-class BigQueryExprTranslator(sql_compiler.ExprTranslator):
+class BigQueryDialect(sab.BigQueryDialect):
+    supports_statement_cache = sab.BigQueryDialect.supports_statement_cache
+    def get_columns(self, connection, table_name, schema=None, **kw):
+        # Override this method to prevent field flattening
+        table = self._get_table(connection, table_name, schema)
+
+        return [
+            {
+                "name": field.name,
+                "type": _get_sqla_column_type(field),
+                "nullable": field.mode == "NULLABLE" or field.mode == "REPEATED",
+                "comment": field.description,
+                "default": None,
+                "precision": field.precision,
+                "scale": field.scale,
+                "max_length": field.max_length,
+            }
+            for field in table.schema
+        ]
+
+
+class BigQueryExprTranslator(AlchemyExprTranslator):
     """Translate expressions to strings."""
 
     _registry = registry.OPERATION_REGISTRY
     _rewrites = rewrites.REWRITES
-    _valid_name_pattern = re.compile(r"^[A-Za-z][A-Za-z_0-9]*$")
 
     _forbids_frame_clause = (
         *sql_compiler.ExprTranslator._forbids_frame_clause,
         ops.Lag,
         ops.Lead,
     )
-
-    def name(self, translated: str, name: str):
-        # replace invalid characters in automatically generated names
-        if self._valid_name_pattern.match(name) is None:
-            return f"{translated} AS `tmp`"
-        return super().name(translated, name)
-
-    @classmethod
-    def compiles(cls, klass):
-        def decorator(f):
-            cls._registry[klass] = f
-            return f
-
-        return decorator
-
-    def _trans_param(self, op):
-        if op not in self.context.params:
-            raise KeyError(op)
-        return f"@{op.name}"
+    supports_unnest_in_select = False
+    _dialect_name = "bigquery"
 
 
-compiles = BigQueryExprTranslator.compiles
-
-
-class BigQueryTableSetFormatter(sql_compiler.TableSetFormatter):
-    def _quote_identifier(self, name):
-        if re.match(r"^[A-Za-z][A-Za-z_0-9]*$", name):
-            return name
-        return f"`{name}`"
-
-
-class BigQueryCompiler(sql_compiler.Compiler):
+class BigQueryCompiler(AlchemyCompiler):
     translator_class = BigQueryExprTranslator
-    table_set_formatter_class = BigQueryTableSetFormatter
-    union_class = BigQueryUnion
-    intersect_class = BigQueryIntersection
-    difference_class = BigQueryDifference
 
     support_values_syntax_in_select = False
 

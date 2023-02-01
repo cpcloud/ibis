@@ -6,7 +6,9 @@ import itertools
 from typing import Callable, Iterable, Literal, Mapping
 
 import ibis.expr.datatypes as dt
+import ibis.expr.operations as ops
 import ibis.expr.rules as rlz
+from ibis.backends.bigquery.compiler import BigQueryDialect, BigQueryExprTranslator
 from ibis.backends.bigquery.datatypes import ibis_type_to_bigquery_type, spread_type
 from ibis.backends.bigquery.operations import BigQueryUDFNode
 from ibis.backends.bigquery.udf.core import PythonToJavaScriptTranslator
@@ -15,6 +17,10 @@ from ibis.udf.validate import validate_output_type
 __all__ = ("udf",)
 
 _udf_name_cache: dict[str, Iterable[int]] = collections.defaultdict(itertools.count)
+
+
+def to_bigquery_type(t):
+    return str(t.compile(dialect=BigQueryDialect()))
 
 
 def _create_udf_node(name, fields):
@@ -276,21 +282,25 @@ return {f.__name__}({args});\
 
         udf_node = _create_udf_node(name, udf_node_fields)
 
-        from ibis.backends.bigquery.compiler import compiles
+        def compiles_udf_node(t: BigQueryExprTranslator, op: ops.Value):
+            import sqlalchemy as sa
 
-        @compiles(udf_node)
-        def compiles_udf_node(t, op):
-            args = ", ".join(map(t.translate, op.args))
-            return f"{udf_node.__name__}({args})"
+            func = getattr(sa.func, udf_node.__name__)
+            return func(*map(t.translate, op.args))
+
+        BigQueryExprTranslator._registry[udf_node] = compiles_udf_node
 
         bigquery_signature = ", ".join(
             "{name} {type}".format(
                 name=name,
-                type=ibis_type_to_bigquery_type(dt.dtype(type_)),
+                type=to_bigquery_type(ibis_type_to_bigquery_type(dt.dtype(type_))),
             )
             for name, type_ in params.items()
         )
-        return_type = ibis_type_to_bigquery_type(dt.dtype(output_type))
+        return_type = to_bigquery_type(
+            ibis_type_to_bigquery_type(dt.dtype(output_type))
+        )
+
         libraries_opts = (
             f"\nOPTIONS (\n    library={repr(list(libraries))}\n)" if libraries else ""
         )
@@ -307,8 +317,10 @@ RETURNS {return_type}
 """{libraries_opts};'''
 
         def wrapped(*args, **kwargs):
+            import sqlalchemy as sa
+
             node = udf_node(*args, **kwargs)
-            object.__setattr__(node, "sql", sql_code)
+            object.__setattr__(node, "sql", sa.text(sql_code))
             return node.to_expr()
 
         wrapped.__signature__ = inspect.Signature(
@@ -369,7 +381,9 @@ RETURNS {return_type}
             for name, type_ in params.items()
         }
 
-        return_type = ibis_type_to_bigquery_type(dt.dtype(output_type))
+        return_type = to_bigquery_type(
+            ibis_type_to_bigquery_type(dt.dtype(output_type))
+        )
 
         udf_node_fields["output_dtype"] = output_type
         udf_node_fields["output_shape"] = rlz.shape_like("args")
@@ -377,19 +391,20 @@ RETURNS {return_type}
 
         udf_node = _create_udf_node(name, udf_node_fields)
 
-        from ibis.backends.bigquery.compiler import compiles
+        def compiles_udf_node(t: BigQueryExprTranslator, op: ops.Value):
+            import sqlalchemy as sa
 
-        @compiles(udf_node)
-        def compiles_udf_node(t, op):
-            args_formatted = ", ".join(map(t.translate, op.args))
-            return f"{udf_node.__name__}({args_formatted})"
+            func = getattr(sa.func, udf_node.__name__)
+            return func(*map(t.translate, op.args))
+
+        BigQueryExprTranslator._registry[udf_node] = compiles_udf_node
 
         bigquery_signature = ", ".join(
             "{name} {type}".format(
                 name=name,
                 type="ANY TYPE"
                 if type_ == "ANY TYPE"
-                else ibis_type_to_bigquery_type(dt.dtype(type_)),
+                else to_bigquery_type(ibis_type_to_bigquery_type(dt.dtype(type_))),
             )
             for name, type_ in params.items()
         )
@@ -399,8 +414,10 @@ RETURNS {return_type}
 AS ({sql_expression});'''
 
         def wrapper(*args, **kwargs):
+            import sqlalchemy as sa
+
             node = udf_node(*args, **kwargs)
-            object.__setattr__(node, "sql", sql_code)
+            object.__setattr__(node, "sql", sa.text(sql_code))
             return node.to_expr()
 
         return wrapper

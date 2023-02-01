@@ -1,1 +1,1 @@
-SELECT TIMESTAMP_MICROS(123456789) AS `tmp`
+SELECT timestamp_micros(123456789) AS `tmp`

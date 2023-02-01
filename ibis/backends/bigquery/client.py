@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import functools
-
 import google.cloud.bigquery as bq
-import pandas as pd
 
-import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
 import ibis.expr.schema as sch
 from ibis.backends.base import Database
 from ibis.backends.bigquery.datatypes import ibis_type_to_bigquery_type
@@ -127,80 +122,6 @@ class BigQueryCursor:
 
 class BigQueryDatabase(Database):
     """A BigQuery dataset."""
-
-
-@functools.singledispatch
-def bigquery_param(dtype, value, name):
-    raise NotADirectoryError(dtype)
-
-
-@bigquery_param.register
-def bq_param_struct(dtype: dt.Struct, value, name):
-    fields = dtype.fields
-    field_params = [bigquery_param(fields[k], v, k) for k, v in value.items()]
-    result = bq.StructQueryParameter(name, *field_params)
-    return result
-
-
-@bigquery_param.register
-def bq_param_array(dtype: dt.Array, value, name):
-    value_type = dtype.value_type
-
-    try:
-        bigquery_type = ibis_type_to_bigquery_type(value_type)
-    except NotImplementedError:
-        raise com.UnsupportedBackendType(dtype)
-    else:
-        if isinstance(value_type, dt.Struct):
-            query_value = [
-                bigquery_param(dtype.value_type, struct, f"element_{i:d}")
-                for i, struct in enumerate(value)
-            ]
-            bigquery_type = "STRUCT"
-        elif isinstance(value_type, dt.Array):
-            raise TypeError("ARRAY<ARRAY<T>> is not supported in BigQuery")
-        else:
-            query_value = value
-        result = bq.ArrayQueryParameter(name, bigquery_type, query_value)
-        return result
-
-
-@bigquery_param.register
-def bq_param_timestamp(_: dt.Timestamp, value, name):
-    # TODO(phillipc): Not sure if this is the correct way to do this.
-    timestamp_value = pd.Timestamp(value, tz="UTC").to_pydatetime()
-    return bq.ScalarQueryParameter(name, "TIMESTAMP", timestamp_value)
-
-
-@bigquery_param.register
-def bq_param_string(_: dt.String, value, name):
-    return bq.ScalarQueryParameter(name, "STRING", value)
-
-
-@bigquery_param.register
-def bq_param_integer(_: dt.Integer, value, name):
-    return bq.ScalarQueryParameter(name, "INT64", value)
-
-
-@bigquery_param.register
-def bq_param_double(_: dt.Floating, value, name):
-    return bq.ScalarQueryParameter(name, "FLOAT64", value)
-
-
-@bigquery_param.register
-def bq_param_boolean(_: dt.Boolean, value, name):
-    return bq.ScalarQueryParameter(name, "BOOL", value)
-
-
-@bigquery_param.register
-def bq_param_date(_: dt.Date, value, name):
-    return bq.ScalarQueryParameter(
-        name, "DATE", pd.Timestamp(value).to_pydatetime().date()
-    )
-
-
-class BigQueryTable(ops.DatabaseTable):
-    pass
 
 
 def rename_partitioned_column(table_expr, bq_table, partition_col):

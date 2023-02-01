@@ -1,2 +1,2 @@
-SELECT ST_ENDPOINT(t0.`geog`) AS `tmp`
-FROM t t0
+SELECT ST_AsEWKB(ST_EndPoint(`t0`.`geog`)) AS `tmp` 
+FROM `t` AS `t0`

@@ -21,11 +21,36 @@ class AlchemyContext(QueryContext):
         if isinstance(queries, str):
             return queries
 
-        if len(queries) > 1:
-            raise NotImplementedError(
-                'Only a single query is supported for SQLAlchemy backends'
+        dialect_class = sa.dialects.registry.load(
+            self.compiler.translator_class._dialect_name
+        )
+        dialect = dialect_class(paramstyle="named")
+
+        params = {}
+        raw_queries = []
+        seen_selectables = 0
+        selectable = None
+        for query in queries:
+            if isinstance(query, sa.sql.selectable.Selectable):
+                seen_selectables += 1
+                selectable = query
+            compiled = query.compile(dialect=dialect)
+            params.update(compiled.params)
+            raw_queries.append(str(compiled))
+
+        if not seen_selectables:
+            raise ValueError("No select statements found")
+        elif seen_selectables > 1:
+            raise ValueError("More than one select statement found")
+        else:
+            raw = "\n\n".join(raw_queries)
+            return (
+                sa.text(raw)
+                .bindparams(**params)
+                .columns(
+                    *(sa.column(c.name, c.type) for c in selectable.exported_columns)
+                )
             )
-        return queries[0]
 
     def subcontext(self):
         return self.__class__(

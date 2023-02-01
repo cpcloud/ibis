@@ -3,39 +3,28 @@
 from __future__ import annotations
 
 import contextlib
-import warnings
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import Iterable
 from urllib.parse import parse_qs, urlparse
 
 import google.auth.credentials
 import google.cloud.bigquery as bq
-import pandas as pd
 import pydata_google_auth
-from google.api_core.exceptions import NotFound
+import sqlalchemy as sa
 from pydata_google_auth import cache
 
 import ibis
-import ibis.expr.operations as ops
-import ibis.expr.schema as sch
+import ibis.expr.datatypes as dt
 import ibis.expr.types as ir
-from ibis.backends.base.sql import BaseSQLBackend
+from ibis.backends.base.sql.alchemy import BaseAlchemyBackend
 from ibis.backends.bigquery.client import (
-    BigQueryCursor,
     BigQueryDatabase,
-    BigQueryTable,
     bigquery_field_to_ibis_dtype,
-    bigquery_param,
-    ibis_schema_to_bigquery_schema,
     parse_project_and_dataset,
-    rename_partitioned_column,
 )
 from ibis.backends.bigquery.compiler import BigQueryCompiler
 
 with contextlib.suppress(ImportError):
     from ibis.backends.bigquery.udf import udf  # noqa: F401
-
-if TYPE_CHECKING:
-    import pyarrow as pa
 
 SCOPES = ["https://www.googleapis.com/auth/bigquery"]
 EXTERNAL_DATA_SCOPES = [
@@ -61,11 +50,10 @@ def _create_client_info(application_name):
     return ClientInfo(user_agent=" ".join(user_agent))
 
 
-class Backend(BaseSQLBackend):
+class Backend(BaseAlchemyBackend):
     name = "bigquery"
     compiler = BigQueryCompiler
     database_class = BigQueryDatabase
-    table_class = BigQueryTable
 
     def _from_url(self, url):
         result = urlparse(url)
@@ -180,6 +168,14 @@ class Backend(BaseSQLBackend):
         )
         self.partition_column = partition_column
 
+        super().do_connect(
+            sa.create_engine(
+                f"ibisbigquery://{self.data_project}/{self.dataset}?user_supplied_client=true&priority=INTERACTIVE",
+                connect_args={"client": self.client},
+            )
+        )
+        self.meta.schema = self.dataset
+
     def _parse_project_and_dataset(self, dataset) -> tuple[str, str]:
         if not dataset and not self.dataset:
             raise ValueError("Unable to determine BigQuery dataset.")
@@ -197,63 +193,6 @@ class Backend(BaseSQLBackend):
     def dataset_id(self):
         return self.dataset
 
-    def table(self, name, database=None) -> ir.TableExpr:
-        t = super().table(name, database=database)
-        table_id = self._fully_qualified_name(name, database)
-        bq_table = self.client.get_table(table_id)
-        return rename_partitioned_column(t, bq_table, self.partition_column)
-
-    def _fully_qualified_name(self, name, database):
-        parts = name.split(".")
-        if len(parts) == 3:
-            return name
-
-        default_project, default_dataset = self._parse_project_and_dataset(database)
-        if len(parts) == 2:
-            return f"{default_project}.{name}"
-        elif len(parts) == 1:
-            return f"{default_project}.{default_dataset}.{name}"
-        raise ValueError(f"Got too many components in table name: {name}")
-
-    def _get_schema_using_query(self, query):
-        job_config = bq.QueryJobConfig(dry_run=True, use_query_cache=False)
-        job = self.client.query(query, job_config=job_config)
-        fields = self._adapt_types(job.schema)
-        return sch.Schema(fields)
-
-    def _get_table_schema(self, qualified_name):
-        dataset, table = qualified_name.rsplit(".", 1)
-        assert dataset is not None, "dataset is None"
-        return self.get_schema(table, database=dataset)
-
-    def _adapt_types(self, descr):
-        return {col.name: bigquery_field_to_ibis_dtype(col) for col in descr}
-
-    def _execute(self, stmt, results=True, query_parameters=None):
-        job_config = bq.job.QueryJobConfig()
-        job_config.query_parameters = query_parameters or []
-        job_config.use_legacy_sql = False  # False by default in >=0.28
-        query = self.client.query(
-            stmt, job_config=job_config, project=self.billing_project
-        )
-        query.result()  # blocks until finished
-        return BigQueryCursor(query)
-
-    def raw_sql(self, query: str, results=False, params=None):
-        query_parameters = [
-            bigquery_param(
-                param.type(),
-                value,
-                (
-                    param.get_name()
-                    if not isinstance(op := param.op(), ops.Alias)
-                    else op.arg.name
-                ),
-            )
-            for param, value in (params or {}).items()
-        ]
-        return self._execute(query, results=results, query_parameters=query_parameters)
-
     @property
     def current_database(self) -> str:
         return self.dataset
@@ -267,169 +206,6 @@ class Backend(BaseSQLBackend):
             )
         return self.database_class(name or self.dataset, self)
 
-    def execute(self, expr, params=None, limit="default", **kwargs):
-        """Compile and execute the given Ibis expression.
-
-        Compile and execute Ibis expression using this backend client
-        interface, returning results in-memory in the appropriate object type
-
-        Parameters
-        ----------
-        expr
-            Ibis expression to execute
-        limit
-            Retrieve at most this number of values/rows. Overrides any limit
-            already set on the expression.
-        params
-            Query parameters
-        kwargs
-            Extra arguments specific to the backend
-
-        Returns
-        -------
-        pd.DataFrame | pd.Series | scalar
-            Output from execution
-        """
-        # TODO: upstream needs to pass params to raw_sql, I think.
-        kwargs.pop("timecontext", None)
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
-        self._log(sql)
-        cursor = self.raw_sql(sql, params=params, **kwargs)
-        schema = self.ast_schema(query_ast, **kwargs)
-        result = self.fetch_from_cursor(cursor, schema)
-
-        if hasattr(getattr(query_ast, "dml", query_ast), "result_handler"):
-            result = query_ast.dml.result_handler(result)
-
-        return result
-
-    def exists_database(self, name):
-        """Return whether a database name exists in the current connection.
-
-        Deprecated in Ibis 2.0. Use `name in client.list_databases()`
-        instead.
-        """
-        warnings.warn(
-            "`client.exists_database(name)` is deprecated, and will be "
-            "removed in a future version of Ibis. Use "
-            "`name in client.list_databases()` instead.",
-            FutureWarning,
-        )
-
-        project, dataset = self._parse_project_and_dataset(name)
-        client = self.client
-        dataset_ref = client.dataset(dataset, project=project)
-        try:
-            client.get_dataset(dataset_ref)
-        except NotFound:
-            return False
-        else:
-            return True
-
-    def exists_table(self, name: str, database: str | None = None) -> bool:
-        """Return whether a table name exists in the database.
-
-        Deprecated in Ibis 2.0. Use `name in client.list_tables()`
-        instead.
-        """
-        warnings.warn(
-            "`client.exists_table(name)` is deprecated, and will be "
-            "removed in a future version of Ibis. Use "
-            "`name in client.list_tables()` instead.",
-            FutureWarning,
-        )
-
-        table_id = self._fully_qualified_name(name, database)
-        client = self.client
-        try:
-            client.get_table(table_id)
-        except NotFound:
-            return False
-        else:
-            return True
-
-    def fetch_from_cursor(self, cursor, schema):
-        arrow_t = self._cursor_to_arrow(cursor)
-        df = arrow_t.to_pandas(timestamp_as_object=True)
-        return schema.apply_to(df)
-
-    def _cursor_to_arrow(self, cursor):
-        query = cursor.query
-        query_result = query.result()
-        # workaround potentially not having the ability to create read sessions
-        # in the dataset project
-        orig_project = query_result._project
-        query_result._project = self.billing_project
-        try:
-            arrow_table = query_result.to_arrow(
-                progress_bar_type=None,
-                bqstorage_client=None,
-                create_bqstorage_client=True,
-            )
-        finally:
-            query_result._project = orig_project
-        return arrow_table
-
-    def to_pyarrow(
-        self,
-        expr: ir.Expr,
-        *,
-        params: Mapping[ir.Scalar, Any] | None = None,
-        limit: int | str | None = None,
-        **kwargs: Any,
-    ) -> pa.Table:
-        self._import_pyarrow()
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
-        cursor = self.raw_sql(sql, params=params, **kwargs)
-        table = self._cursor_to_arrow(cursor)
-        if isinstance(expr, ir.Scalar):
-            assert len(table.columns) == 1, "len(table.columns) != 1"
-            return table[0][0]
-        elif isinstance(expr, ir.Column):
-            assert len(table.columns) == 1, "len(table.columns) != 1"
-            return table[0]
-        else:
-            return table
-
-    def to_pyarrow_batches(
-        self,
-        expr: ir.Expr,
-        *,
-        params: Mapping[ir.Scalar, Any] | None = None,
-        limit: int | str | None = None,
-        chunk_size: int = 1_000_000,
-        **kwargs: Any,
-    ):
-        self._import_pyarrow()
-
-        # kind of pointless, but it'll work if there's enough memory
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
-        cursor = self.raw_sql(sql, params=params, **kwargs)
-        table = self._cursor_to_arrow(cursor)
-        return table.to_reader(chunk_size)
-
-    def get_schema(self, name, database=None):
-        table_id = self._fully_qualified_name(name, database)
-        table_ref = bq.TableReference.from_string(table_id)
-        bq_table = self.client.get_table(table_ref)
-        return sch.infer(bq_table)
-
-    def list_databases(self, like=None):
-        results = [
-            dataset.dataset_id
-            for dataset in self.client.list_datasets(project=self.data_project)
-        ]
-        return self._filter_with_like(results, like)
-
-    def list_tables(self, like=None, database=None):
-        project, dataset = self._parse_project_and_dataset(database)
-        dataset_ref = bq.DatasetReference(project, dataset)
-        result = [table.table_id for table in self.client.list_tables(dataset_ref)]
-        return self._filter_with_like(result, like)
-
     def set_database(self, name):
         self.data_project, self.dataset = self._parse_project_and_dataset(name)
 
@@ -437,49 +213,28 @@ class Backend(BaseSQLBackend):
     def version(self):
         return bq.__version__
 
-    def create_table(
-        self,
-        name: str,
-        obj: pd.DataFrame | ir.Table | None = None,
-        schema: ibis.Schema | None = None,
-        database: str | None = None,
-    ) -> None:
-        if obj is None and schema is None:
-            raise ValueError("The schema or obj parameter is required")
-        if schema is not None:
-            table_id = self._fully_qualified_name(name, database)
-            bigquery_schema = ibis_schema_to_bigquery_schema(schema)
-            table = bq.Table(table_id, schema=bigquery_schema)
-            self.client.create_table(table)
-        else:
-            project_id, dataset = self._parse_project_and_dataset(database)
-            if isinstance(obj, pd.DataFrame):
-                table = ibis.memtable(obj)
-            else:
-                table = obj
-            sql_select = self.compile(table)
-            table_ref = f"`{project_id}`.`{dataset}`.`{name}`"
-            self.raw_sql(f'CREATE TABLE {table_ref} AS ({sql_select})')
-
-    def drop_table(
-        self, name: str, database: str | None = None, force: bool = False
-    ) -> None:
-        table_id = self._fully_qualified_name(name, database)
-        self.client.delete_table(table_id, not_found_ok=not force)
-
     def create_view(
         self, name: str, expr: ir.Table, database: str | None = None
     ) -> None:
-        table_id = self._fully_qualified_name(name, database)
-        sql_select = self.compile(expr)
-        table = bq.Table(table_id)
-        table.view_query = sql_select
-        self.client.create_table(table)
+        import sqlalchemy_views as sav
+
+        create_view = sav.CreateView(sa.table(name), expr.compile())
+        with self.begin() as con:
+            con.execute(create_view)
 
     def drop_view(
         self, name: str, database: str | None = None, force: bool = False
     ) -> None:
-        self.drop_table(name=name, database=database, force=force)
+        import sqlalchemy_views as sav
+
+        drop_view = sav.DropView(sa.table(name), if_exists=not force)
+        with self.begin() as con:
+            con.execute(drop_view)
+
+    def _metadata(self, query: str) -> Iterable[tuple[str, dt.DataType]]:
+        job_config = bq.QueryJobConfig(dry_run=True, use_query_cache=False)
+        job = self.client.query(query, job_config=job_config)
+        return ((col.name, bigquery_field_to_ibis_dtype(col)) for col in job.schema)
 
 
 def compile(expr, params=None, **kwargs):

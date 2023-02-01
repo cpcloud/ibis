@@ -64,10 +64,7 @@ class QueryContext:
         with contextlib.suppress(KeyError):
             return self.top_context.subquery_memo[node]
 
-        if isinstance(node, (ops.SQLQueryResult, ops.SQLStringView)):
-            result = node.query
-        else:
-            result = self._compile_subquery(node)
+        result = self._compile_subquery(node)
 
         self.top_context.subquery_memo[node] = result
         return result

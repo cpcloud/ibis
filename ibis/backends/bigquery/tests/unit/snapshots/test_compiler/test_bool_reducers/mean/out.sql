@@ -1,2 +1,2 @@
-SELECT avg(CAST(t0.`bool_col` AS INT64)) AS `tmp`
-FROM functional_alltypes t0
+SELECT avg(CAST(`t0`.`bool_col` AS INT64)) AS `Mean_bool_col_` 
+FROM `functional_alltypes` AS `t0`

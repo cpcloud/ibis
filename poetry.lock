@@ -1265,6 +1265,17 @@ ssh = ["paramiko"]
 tqdm = ["tqdm"]
 
 [[package]]
+name = "future"
+version = "0.18.3"
+description = "Clean single-source support for Python 3 and 2"
+category = "main"
+optional = true
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+files = [
+    {file = "future-0.18.3.tar.gz", hash = "sha256:34a17436ed1e96697a86f9de3d15a3b0be01d8bc8de9c1dffd59fb8234ed5307"},
+]
+
+[[package]]
 name = "geoalchemy2"
 version = "0.13.1"
 description = "Using SQLAlchemy with Spatial Databases"
@@ -4774,6 +4785,34 @@ pymysql = ["pymysql", "pymysql (<1)"]
 sqlcipher = ["sqlcipher3-binary"]
 
 [[package]]
+name = "sqlalchemy-bigquery"
+version = "1.6.1"
+description = "SQLAlchemy dialect for BigQuery"
+category = "main"
+optional = true
+python-versions = ">=3.7, <3.12"
+files = [
+    {file = "sqlalchemy-bigquery-1.6.1.tar.gz", hash = "sha256:352fe5e1d2a9d2991a88c501a97624912e4b59b4b5c0d6a98c63b7228f37ea4e"},
+    {file = "sqlalchemy_bigquery-1.6.1-py2.py3-none-any.whl", hash = "sha256:e9ce790d5172fbcc867b4fc92ec5047ad5e906e0121691907aab86e8a69adb65"},
+]
+
+[package.dependencies]
+future = "*"
+google-api-core = ">=1.31.5,<2.0.0 || >2.3.0,<3.0.0dev"
+google-auth = ">=1.25.0,<3.0.0dev"
+google-cloud-bigquery = ">=2.25.2,<4.0.0dev"
+google-cloud-bigquery-storage = ">=2.0.0,<3.0.0dev"
+packaging = "*"
+pyarrow = ">=3.0.0"
+sqlalchemy = ">=1.2.0,<2.0.0dev"
+
+[package.extras]
+alembic = ["alembic"]
+all = ["GeoAlchemy2", "alembic", "packaging", "pytz", "shapely"]
+geography = ["GeoAlchemy2", "shapely"]
+tests = ["packaging", "pytz"]
+
+[[package]]
 name = "sqlalchemy-views"
 version = "0.3.1"
 description = "Adds CreateView and DropView constructs to SQLAlchemy"
@@ -5204,8 +5243,8 @@ docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker
 testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
 
 [extras]
-all = ["black", "clickhouse-cityhash", "clickhouse-driver", "dask", "datafusion", "db-dtypes", "duckdb", "duckdb-engine", "fsspec", "GeoAlchemy2", "geopandas", "google-cloud-bigquery", "google-cloud-bigquery-storage", "graphviz", "impyla", "lz4", "polars", "psycopg2", "pyarrow", "pydata-google-auth", "pymssql", "pymysql", "pyspark", "regex", "requests", "shapely", "snowflake-connector-python", "snowflake-sqlalchemy", "sqlalchemy", "sqlalchemy-views", "trino"]
-bigquery = ["db-dtypes", "google-cloud-bigquery", "google-cloud-bigquery-storage", "pydata-google-auth"]
+all = ["black", "clickhouse-cityhash", "clickhouse-driver", "dask", "datafusion", "db-dtypes", "duckdb", "duckdb-engine", "fsspec", "GeoAlchemy2", "geopandas", "google-cloud-bigquery", "google-cloud-bigquery-storage", "graphviz", "impyla", "lz4", "polars", "psycopg2", "pyarrow", "pydata-google-auth", "pymssql", "pymysql", "pyspark", "regex", "requests", "shapely", "snowflake-connector-python", "snowflake-sqlalchemy", "sqlalchemy", "sqlalchemy-bigquery", "sqlalchemy-views", "trino"]
+bigquery = ["db-dtypes", "google-cloud-bigquery", "google-cloud-bigquery-storage", "pydata-google-auth", "sqlalchemy", "sqlalchemy-bigquery"]
 clickhouse = ["clickhouse-driver", "clickhouse-cityhash", "lz4"]
 dask = ["dask", "pyarrow", "regex"]
 datafusion = ["datafusion"]
@@ -5227,4 +5266,4 @@ visualization = ["graphviz"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "3c591211975386498271573c65b1afddf783fdd9f19416a318264474790f7cf8"
+content-hash = "408da285135dd34e2c8095c98358bc605e640280fcc436217ab42c864d7d99f0"

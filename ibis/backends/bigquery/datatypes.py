@@ -1,75 +1,96 @@
 from __future__ import annotations
+import functools
 
-from multipledispatch import Dispatcher
+import sqlalchemy as sa
+import sqlalchemy_bigquery as sab
+from sqlalchemy_bigquery import (
+    ARRAY,
+    BIGNUMERIC,
+    BYTES,
+    DATE,
+    FLOAT64,
+    INT64,
+    NUMERIC,
+    STRUCT,
+    TIMESTAMP,
+    BigQueryDialect,
+)
 
 import ibis.expr.datatypes as dt
 
-ibis_type_to_bigquery_type = Dispatcher("ibis_type_to_bigquery_type")
+
+def ibis_type_to_bigquery_type(t):
+    return sa.types.to_instance(_ibis_type_to_bigquery_type(t))
 
 
-@ibis_type_to_bigquery_type.register(str)
+@functools.singledispatch
+def _ibis_type_to_bigquery_type(_):
+    ...
+
+
+@_ibis_type_to_bigquery_type.register(str)
 def trans_string_default(datatype):
     return ibis_type_to_bigquery_type(dt.dtype(datatype))
 
 
-@ibis_type_to_bigquery_type.register(dt.Floating)
-def trans_float64(t):
-    return "FLOAT64"
+@_ibis_type_to_bigquery_type.register(dt.Floating)
+def trans_float64(_):
+    return FLOAT64
 
 
-@ibis_type_to_bigquery_type.register(dt.Integer)
-def trans_integer(t):
-    return "INT64"
+@_ibis_type_to_bigquery_type.register(dt.Integer)
+def trans_integer(_):
+    return INT64
 
 
-@ibis_type_to_bigquery_type.register(dt.Binary)
-def trans_binary(t):
-    return "BYTES"
+@_ibis_type_to_bigquery_type.register(dt.Binary)
+def trans_binary(_):
+    return BYTES
 
 
-@ibis_type_to_bigquery_type.register(dt.UInt64)
-def trans_lossy_integer(t):
+@_ibis_type_to_bigquery_type.register(dt.UInt64)
+def trans_lossy_integer(_):
     raise TypeError("Conversion from uint64 to BigQuery integer type (int64) is lossy")
 
 
-@ibis_type_to_bigquery_type.register(dt.Array)
+@_ibis_type_to_bigquery_type.register(dt.Array)
 def trans_array(t):
-    return f"ARRAY<{ibis_type_to_bigquery_type(t.value_type)}>"
+    return ARRAY(ibis_type_to_bigquery_type(t.value_type))
 
 
-@ibis_type_to_bigquery_type.register(dt.Struct)
+@_ibis_type_to_bigquery_type.register(dt.Struct)
 def trans_struct(t):
-    return "STRUCT<{}>".format(
-        ", ".join(
-            f"{name} {ibis_type_to_bigquery_type(dt.dtype(type_))}"
+    return STRUCT(
+        *(
+            (name, ibis_type_to_bigquery_type(dt.dtype(type_)))
             for name, type_ in t.fields.items()
         )
     )
 
 
-@ibis_type_to_bigquery_type.register(dt.Date)
-def trans_date(t):
-    return "DATE"
+@_ibis_type_to_bigquery_type.register(dt.Date)
+def trans_date(_):
+    return DATE
 
 
-@ibis_type_to_bigquery_type.register(dt.Timestamp)
+@_ibis_type_to_bigquery_type.register(dt.Timestamp)
 def trans_timestamp(t):
     if t.timezone is not None:
         raise TypeError("BigQuery does not support timestamps with timezones")
-    return "TIMESTAMP"
+    return TIMESTAMP
 
 
-@ibis_type_to_bigquery_type.register(dt.DataType)
+@_ibis_type_to_bigquery_type.register(dt.DataType)
 def trans_type(t):
-    return str(t).upper()
+    return getattr(sab, str(t).upper())
 
 
-@ibis_type_to_bigquery_type.register(dt.Decimal)
+@_ibis_type_to_bigquery_type.register(dt.Decimal)
 def trans_numeric(t):
     if (t.precision, t.scale) == (76, 38):
-        return 'BIGNUMERIC'
+        return BIGNUMERIC
     if (t.precision, t.scale) in [(38, 9), (None, None)]:
-        return "NUMERIC"
+        return NUMERIC
     raise TypeError(
         "BigQuery only supports decimal types with precision of 38 and "
         f"scale of 9 (NUMERIC) or precision of 76 and scale of 38 (BIGNUMERIC). "
@@ -77,9 +98,9 @@ def trans_numeric(t):
     )
 
 
-@ibis_type_to_bigquery_type.register(dt.JSON)
-def trans_json(t):
-    return "JSON"
+@_ibis_type_to_bigquery_type.register(dt.JSON)
+def trans_json(_):
+    return sa.JSON
 
 
 def spread_type(dt: dt.DataType):
@@ -96,3 +117,15 @@ def spread_type(dt: dt.DataType):
         yield from spread_type(dt.key_type)
         yield from spread_type(dt.value_type)
     yield dt
+
+
+@dt.dtype.register(BigQueryDialect, STRUCT)
+def _(dialect, sqla_type, nullable: bool = True):
+    return dt.Struct(
+        {name: dt.dtype(dialect, typ) for name, typ in sqla_type._STRUCT_fields}
+    )
+
+
+@dt.dtype.register(BigQueryDialect, ARRAY)
+def _(dialect, sqla_type, nullable: bool = True):
+    return dt.Array(dt.dtype(dialect, sqla_type.item_type))

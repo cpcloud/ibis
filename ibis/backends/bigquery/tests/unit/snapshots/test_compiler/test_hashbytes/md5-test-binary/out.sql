@@ -1,1 +1,1 @@
-SELECT md5(FROM_BASE64('dGVzdA==')) AS `tmp`
+SELECT md5(from_base64('dGVzdA==')) AS `tmp`

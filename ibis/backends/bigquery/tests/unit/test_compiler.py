@@ -1,5 +1,4 @@
 import datetime
-import re
 from operator import floordiv, methodcaller, truediv
 
 import pandas as pd
@@ -10,8 +9,13 @@ import ibis
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 from ibis import _
+from ibis.backends.bigquery.compiler import BigQueryDialect
 
-to_sql = ibis.bigquery.compile
+to_sql = lambda *args, **kwargs: str(
+    ibis.bigquery.compile(*args, **kwargs).compile(
+        dialect=BigQueryDialect(), compile_kwargs={"literal_binds": True}
+    )
+)
 
 
 @pytest.fixture(scope="module")
@@ -377,16 +381,13 @@ def test_geospatial_simplify_error():
     assert str(exception_info.value) == expected
 
 
-def test_timestamp_accepts_date_literals(alltypes):
+def test_timestamp_accepts_date_literals(alltypes, snapshot):
     date_string = "2009-03-01"
     p = ibis.param(dt.timestamp).name("param_0")
     expr = alltypes.mutate(param=p)
     params = {p: date_string}
     result = to_sql(expr, params=params)
-    expected = """\
-SELECT t\\d+\\.\\*, @param_\\d+ AS `param`
-FROM functional_alltypes t\\d+"""
-    assert re.match(expected, result) is not None
+    snapshot.assert_match(result, "out.sql")
 
 
 @pytest.mark.parametrize("distinct", [True, False])
@@ -567,11 +568,8 @@ def test_compile_toplevel(snapshot):
     snapshot.assert_match(result, "out.sql")
 
 
-def test_scalar_param_scope(alltypes):
+def test_scalar_param_scope(alltypes, snapshot):
     t = alltypes
     param = ibis.param("timestamp")
     result = to_sql(t.mutate(param=param), params={param: "2017-01-01"})
-    expected = """\
-SELECT t\\d+\\.\\*, @param_\\d+ AS `param`
-FROM functional_alltypes t\\d+"""
-    assert re.match(expected, result) is not None
+    snapshot.assert_match(result, "out.sql")

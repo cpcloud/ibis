@@ -1,2 +1,2 @@
-SELECT APPROX_COUNT_DISTINCT(t0.`double_col`) AS `tmp`
-FROM functional_alltypes t0
+SELECT approx_count_distinct(`t0`.`double_col`) AS `ApproxCountDistinct_double_col_` 
+FROM `functional_alltypes` AS `t0`

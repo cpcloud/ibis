@@ -336,3 +336,8 @@ def schema_from_table(
             dtype = dt.dtype(dialect, column.type, nullable=column.nullable)
         pairs.append((name, dtype))
     return sch.schema(pairs)
+
+
+@compiles(sa.JSON, "default")
+def compiles_json(element, compiler, **kw):
+    return "JSON"

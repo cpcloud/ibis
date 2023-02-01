@@ -1,17 +1,9 @@
 import pytest
-from multipledispatch.conflict import ambiguities
 from pytest import param
 
 import ibis.expr.datatypes as dt
-from ibis.backends.bigquery.datatypes import (
-    ibis_type_to_bigquery_type,
-    spread_type,
-)
-
-
-def test_no_ambiguities():
-    ambs = ambiguities(ibis_type_to_bigquery_type.funcs)
-    assert not ambs
+from ibis.backends.bigquery.compiler import BigQueryDialect
+from ibis.backends.bigquery.datatypes import ibis_type_to_bigquery_type, spread_type
 
 
 @pytest.mark.parametrize(
@@ -54,7 +46,8 @@ def test_no_ambiguities():
     ],
 )
 def test_simple(datatype, expected):
-    assert ibis_type_to_bigquery_type(datatype) == expected
+    dtype = ibis_type_to_bigquery_type(datatype)
+    assert str(dtype.compile(dialect=BigQueryDialect())) == expected
 
 
 @pytest.mark.parametrize("datatype", [dt.uint64, dt.Decimal(8, 3)])

@@ -1,4 +1,3 @@
-import collections
 import datetime
 import decimal
 import re
@@ -10,7 +9,6 @@ import pytz
 
 import ibis
 import ibis.expr.datatypes as dt
-from ibis.backends.bigquery.client import bigquery_param
 
 
 def test_column_execute(alltypes, df):
@@ -137,61 +135,6 @@ FROM \\(
     )
     result = expr.compile(params={p: "20140101"})
     assert re.match(expected, result) is not None
-
-
-def test_repr_struct_of_array_of_struct():
-    name = "foo"
-    p = ibis.param("struct<x: array<struct<y: array<double>>>>").name(name)
-    value = collections.OrderedDict(
-        [("x", [collections.OrderedDict([("y", [1.0, 2.0, 3.0])])])]
-    )
-    result = bigquery_param(p.type(), value, name)
-    expected = {
-        "name": "foo",
-        "parameterType": {
-            "structTypes": [
-                {
-                    "name": "x",
-                    "type": {
-                        "arrayType": {
-                            "structTypes": [
-                                {
-                                    "name": "y",
-                                    "type": {
-                                        "arrayType": {"type": "FLOAT64"},
-                                        "type": "ARRAY",
-                                    },
-                                }
-                            ],
-                            "type": "STRUCT",
-                        },
-                        "type": "ARRAY",
-                    },
-                }
-            ],
-            "type": "STRUCT",
-        },
-        "parameterValue": {
-            "structValues": {
-                "x": {
-                    "arrayValues": [
-                        {
-                            "structValues": {
-                                "y": {
-                                    "arrayValues": [
-                                        {"value": 1.0},
-                                        {"value": 2.0},
-                                        {"value": 3.0},
-                                    ]
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        },
-    }
-    assert result.to_api_repr() == expected
 
 
 def test_raw_sql(client):
