@@ -1,1 +1,1 @@
-SELECT mod(EXTRACT(DAYOFWEEK FROM TIMESTAMP '2017-01-01 04:55:59') + 5, 7) AS `DayOfWeekIndex_datetime_datetime_2017_1_1_4_55_59_`
+SELECT mod(EXTRACT(DAYOFWEEK FROM DATETIME '2017-01-01 04:55:59') + 5, 7) AS `DayOfWeekIndex_datetime_datetime_2017_1_1_4_55_59_`

@@ -1,1 +1,1 @@
-SELECT initcap(cast(TIMESTAMP '2017-01-01 04:55:59' AS STRING FORMAT 'DAY')) AS `DayOfWeekName_datetime_datetime_2017_1_1_4_55_59_`
+SELECT initcap(cast(DATETIME '2017-01-01 04:55:59' AS STRING FORMAT 'DAY')) AS `DayOfWeekName_datetime_datetime_2017_1_1_4_55_59_`

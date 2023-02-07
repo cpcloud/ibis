@@ -249,12 +249,14 @@ def _literal(translator, op):
     # special case literal timestamp, date, and time scalars
     if isinstance(op, ops.Literal):
         if dtype.is_date():
-            return sa.cast(sa.literal(value), sa.DATE())
+            return sa.literal(value, type_=sa.DATE())
         elif dtype.is_timestamp():
-            return sa.cast(sa.literal(value), sa.TIMESTAMP())
+            return sa.literal(
+                value, type_=sa.TIMESTAMP(timezone=dtype.timezone is not None)
+            )
         elif dtype.is_time():
             # TODO: define extractors on TimeValue expressions
-            return sa.cast(sa.literal(value), sa.TIME())
+            return sa.literal(value, type_=sa.TIME())
         elif dtype.is_binary():
             return sa.func.from_base64(base64.b64encode(value).decode(encoding="utf-8"))
         elif dtype.is_struct():
