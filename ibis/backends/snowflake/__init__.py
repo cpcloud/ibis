@@ -31,8 +31,11 @@ from ibis.backends.base.sql.alchemy import (
 from ibis.backends.snowflake.converter import SnowflakePandasData
 from ibis.backends.snowflake.datatypes import SnowflakeType, parse
 from ibis.backends.snowflake.registry import operation_registry
+from ibis.formats.pyarrow import PyArrowSchema
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import pandas as pd
 
     import ibis.expr.schema as sch
@@ -494,6 +497,65 @@ $$""".format(
                     PURGE = TRUE
                     """
                 )
+
+    def read_parquet(
+        self,
+        path: str | Path,
+        table_name: str | None = None,
+        nthreads: int | None = None,
+        **_: Any,
+    ) -> ir.Table:
+        import pyarrow.parquet as pq
+
+        quote = self.con.dialect.identifier_preparer.quote
+
+        if nthreads is None:
+            nthreads = os.cpu_count()
+
+        # snowflake has a documented limit of 99 threads
+        nthreads = min(nthreads, 99)
+
+        md = pq.read_metadata(path)
+        schema = PyArrowSchema.to_ibis(md.schema.to_arrow_schema())
+
+        quoted_columns = list(map(quote, schema.names))
+        dialect = self.con.dialect
+        types = [
+            sat.to_instance(SnowflakeType.from_ibis(typ)).compile(dialect=dialect)
+            for typ in schema.types
+        ]
+        schema = ", ".join(map("{} {}".format, quoted_columns, types))
+
+        if table_name is None:
+            table_name = util.gen_name("snowflake_parquet_file")
+
+        stage = util.gen_name("snowflake_parquet_stage")
+        quoted_table_name = quote(table_name)
+
+        with self.begin() as con:
+            # 1. create a temporary stage for holding parquet files
+            con.exec_driver_sql(f"CREATE TEMP STAGE {stage}")
+
+            # 2. copy the parquet file into the stage
+            con.exec_driver_sql(f"PUT 'file://{path}' @{stage} PARALLEL = {nthreads}")
+
+            # 3. create a temporary table
+            con.exec_driver_sql(f"CREATE TEMP TABLE {quoted_table_name} ({schema})")
+
+            # 4. copy the data into the table
+            column_names = ", ".join(quoted_columns)
+            parquet_column_exprs = ", ".join(
+                map("CAST($1:{} AS {})".format, quoted_columns, types)
+            )
+            con.exec_driver_sql(
+                f"""
+                COPY INTO {quoted_table_name} ({column_names})
+                FROM (SELECT {parquet_column_exprs} FROM @{stage})
+                FILE_FORMAT = (TYPE = PARQUET COMPRESSION = AUTO)
+                PURGE = TRUE
+                """
+            )
+        return self.table(table_name)
 
     def _get_temp_view_definition(
         self, name: str, definition: sa.sql.compiler.Compiled
