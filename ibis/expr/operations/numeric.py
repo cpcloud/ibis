@@ -221,6 +221,11 @@ class Sqrt(MathUnary):
 
 
 @public
+class Cbrt(MathUnary):
+    pass
+
+
+@public
 class Logarithm(MathUnary):
     arg = rlz.strict_numeric
 

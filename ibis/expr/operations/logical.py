@@ -189,6 +189,14 @@ class ExistsSubquery(Value, _Negatable):
 
 
 @public
+class Subquery(Value):
+    arg = rlz.any
+
+    output_dtype = rlz.dtype_like("arg")
+    output_shape = rlz.Shape.COLUMNAR
+
+
+@public
 class NotExistsSubquery(Value, _Negatable):
     foreign_table = rlz.table
     predicates = rlz.tuple_of(rlz.boolean)

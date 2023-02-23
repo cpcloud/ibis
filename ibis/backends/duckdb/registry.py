@@ -255,6 +255,12 @@ def _array_filter(t, op):
     )
 
 
+def _subquery(t, op):
+    arg = t.translate(op.arg)
+    res = sa.select(arg).scalar_subquery()
+    return res
+
+
 operation_registry.update(
     {
         ops.ArrayColumn: (
@@ -343,6 +349,7 @@ operation_registry.update(
         ops.ArrayMap: _array_map,
         ops.ArrayFilter: _array_filter,
         ops.Argument: lambda _, op: sa.literal_column(op.name),
+        ops.Subquery: _subquery,
     }
 )
 

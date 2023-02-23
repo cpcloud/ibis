@@ -407,6 +407,10 @@ class Value(Expr):
         else:
             return ops.WindowFunction(self, window).to_expr()
 
+    def subquery(self):
+        """Construct a subquery."""
+        return ops.Subquery(self).to_expr()
+
     def isnull(self) -> ir.BooleanValue:
         """Return whether this expression is NULL."""
         return ops.IsNull(self).to_expr()

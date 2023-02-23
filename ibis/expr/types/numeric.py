@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections
 import functools
+import sys
 from typing import TYPE_CHECKING, Iterable, Literal, Sequence
 
 from public import public
@@ -166,6 +167,10 @@ class NumericValue(Value):
     def sqrt(self) -> NumericValue:
         """Compute the square root of `self`."""
         return ops.Sqrt(self).to_expr()
+
+    def cbrt(self) -> NumericValue:
+        """Compute the cube root of `self`."""
+        return ops.Cbrt(self).to_expr()
 
     def nullifzero(self) -> NumericValue:
         """Return `NULL` if an expression is zero."""
@@ -538,50 +543,94 @@ class NumericColumn(Column, NumericValue):
 
     def histogram(
         self,
-        nbins: int | None = None,
+        bins: int
+        | Literal["auto", "fd", "scott", "rice", "sturges", "doane", "sqrt"]
+        | None = None,
         binwidth: float | None = None,
-        base: float | None = None,
-        eps: float = 1e-13,
     ):
         """Compute a histogram with fixed width bins.
 
         Parameters
         ----------
-        nbins
-            If supplied, will be used to compute the binwidth
+        bins
+            If supplied, will be used to compute the binwidth. See
+            https://numpy.org/doc/stable/reference/generated/numpy.histogram_bin_edges.html#numpy.histogram_bin_edges
+            for details about the various ways of computing bin width / number
+            of bins.
         binwidth
             If not supplied, computed from the data (actual max and min values)
-        base
-            The value of the first histogram bin. Defaults to the minimum value
-            of `column`.
-        eps
-            Allowed floating point epsilon for histogram base
 
         Returns
         -------
         Column
             Bucketed column
         """
+        import ibis
 
-        if nbins is not None and binwidth is not None:
+        if bins is not None and binwidth is not None:
             raise ValueError(
-                f"Cannot pass both `nbins` (got {nbins}) and `binwidth` (got {binwidth})"
+                f"Cannot pass both `bins` (got {bins}) and `binwidth` (got {binwidth})"
             )
 
-        if binwidth is None or base is None:
-            import ibis
+        if binwidth is not None:
+            return (self / binwidth).floor() * binwidth
 
-            if nbins is None:
-                raise ValueError("`nbins` is required if `binwidth` is not provided")
+        nbins = bins if isinstance(bins, int) else None
 
-            empty_window = ibis.window()
+        n = self.count()
 
-            if base is None:
-                base = self.min().over(empty_window) - eps
+        def fd(arg, n):
+            iqr = arg.quantile(0.75) - arg.quantile(0.25)
+            binwidth = 2 * (iqr / n.cbrt())
+            return binwidth
 
-            binwidth = (self.max().over(empty_window) - base) / (nbins - 1)
+        def scott(arg, n):
+            binwidth = arg.std() * (24 * ibis.pi / n).cbrt()
+            return binwidth
 
-        return ((self - base) / binwidth).floor()
+        def rice(n):
+            nbins = 2 * n.cbrt()
+            return nbins
+
+        def sturges(n):
+            nbins = n.log2() + 1.0
+            return nbins
+
+        def doane(x, n):
+            num = x - x.mean()
+            denom = x.std()
+            arg = (num / denom) ** 3
+            g1 = arg.subquery().mean().over()
+            sg1 = ((6 * (n - 2)) / ((n + 1) * (n + 3))).sqrt()
+            nbins = 1 + n.log2() + (1 + g1.abs() / sg1).log2()
+            return nbins
+
+        def _binwidth(nbins):
+            base = self.min() - sys.float_info.epsilon
+            binwidth = (self.max() - base) / (nbins - 1)
+            return binwidth
+
+        if bins == "fd":
+            binwidth = fd(self, n)
+        elif bins == "scott":
+            binwidth = scott(self, n)
+        elif bins == "rice":
+            nbins = rice(n)
+        elif bins == "sturges":
+            nbins = sturges(n)
+        elif bins == "doane":
+            nbins = doane(self, n)
+        elif bins == "sqrt":
+            nbins = n.sqrt()
+        elif bins == "auto":
+            fd_binwidth = fd(self, n)
+            sturges_binwidth = _binwidth(sturges(n))
+            binwidth = ibis.greatest(fd_binwidth, sturges_binwidth)
+
+        if nbins is not None:
+            binwidth = _binwidth(nbins)
+
+        return (self / binwidth).floor() * binwidth
 
     def summary(
         self,
