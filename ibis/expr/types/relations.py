@@ -7,7 +7,15 @@ import itertools
 import operator
 import re
 from keyword import iskeyword
-from typing import TYPE_CHECKING, Callable, Iterable, Literal, Mapping, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Iterable,
+    Iterator,
+    Literal,
+    Mapping,
+    Sequence,
+)
 
 import toolz
 from public import public
@@ -3541,6 +3549,49 @@ class Table(Expr, _FixedTextJupyterMixin):
                 aggs[key] = arg if values_fill is None else arg.coalesce(values_fill)
 
         return self.group_by(id_cols).aggregate(**aggs)
+
+    def split_wider_sep(
+        self,
+        cols: str | s.Selector,
+        *,
+        sep: str,
+        names: str | Iterable[str] | None = None,
+        names_sep: str = "_",
+    ) -> Table:
+        """Split string columns into multiple columns delimited by `sep`."""
+        import ibis.selectors as s
+
+        selected_cols = cols.expand(self)
+        more_than_one_selected = len(selected_cols) > 1
+        name_locs = self.schema()._name_locs
+
+        names = util.promote_list(names)
+        start = 0
+
+        selections = []
+
+        for col in selected_cols:
+            name = col.get_name()
+            idx = name_locs[name]
+
+            selections.append(s.r[start:idx])
+
+            prefix = name * more_than_one_selected
+
+            expr = col.split(sep)
+            selections.extend(
+                expr[i].name(names_sep.join(filter(None, (prefix, raw_name))))
+                for i, raw_name in enumerate(names)
+            )
+            # skip the selected column and start at the column one after
+            start = idx + 1
+
+        # append the remaining columns after all selected columns
+        last_selected_col = selected_cols[-1]
+        last_selected_col_pos = name_locs[last_selected_col.get_name()]
+        selections.append(s.r[last_selected_col_pos + 1 :])
+
+        return self.select(*selections)
 
 
 @public
