@@ -2470,6 +2470,11 @@ class Table(Expr, _FixedTextJupyterMixin):
         }
 
         klass = _join_classes[how.lower()]
+        be = ibis.get_backend()
+        if left._find_backend() != be:
+            left = be.read_in_memory(left.to_pyarrow_batches())
+        if right._find_backend() != be:
+            right = be.read_in_memory(right.to_pyarrow_batches())
         expr = klass(left, right, predicates).to_expr()
 
         # semi/anti join only give access to the left table's fields, so
