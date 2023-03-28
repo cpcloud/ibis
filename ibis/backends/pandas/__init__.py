@@ -205,7 +205,10 @@ class BasePandasBackend(BaseBackend):
 
     @classmethod
     def _convert_object(cls, obj: Any) -> Any:
-        return cls.backend_table_type(obj)
+        try:
+            return obj.op().data.to_frame()
+        except AttributeError:
+            return cls.backend_table_type(obj)
 
     @classmethod
     @lru_cache

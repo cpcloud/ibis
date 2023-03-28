@@ -331,3 +331,8 @@ def execute_selection_dataframe(
 
     # drop every temporary column we created for ordering or grouping
     return result.drop(temporary_columns, axis=1)
+
+
+@execute_node.register(ops.InMemoryTable)
+def execute_in_memory_table(op, **_):
+    return op.data.to_frame()

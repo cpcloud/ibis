@@ -464,6 +464,7 @@ def test_array_slice(con, start, stop):
         "datafusion",
         "impala",
         "mssql",
+        "pandas",
         "polars",
         "postgres",
         "snowflake",
@@ -472,7 +473,7 @@ def test_array_slice(con, start, stop):
     raises=com.OperationNotDefinedError,
 )
 @pytest.mark.notimpl(
-    ["dask", "pandas"],
+    ["dask"],
     raises=com.UnboundExpressionError,
     reason=(
         "Node of type 'InMemoryTable' has no data bound to it. "
@@ -500,6 +501,7 @@ def test_array_map(backend, con):
         "datafusion",
         "impala",
         "mssql",
+        "pandas",
         "polars",
         "postgres",
         "snowflake",
@@ -507,7 +509,7 @@ def test_array_map(backend, con):
     raises=com.OperationNotDefinedError,
 )
 @pytest.mark.notimpl(
-    ["dask", "pandas"],
+    ["dask"],
     raises=com.UnboundExpressionError,
     reason=(
         "Node of type 'InMemoryTable' has no data bound to it. "
