@@ -184,9 +184,10 @@ class BasePandasBackend(BaseBackend):
         self.drop_table(name, force=force)
 
     def drop_table(self, name: str, *, force: bool = False) -> None:
-        if not force and name in self.dictionary:
+        if not force and name not in self.dictionary:
             raise com.IbisError(
-                "Cannot drop existing table. Call drop_table with force=True to drop existing table."
+                "Cannot drop non-existent table. Call `drop_table` with force=True "
+                "ignore non-existent tables."
             )
         del self.dictionary[name]
 
