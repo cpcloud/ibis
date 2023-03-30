@@ -223,7 +223,7 @@ class Backend(BaseAlchemyBackend):
         prefixes = []
         if temp:
             prefixes.append('TEMPORARY')
-        columns = self._columns_from_schema(name, schema)
+        columns = self._columns_from_schema(schema)
         return sa.Table(
             name, sa.MetaData(), *columns, schema=database, prefixes=prefixes
         )
