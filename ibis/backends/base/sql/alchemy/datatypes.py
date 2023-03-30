@@ -129,7 +129,6 @@ ibis_type_to_sqla = {
     dt.String: sa.Text,
     dt.Decimal: sa.NUMERIC,
     # Mantissa-based
-    dt.Float16: sa.REAL,
     dt.Float32: sa.REAL,
     # precision is the number of bits in the mantissa
     # without specifying this, some backends interpret the type as FLOAT, which
@@ -217,11 +216,7 @@ else:
         return dt.UUID(nullable=nullable)
 
 
-_FLOAT_PREC_TO_TYPE = {
-    11: dt.Float16,
-    24: dt.Float32,
-    53: dt.Float64,
-}
+_FLOAT_PREC_TO_TYPE = {24: dt.Float32, 53: dt.Float64}
 
 
 @dt.dtype.register(Dialect, sat.Float)

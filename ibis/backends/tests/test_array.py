@@ -423,7 +423,7 @@ def test_unnest_default_name(backend):
     assert expr.get_name().startswith("ArrayConcat(")
 
     result = expr.name("x").execute()
-    expected = df.x.map(lambda x: x + [1]).explode("x")
+    expected = df.x.map(lambda x: x.tolist() + [1]).explode("x")
     tm.assert_series_equal(result, expected, check_dtype=False)
 
 

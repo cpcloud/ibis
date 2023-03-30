@@ -240,35 +240,10 @@ class Backend(BaseBackend):
         chunk_size: int = 1_000_000,
         **kwargs: Any,
     ) -> pa.ipc.RecordBatchReader:
-        pa = self._import_pyarrow()
         frame = self._get_frame(expr, params, limit, **kwargs)
         return pa.ipc.RecordBatchReader.from_batches(frame.schema(), frame.collect())
 
-    def execute(
-        self,
-        expr: ir.Expr,
-        params: Mapping[ir.Expr, object] = None,
-        limit: int | str | None = "default",
-        **kwargs: Any,
-    ):
-        output = self.to_pyarrow(expr, params=params, limit=limit, **kwargs)
-        if isinstance(expr, ir.Table):
-            return output.to_pandas()
-        elif isinstance(expr, ir.Column):
-            series = output.to_pandas()
-            series.name = expr.get_name()
-            return series
-        elif isinstance(expr, ir.Scalar):
-            return output.as_py()
-        else:
-            raise com.IbisError(f"Cannot execute expression of type: {type(expr)}")
-
-    def compile(
-        self,
-        expr: ir.Expr,
-        params: Mapping[ir.Expr, object] = None,
-        **kwargs: Any,
-    ):
+    def compile(self, expr: ir.Expr, **_: Any):
         return translate(expr.op())
 
     @classmethod

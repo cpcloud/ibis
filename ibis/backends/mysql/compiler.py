@@ -35,7 +35,6 @@ _MYSQL_TYPE_MAP = {
     dt.Int16: mysql.SMALLINT,
     dt.Int32: mysql.INTEGER,
     dt.Int64: mysql.BIGINT,
-    dt.Float16: mysql.FLOAT,
     dt.Float32: mysql.FLOAT,
     dt.Float64: mysql.DOUBLE,
     dt.String: mysql.TEXT,

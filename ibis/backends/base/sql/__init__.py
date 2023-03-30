@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import abc
 import contextlib
 import os
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
+import pyarrow as pa
 import toolz
 
 import ibis.common.exceptions as exc
@@ -19,7 +19,6 @@ from ibis.backends.base.sql.compiler import Compiler
 
 if TYPE_CHECKING:
     import pandas as pd
-    import pyarrow as pa
 
 __all__ = [
     'BaseSQLBackend',
@@ -188,8 +187,6 @@ class BaseSQLBackend(BaseBackend):
         RecordBatchReader
             Collection of pyarrow `RecordBatch`s.
         """
-        pa = self._import_pyarrow()
-
         schema = expr.as_table().schema()
         array_type = schema.as_struct().to_pyarrow()
         arrays = (
@@ -202,62 +199,6 @@ class BaseSQLBackend(BaseBackend):
 
         return pa.ipc.RecordBatchReader.from_batches(schema.to_pyarrow(), batches)
 
-    def execute(
-        self,
-        expr: ir.Expr,
-        params: Mapping[ir.Scalar, Any] | None = None,
-        limit: str = 'default',
-        **kwargs: Any,
-    ):
-        """Compile and execute an Ibis expression.
-
-        Compile and execute Ibis expression using this backend client
-        interface, returning results in-memory in the appropriate object type
-
-        Parameters
-        ----------
-        expr
-            Ibis expression
-        limit
-            For expressions yielding result sets; retrieve at most this number
-            of values/rows. Overrides any limit already set on the expression.
-        params
-            Named unbound parameters
-        kwargs
-            Backend specific arguments. For example, the clickhouse backend
-            uses this to receive `external_tables` as a dictionary of pandas
-            DataFrames.
-
-        Returns
-        -------
-        DataFrame | Series | Scalar
-            * `Table`: pandas.DataFrame
-            * `Column`: pandas.Series
-            * `Scalar`: Python scalar value
-        """
-        # TODO Reconsider having `kwargs` here. It's needed to support
-        # `external_tables` in clickhouse, but better to deprecate that
-        # feature than all this magic.
-        # we don't want to pass `timecontext` to `raw_sql`
-        kwargs.pop('timecontext', None)
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
-        self._log(sql)
-
-        schema = self.ast_schema(query_ast, **kwargs)
-
-        # register all in memory tables if the backend supports cheap access
-        # to them
-        self._register_in_memory_tables(expr)
-
-        with self._safe_raw_sql(sql, **kwargs) as cursor:
-            result = self.fetch_from_cursor(cursor, schema)
-
-        if hasattr(getattr(query_ast, 'dml', query_ast), 'result_handler'):
-            result = query_ast.dml.result_handler(result)
-
-        return result
-
     def _register_in_memory_table(self, _: ops.InMemoryTable) -> None:
         raise NotImplementedError(self.name)
 
@@ -265,10 +206,6 @@ class BaseSQLBackend(BaseBackend):
         if self.compiler.cheap_in_memory_tables:
             for memtable in an.find_memtables(expr.op()):
                 self._register_in_memory_table(memtable)
-
-    @abc.abstractmethod
-    def fetch_from_cursor(self, cursor, schema):
-        """Fetch data from cursor."""
 
     def ast_schema(self, query_ast, **kwargs) -> sch.Schema:
         """Return the schema of the expression.

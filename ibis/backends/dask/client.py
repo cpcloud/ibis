@@ -4,18 +4,12 @@ from __future__ import annotations
 
 import dask.dataframe as dd
 import numpy as np
-from pandas.api.types import DatetimeTZDtype
 
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.schema as sch
 from ibis.backends.base import Database
-from ibis.backends.pandas.client import (
-    PANDAS_DATE_TYPES,
-    PANDAS_STRING_TYPES,
-    ibis_dtype_to_pandas,
-    ibis_schema_to_pandas,
-)
+from ibis.backends.pandas.client import ibis_dtype_to_pandas, ibis_schema_to_pandas
 
 
 @sch.schema.register(dd.Series)
@@ -51,44 +45,6 @@ def infer_dask_schema(df, schema=None):
 ibis_dtype_to_dask = ibis_dtype_to_pandas
 
 ibis_schema_to_dask = ibis_schema_to_pandas
-
-
-@sch.convert.register(DatetimeTZDtype, dt.Timestamp, dd.Series)
-def convert_datetimetz_to_timestamp(in_dtype, out_dtype, column):
-    output_timezone = out_dtype.timezone
-    if output_timezone is not None:
-        return column.dt.tz_convert(output_timezone)
-    return column.astype(out_dtype.to_dask())
-
-
-DASK_STRING_TYPES = PANDAS_STRING_TYPES
-DASK_DATE_TYPES = PANDAS_DATE_TYPES
-
-
-@sch.convert.register(np.dtype, dt.Interval, dd.Series)
-def convert_any_to_interval(_, out_dtype, column):
-    return column.values.astype(out_dtype.to_dask())
-
-
-@sch.convert.register(np.dtype, dt.String, dd.Series)
-def convert_any_to_string(_, out_dtype, column):
-    result = column.astype(out_dtype.to_dask())
-    return result
-
-
-@sch.convert.register(np.dtype, dt.Boolean, dd.Series)
-def convert_boolean_to_series(in_dtype, out_dtype, column):
-    # XXX: this is a workaround until #1595 can be addressed
-    in_dtype_type = in_dtype.type
-    out_dtype_type = out_dtype.to_dask().type
-    if in_dtype_type != np.object_ and in_dtype_type != out_dtype_type:
-        return column.astype(out_dtype_type)
-    return column
-
-
-@sch.convert.register(object, dt.DataType, dd.Series)
-def convert_any_to_any(_, out_dtype, column):
-    return column.astype(out_dtype.to_dask())
 
 
 dt.DataType.to_dask = ibis_dtype_to_dask

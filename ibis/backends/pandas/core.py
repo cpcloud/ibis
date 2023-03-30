@@ -491,18 +491,6 @@ def execute_and_reset(
         aggcontext=aggcontext,
         **kwargs,
     )
-    return _apply_schema(node, result)
-
-
-def _apply_schema(op: ops.Node, result: pd.DataFrame | pd.Series):
-    assert isinstance(op, ops.Node), type(op)
-    if isinstance(result, pd.DataFrame):
-        df = result.reset_index()
-        schema = op.schema
-        return schema.apply_to(df.loc[:, list(schema.names)])
-    elif isinstance(result, pd.Series):
-        schema = op.to_expr().as_table().schema()
-        return schema.apply_to(result.to_frame()).iloc[:, 0].reset_index(drop=True)
     return result
 
 

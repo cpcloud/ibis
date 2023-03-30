@@ -5,8 +5,9 @@ import itertools
 import json
 import warnings
 import weakref
-from typing import TYPE_CHECKING, Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
+import pyarrow as pa
 import sqlalchemy as sa
 
 import ibis.expr.datatypes as dt
@@ -18,12 +19,6 @@ from ibis.backends.base.sql.alchemy import (
     BaseAlchemyBackend,
 )
 from ibis.backends.base.sql.alchemy.query_builder import _AlchemyTableSetFormatter
-
-if TYPE_CHECKING:
-    import pandas as pd
-    import pyarrow as pa
-
-    import ibis.expr.schema as sch
 
 
 @contextlib.contextmanager
@@ -239,8 +234,6 @@ class Backend(BaseAlchemyBackend):
         if not _NATIVE_ARROW:
             return super().to_pyarrow(expr, params=params, limit=limit, **kwargs)
 
-        import pyarrow as pa
-
         self._register_in_memory_tables(expr)
         query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         sql = query_ast.compile()
@@ -254,22 +247,17 @@ class Backend(BaseAlchemyBackend):
             )
 
         target_schema = expr.as_table().schema().to_pyarrow()
+
         if res is None:
             res = pa.Table.from_pylist([], schema=target_schema)
 
-        if not res.schema.equals(target_schema, check_metadata=False):
-            res = res.rename_columns(target_schema.names).cast(target_schema)
+        res = res.rename_columns(target_schema.names)
 
         if isinstance(expr, ir.Column):
             return res[expr.get_name()]
         elif isinstance(expr, ir.Scalar):
             return res[expr.get_name()][0]
         return res
-
-    def fetch_from_cursor(self, cursor, schema: sch.Schema) -> pd.DataFrame:
-        if _NATIVE_ARROW and self._default_connector_format == "ARROW":
-            return cursor.cursor.fetch_pandas_all()
-        return super().fetch_from_cursor(cursor, schema)
 
     def to_pyarrow_batches(
         self,
@@ -285,8 +273,6 @@ class Backend(BaseAlchemyBackend):
                 expr, params=params, limit=limit, chunk_size=chunk_size, **kwargs
             )
 
-        import pyarrow as pa
-
         self._register_in_memory_tables(expr)
         query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         sql = query_ast.compile()
@@ -298,18 +284,15 @@ class Backend(BaseAlchemyBackend):
         con.exec_driver_sql(
             f"ALTER SESSION SET {PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT} = {self._default_connector_format!r}"
         )
-        raw_cursor = cursor.cursor
-        target_schema = expr.as_table().schema().to_pyarrow()
-        target_columns = target_schema.names
+        schema = expr.as_table().schema()
+
+        target_schema = schema.to_pyarrow()
         reader = pa.RecordBatchReader.from_batches(
             target_schema,
             itertools.chain.from_iterable(
-                (
-                    t.rename_columns(target_columns)
-                    .cast(target_schema)
-                    .to_batches(max_chunksize=chunk_size)
-                )
-                for t in raw_cursor.fetch_arrow_batches()
+                (t.rename_columns(schema.names).to_batches(max_chunksize=chunk_size))
+                # "batches" is a misnomer: each batch is a pyarrow.Table
+                for t in cursor.cursor.fetch_arrow_batches()
             ),
         )
 

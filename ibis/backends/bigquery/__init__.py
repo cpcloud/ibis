@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 import google.auth.credentials
 import google.cloud.bigquery as bq
-import pandas as pd
+import pyarrow as pa
 import pydata_google_auth
 from pydata_google_auth import cache
 
@@ -34,7 +34,7 @@ with contextlib.suppress(ImportError):
     from ibis.backends.bigquery.udf import udf  # noqa: F401
 
 if TYPE_CHECKING:
-    import pyarrow as pa
+    import pandas as pd
     from google.cloud.bigquery.table import RowIterator
 
 SCOPES = ["https://www.googleapis.com/auth/bigquery"]
@@ -268,48 +268,6 @@ class Backend(BaseSQLBackend):
             )
         return self.database_class(name or self.dataset, self)
 
-    def execute(self, expr, params=None, limit="default", **kwargs):
-        """Compile and execute the given Ibis expression.
-
-        Compile and execute Ibis expression using this backend client
-        interface, returning results in-memory in the appropriate object type
-
-        Parameters
-        ----------
-        expr
-            Ibis expression to execute
-        limit
-            Retrieve at most this number of values/rows. Overrides any limit
-            already set on the expression.
-        params
-            Query parameters
-        kwargs
-            Extra arguments specific to the backend
-
-        Returns
-        -------
-        pd.DataFrame | pd.Series | scalar
-            Output from execution
-        """
-        # TODO: upstream needs to pass params to raw_sql, I think.
-        kwargs.pop("timecontext", None)
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
-        self._log(sql)
-        cursor = self.raw_sql(sql, params=params, **kwargs)
-        schema = self.ast_schema(query_ast, **kwargs)
-        result = self.fetch_from_cursor(cursor, schema)
-
-        if hasattr(getattr(query_ast, "dml", query_ast), "result_handler"):
-            result = query_ast.dml.result_handler(result)
-
-        return result
-
-    def fetch_from_cursor(self, cursor, schema):
-        arrow_t = self._cursor_to_arrow(cursor)
-        df = arrow_t.to_pandas(timestamp_as_object=True)
-        return schema.apply_to(df)
-
     def _cursor_to_arrow(
         self,
         cursor,
@@ -344,7 +302,6 @@ class Backend(BaseSQLBackend):
         limit: int | str | None = None,
         **kwargs: Any,
     ) -> pa.Table:
-        self._import_pyarrow()
         query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         sql = query_ast.compile()
         cursor = self.raw_sql(sql, params=params, **kwargs)
@@ -367,8 +324,6 @@ class Backend(BaseSQLBackend):
         chunk_size: int = 1_000_000,
         **kwargs: Any,
     ):
-        pa = self._import_pyarrow()
-
         schema = expr.as_table().schema()
 
         query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
@@ -433,6 +388,8 @@ class Backend(BaseSQLBackend):
             table = bq.Table(table_id, schema=bigquery_schema)
             self.client.create_table(table)
         else:
+            import pandas as pd
+
             project_id, dataset = self._parse_project_and_dataset(database)
             if isinstance(obj, pd.DataFrame):
                 table = ibis.memtable(obj)

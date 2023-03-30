@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import warnings
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 import numpy as np
 import pandas as pd
 import toolz
-from dateutil.parser import parse as date_parse
 from pandas.api.types import CategoricalDtype, DatetimeTZDtype
 
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.schema as sch
-from ibis import util
 from ibis.backends.base import Database
 from ibis.expr.operations.relations import TableProxy
 
@@ -39,7 +35,6 @@ _ibis_dtypes = toolz.valmap(
         dt.UInt16: np.uint16,
         dt.UInt32: np.uint32,
         dt.UInt64: np.uint64,
-        dt.Float16: np.float16,
         dt.Float32: np.float32,
         dt.Float64: np.float64,
         dt.Decimal: np.object_,
@@ -120,94 +115,6 @@ def ibis_dtype_to_pandas(ibis_dtype: dt.DataType):
 
 def ibis_schema_to_pandas(schema):
     return list(zip(schema.names, map(ibis_dtype_to_pandas, schema.types)))
-
-
-@sch.convert.register(DatetimeTZDtype, dt.Timestamp, pd.Series)
-def convert_datetimetz_to_timestamp(_, out_dtype, column):
-    output_timezone = out_dtype.timezone
-    if output_timezone is not None:
-        return column.dt.tz_convert(output_timezone)
-    return column.astype(out_dtype.to_pandas(), errors='ignore')
-
-
-PANDAS_STRING_TYPES = {'string', 'unicode', 'bytes'}
-PANDAS_DATE_TYPES = {'datetime', 'datetime64', 'date'}
-
-
-@sch.convert.register(np.dtype, dt.Interval, pd.Series)
-def convert_any_to_interval(_, out_dtype, column):
-    return column.values.astype(out_dtype.to_pandas())
-
-
-@sch.convert.register(np.dtype, dt.String, pd.Series)
-def convert_any_to_string(_, out_dtype, column):
-    result = column.astype(out_dtype.to_pandas(), errors='ignore')
-    return result
-
-
-@sch.convert.register(np.dtype, dt.UUID, pd.Series)
-def convert_any_to_uuid(_, out_dtype, column):
-    return column.map(lambda v: v if isinstance(v, UUID) else UUID(v))
-
-
-@sch.convert.register(np.dtype, dt.Boolean, pd.Series)
-def convert_boolean_to_series(in_dtype, out_dtype, column):
-    # XXX: this is a workaround until #1595 can be addressed
-    in_dtype_type = in_dtype.type
-    out_dtype_type = out_dtype.to_pandas().type
-    if column.empty:
-        return column.astype(out_dtype_type)
-    elif in_dtype_type != np.object_ and in_dtype_type != out_dtype_type:
-        return column.map(lambda value: pd.NA if pd.isna(value) else bool(value))
-    return column
-
-
-@sch.convert.register(DatetimeTZDtype, dt.Date, pd.Series)
-def convert_timestamp_to_date(in_dtype, out_dtype, column):
-    if in_dtype.tz is not None:
-        column = column.dt.tz_convert("UTC").dt.tz_localize(None)
-    return column.astype(out_dtype.to_pandas(), errors='ignore').dt.normalize()
-
-
-@sch.convert.register(object, dt.DataType, pd.Series)
-def convert_any_to_any(_, out_dtype, column):
-    try:
-        return column.astype(out_dtype.to_pandas())
-    except pd.errors.OutOfBoundsDatetime:
-        try:
-            return column.map(date_parse)
-        except TypeError:
-            return column
-    except Exception:  # noqa: BLE001
-        return column
-
-
-@sch.convert.register(object, dt.Struct, pd.Series)
-def convert_struct_to_dict(_, out_dtype, column):
-    def convert_element(values, names=out_dtype.names):
-        if values is None or isinstance(values, dict) or pd.isna(values):
-            return values
-        return dict(zip(names, values))
-
-    return column.map(convert_element)
-
-
-@sch.convert.register(np.dtype, dt.Array, pd.Series)
-def convert_array_to_series(in_dtype, out_dtype, column):
-    return column.map(lambda x: list(x) if util.is_iterable(x) else x)
-
-
-@sch.convert.register(np.dtype, dt.JSON, pd.Series)
-def convert_json_to_series(in_, out, col: pd.Series):
-    def try_json(x):
-        if x is None:
-            return x
-        try:
-            return json.loads(x)
-        except (TypeError, json.JSONDecodeError):
-            return x
-
-    return pd.Series(list(map(try_json, col)), dtype="object")
 
 
 class DataFrameProxy(TableProxy):

@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, MutableMapping
 
 import duckdb
+import pyarrow as pa
+import pyarrow.dataset as ds
 import sqlalchemy as sa
 import toolz
 
 import ibis.common.exceptions as exc
 import ibis.expr.datatypes as dt
-import ibis.expr.schema as sch
 import ibis.expr.types as ir
 from ibis import util
 from ibis.backends.base.sql.alchemy import BaseAlchemyBackend
@@ -26,7 +27,6 @@ from ibis.backends.duckdb.datatypes import parse
 
 if TYPE_CHECKING:
     import pandas as pd
-    import pyarrow as pa
 
     import ibis.expr.operations as ops
 
@@ -396,8 +396,6 @@ class Backend(BaseAlchemyBackend):
         table_name: str,
         **kwargs: Any,
     ) -> None:
-        import pyarrow.dataset as ds
-
         dataset = ds.dataset(list(map(ds.dataset, source_list)), **kwargs)
         self._load_extensions(["httpfs"])
         # We don't create a view since DuckDB special cases Arrow Datasets
@@ -545,7 +543,6 @@ class Backend(BaseAlchemyBackend):
         chunk_size
             !!! warning "DuckDB returns 1024 size batches regardless of what argument is passed."
         """
-        self._import_pyarrow()
         self._register_in_memory_tables(expr)
         query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         sql = query_ast.compile()
@@ -577,29 +574,26 @@ class Backend(BaseAlchemyBackend):
         limit: int | str | None = None,
         **_: Any,
     ) -> pa.Table:
-        pa = self._import_pyarrow()
-
         self._register_in_memory_tables(expr)
         query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
         sql = query_ast.compile()
 
+        schema = expr.as_table().schema()
+
         with self.begin() as con:
             cursor = con.execute(sql)
-            table = cursor.cursor.fetch_arrow_table()
+            t = cursor.cursor.fetch_arrow_table()
+        table = t.rename_columns(schema.names)
+        table = table.cast(schema.to_pyarrow(), safe=False)
 
         if isinstance(expr, ir.Table):
             return table
         elif isinstance(expr, ir.Column):
-            # Column will be a ChunkedArray, `combine_chunks` will
-            # flatten it
-            if len(table.columns[0]):
-                return table.columns[0].combine_chunks()
-            else:
-                return pa.array(table.columns[0])
+            return table[0]
         elif isinstance(expr, ir.Scalar):
-            return table.columns[0][0]
+            return table[0][0]
         else:
-            raise ValueError
+            raise exc.IbisTypeError(f"Invalid expression type: {type(expr)}")
 
     @util.experimental
     def to_parquet(
@@ -689,26 +683,6 @@ class Backend(BaseAlchemyBackend):
         copy_cmd = f"COPY ({query}) TO {str(path)!r} ({', '.join(args)})"
         with self.begin() as con:
             con.exec_driver_sql(copy_cmd)
-
-    def fetch_from_cursor(
-        self, cursor: duckdb.DuckDBPyConnection, schema: sch.Schema
-    ) -> pd.DataFrame:
-        import pandas as pd
-        import pyarrow.types as pat
-
-        table = cursor.cursor.fetch_arrow_table()
-
-        df = pd.DataFrame(
-            {
-                name: (
-                    col.to_pylist()
-                    if pat.is_nested(col.type)
-                    else col.to_pandas(timestamp_as_object=True)
-                )
-                for name, col in zip(table.column_names, table.columns)
-            }
-        )
-        return schema.apply_to(df)
 
     def _metadata(self, query: str) -> Iterator[tuple[str, dt.DataType]]:
         with self.begin() as con:

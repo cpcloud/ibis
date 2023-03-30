@@ -123,7 +123,7 @@ class GeoLineLocatePoint(GeoSpatialBinOp):
     left = rlz.linestring
     right = rlz.point
 
-    output_dtype = dt.halffloat
+    output_dtype = dt.float32
 
 
 @public

@@ -805,7 +805,7 @@ def test_int_scalar(alltypes):
     expr = alltypes.smallint_col.min()
     result = expr.execute()
     assert expr.type() == dt.int16
-    assert result.dtype == np.int16
+    assert result == 0
 
 
 @pytest.mark.notimpl(["dask", "datafusion", "pandas", "polars", "druid"])

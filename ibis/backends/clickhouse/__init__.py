@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping
 
 import clickhouse_driver
+import pyarrow as pa
 import sqlalchemy as sa
 import sqlglot as sg
 import toolz
@@ -25,7 +26,6 @@ from ibis.config import options
 
 if TYPE_CHECKING:
     import pandas as pd
-    import pyarrow as pa
 
 _default_compression: str | bool
 
@@ -281,6 +281,35 @@ class Backend(BaseBackend):
         for memtable in an.find_memtables(expr.op()):
             self._register_in_memory_table(memtable)
 
+    def to_pyarrow(
+        self,
+        expr: ir.Expr,
+        *,
+        limit: int | str | None = None,
+        external_tables=None,
+        **kwargs: Any,
+    ) -> pa.Table:
+        """Execute an expression."""
+        import pandas as pd
+
+        self._register_in_memory_tables(expr)
+        table_expr = expr.as_table()
+        sql = self.compile(table_expr, limit=limit, **kwargs)
+        self._log(sql)
+        cursor = self.raw_sql(sql, external_tables=external_tables)
+        schema = expr.as_table().schema()
+        t = pa.Table.from_pandas(
+            pd.DataFrame.from_records(iter(cursor), columns=schema.names),
+            schema=schema.to_pyarrow(),
+        )
+        breakpoint()
+        if isinstance(expr, ir.Scalar):
+            return t[0][0]
+        elif isinstance(expr, ir.Column):
+            return t[0]
+        else:
+            return t
+
     def to_pyarrow_batches(
         self,
         expr: ir.Expr,
@@ -312,8 +341,6 @@ class Backend(BaseBackend):
         results
             RecordBatchReader
         """
-        pa = self._import_pyarrow()
-
         schema = expr.as_table().schema()
         array_type = schema.as_struct().to_pyarrow()
         batches = (
@@ -340,29 +367,6 @@ class Backend(BaseBackend):
                 yield batch
         finally:
             cursor.close()
-
-    def execute(
-        self,
-        expr: ir.Expr,
-        limit: str | None = 'default',
-        external_tables: Mapping[str, pd.DataFrame] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Execute an expression."""
-        self._register_in_memory_tables(expr)
-        table_expr = expr.as_table()
-        sql = self.compile(table_expr, limit=limit, **kwargs)
-        self._log(sql)
-        result = self.fetch_from_cursor(
-            self.raw_sql(sql, external_tables=external_tables),
-            table_expr.schema(),
-        )
-        if isinstance(expr, ir.Scalar):
-            return result.iloc[0, 0]
-        elif isinstance(expr, ir.Column):
-            return result.iloc[:, 0]
-        else:
-            return result
 
     def compile(self, expr: ir.Expr, limit: str | None = None, params=None, **_: Any):
         table_expr = expr.as_table()
@@ -433,12 +437,6 @@ class Backend(BaseBackend):
         ibis.util.log(query)
         cursor.execute(query)
         return cursor
-
-    def fetch_from_cursor(self, cursor, schema):
-        import pandas as pd
-
-        df = pd.DataFrame.from_records(iter(cursor), columns=schema.names)
-        return schema.apply_to(df)
 
     def close(self):
         """Close Clickhouse connection and drop any temporary objects."""

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import importlib
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Mapping, MutableMapping
+from typing import Any, Mapping, MutableMapping
 
 import pandas as pd
+import pyarrow as pa
 
 import ibis.common.exceptions as com
 import ibis.config
@@ -17,9 +18,6 @@ from ibis.backends.pandas.client import (
     PandasTable,
     ibis_schema_to_pandas,
 )
-
-if TYPE_CHECKING:
-    import pyarrow as pa
 
 
 class BasePandasBackend(BaseBackend):
@@ -246,8 +244,31 @@ class Backend(BasePandasBackend):
         limit: int | str | None = None,
         **kwargs: Any,
     ) -> pa.Table:
-        pa = self._import_pyarrow()
-        output = self.execute(expr, params=params, limit=limit)
+        from ibis.backends.pandas.core import execute_and_reset
+
+        if limit != 'default' and limit is not None:
+            raise ValueError(
+                'limit parameter to execute is not yet implemented in the '
+                'pandas backend'
+            )
+
+        if not isinstance(expr, ir.Expr):
+            raise TypeError(
+                "`expr` has type {!r}, expected ibis.expr.types.Expr".format(
+                    type(expr).__name__
+                )
+            )
+
+        node = expr.op()
+
+        if params is None:
+            params = {}
+        else:
+            params = {
+                k.op() if isinstance(k, ir.Expr) else k: v for k, v in params.items()
+            }
+
+        output = execute_and_reset(node, params=params, **kwargs)
 
         if isinstance(output, pd.DataFrame):
             return pa.Table.from_pandas(output)
@@ -265,38 +286,10 @@ class Backend(BasePandasBackend):
         chunk_size: int = 1000000,
         **kwargs: Any,
     ) -> pa.ipc.RecordBatchReader:
-        pa = self._import_pyarrow()
-        pa_table = self.to_pyarrow(expr, params=params, limit=limit)
+        pa_table = self.to_pyarrow(expr, params=params, limit=limit, **kwargs)
         return pa.RecordBatchReader.from_batches(
             pa_table.schema, pa_table.to_batches(max_chunksize=chunk_size)
         )
-
-    def execute(self, query, params=None, limit='default', **kwargs):
-        from ibis.backends.pandas.core import execute_and_reset
-
-        if limit != 'default' and limit is not None:
-            raise ValueError(
-                'limit parameter to execute is not yet implemented in the '
-                'pandas backend'
-            )
-
-        if not isinstance(query, ir.Expr):
-            raise TypeError(
-                "`query` has type {!r}, expected ibis.expr.types.Expr".format(
-                    type(query).__name__
-                )
-            )
-
-        node = query.op()
-
-        if params is None:
-            params = {}
-        else:
-            params = {
-                k.op() if isinstance(k, ir.Expr) else k: v for k, v in params.items()
-            }
-
-        return execute_and_reset(node, params=params, **kwargs)
 
     def _load_into_cache(self, name, expr):
         self.create_table(name, expr.execute())

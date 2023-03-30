@@ -16,7 +16,6 @@ import ibis.expr.types as ir
 from ibis.backends.dask.client import DaskDatabase, DaskTable, ibis_schema_to_dask
 from ibis.backends.dask.core import execute_and_reset
 from ibis.backends.pandas import BasePandasBackend
-from ibis.backends.pandas.core import _apply_schema
 
 # Make sure that the pandas backend options have been loaded
 ibis.pandas
@@ -92,7 +91,7 @@ class Backend(BasePandasBackend):
             result = compiled.compute()
         else:
             result = compiled
-        return _apply_schema(query.op(), result)
+        return result
 
     def compile(
         self, query: ir.Expr, params: Mapping[ir.Expr, object] = None, **kwargs

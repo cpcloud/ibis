@@ -17,7 +17,6 @@ import ibis.expr.datatypes as dt
         ('uint16', dt.uint16),
         ('uint32', dt.uint32),
         ('uint64', dt.uint64),
-        ('float16', dt.float16),
         ('float32', dt.float32),
         ('float64', dt.float64),
         ('float', dt.float64),

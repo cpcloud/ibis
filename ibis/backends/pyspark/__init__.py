@@ -213,20 +213,6 @@ class Backend(BaseSQLBackend):
             session=getattr(self, "_session", None),
         )
 
-    def execute(self, expr: ir.Expr, **kwargs: Any) -> Any:
-        """Execute an expression."""
-        table_expr = expr.as_table()
-        df = self.compile(table_expr, **kwargs).toPandas()
-        result = table_expr.schema().apply_to(df)
-        if isinstance(expr, ir.Table):
-            return result
-        elif isinstance(expr, ir.Column):
-            return result.iloc[:, 0]
-        elif isinstance(expr, ir.Scalar):
-            return result.iloc[0, 0]
-        else:
-            raise com.IbisError(f"Cannot execute expression of type: {type(expr)}")
-
     @staticmethod
     def _fully_qualified_name(name, database):
         if is_fully_qualified(name):
@@ -238,10 +224,6 @@ class Backend(BaseSQLBackend):
     def close(self):
         """Close Spark connection and drop any temporary objects."""
         self._context.stop()
-
-    def fetch_from_cursor(self, cursor, schema):
-        df = cursor.query.toPandas()  # blocks until finished
-        return schema.apply_to(df)
 
     def raw_sql(self, query: str) -> _PySparkCursor:
         query = self._session.sql(query)

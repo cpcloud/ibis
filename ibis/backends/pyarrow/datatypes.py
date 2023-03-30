@@ -8,6 +8,7 @@ import pyarrow as pa
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
 import ibis.expr.schema as sch
+from ibis.common.enums import IntervalUnit
 
 _to_pyarrow_types = {
     dt.Int8: pa.int8(),
@@ -18,7 +19,6 @@ _to_pyarrow_types = {
     dt.UInt16: pa.uint16(),
     dt.UInt32: pa.uint32(),
     dt.UInt64: pa.uint64(),
-    dt.Float16: pa.float16(),
     dt.Float32: pa.float32(),
     dt.Float64: pa.float64(),
     dt.String: pa.string(),
@@ -26,8 +26,11 @@ _to_pyarrow_types = {
     dt.Boolean: pa.bool_(),
     dt.Date: pa.date64(),
     dt.Time: pa.time64("us"),
-    dt.Timestamp: pa.timestamp('ns'),
+    dt.Timestamp: pa.timestamp("us"),
     dt.JSON: pa.string(),
+    dt.INET: pa.string(),
+    dt.MACADDR: pa.string(),
+    dt.UUID: pa.string(),
     dt.Null: pa.null(),
     # assume unknown types can be converted into strings
     dt.Unknown: pa.string(),
@@ -43,6 +46,11 @@ def to_pyarrow_type(dtype: dt.DataType) -> pa.DataType:
     return arrow_type
 
 
+@to_pyarrow_type.register
+def from_ibis_timestamp(dtype: dt.Timestamp) -> pa.TimestampType:
+    return pa.timestamp("us", dtype.timezone)
+
+
 @to_pyarrow_type.register(dt.Array)
 @to_pyarrow_type.register(dt.Set)
 def from_ibis_collection(dtype: dt.Array | dt.Set) -> pa.ListType:
@@ -51,9 +59,15 @@ def from_ibis_collection(dtype: dt.Array | dt.Set) -> pa.ListType:
 
 @to_pyarrow_type.register
 def from_ibis_interval(dtype: dt.Interval) -> pa.DurationType:
+    unit = dtype.unit
     try:
-        return pa.duration(dtype.unit.short)
+        return pa.duration(unit.short)
     except ValueError:
+        if unit == IntervalUnit.DAY:
+            # workaround pyarrow's lack of support for constructing
+            # month_day_nano_interval arrays
+            # https://github.com/apache/arrow/issues/34824
+            return pa.duration("ms")
         raise com.IbisTypeError(f"Unsupported interval unit: {dtype.unit}")
 
 
@@ -69,6 +83,27 @@ def from_ibis_map(dtype: dt.Map) -> pa.MapType:
     return pa.map_(to_pyarrow_type(dtype.key_type), to_pyarrow_type(dtype.value_type))
 
 
+@to_pyarrow_type.register
+def from_ibis_decimal(dtype: dt.Decimal) -> pa.MapType:
+    precision = dtype.precision
+    scale = dtype.scale
+
+    if precision is not None:
+        if scale is None:
+            # arbitrary, but avoid failing for unspecified scale in a decimal type
+            scale = precision // 2
+        if 1 <= precision <= 38:
+            return pa.decimal128(precision, scale)
+        elif 39 <= precision <= 76:
+            return pa.decimal256(precision, scale)
+        else:
+            raise com.IbisError(
+                f"Precision out of bounds for pyarrow conversion: {precision:d}"
+            )
+    else:
+        return pa.decimal256(76, scale if scale is not None else 38)
+
+
 _to_ibis_dtypes = {
     pa.int8(): dt.Int8,
     pa.int16(): dt.Int16,
@@ -78,7 +113,6 @@ _to_ibis_dtypes = {
     pa.uint16(): dt.UInt16,
     pa.uint32(): dt.UInt32,
     pa.uint64(): dt.UInt64,
-    pa.float16(): dt.Float16,
     pa.float32(): dt.Float32,
     pa.float64(): dt.Float64,
     pa.string(): dt.String,

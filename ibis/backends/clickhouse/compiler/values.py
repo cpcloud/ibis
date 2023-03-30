@@ -566,7 +566,8 @@ def _truncate(op, **kw):
     except KeyError:
         raise com.UnsupportedOperationError(f"Unsupported truncate unit {unit}")
 
-    return f"{converter}({arg})"
+    output_dtype = serialize(op.arg.output_dtype)
+    return f"CAST({converter}({arg}) AS {output_dtype})"
 
 
 @translate_val.register(ops.DateFromYMD)

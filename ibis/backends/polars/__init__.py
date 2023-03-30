@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, MutableMapping
 
 import polars as pl
+import pyarrow as pa
 
 import ibis
 import ibis.common.exceptions as com
@@ -305,30 +306,6 @@ class Backend(BaseBackend):
         else:
             raise com.IbisError(f"Cannot compile expression of type: {type(expr)}")
 
-    def execute(
-        self,
-        expr: ir.Expr,
-        params: Mapping[ir.Expr, object] = None,
-        limit: int | None = None,
-        **kwargs: Any,
-    ):
-        lf = self.compile(expr, params=params, **kwargs)
-        if limit == "default":
-            limit = ibis.options.sql.default_limit
-        if limit is not None:
-            df = lf.fetch(limit)
-        else:
-            df = lf.collect()
-
-        if isinstance(expr, ir.Table):
-            return df.to_pandas()
-        elif isinstance(expr, ir.Column):
-            return df.to_pandas().iloc[:, 0]
-        elif isinstance(expr, ir.Scalar):
-            return df.to_pandas().iat[0, 0]
-        else:
-            raise com.IbisError(f"Cannot execute expression of type: {type(expr)}")
-
     def _to_pyarrow_table(
         self,
         expr: ir.Expr,
@@ -360,7 +337,6 @@ class Backend(BaseBackend):
         limit: int | None = None,
         **kwargs: Any,
     ):
-        pa = self._import_pyarrow()
         result = self._to_pyarrow_table(expr, params=params, limit=limit, **kwargs)
         if isinstance(expr, ir.Table):
             return result
@@ -383,7 +359,6 @@ class Backend(BaseBackend):
         chunk_size: int = 1_000_000,
         **kwargs: Any,
     ):
-        self._import_pyarrow()
         table = self._to_pyarrow_table(expr, params=params, limit=limit, **kwargs)
         return table.to_reader(chunk_size)
 

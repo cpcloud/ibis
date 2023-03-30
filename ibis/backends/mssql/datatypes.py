@@ -93,7 +93,6 @@ _MSSQL_TYPE_MAP = {
     dt.Int16: mssql.SMALLINT,
     dt.Int32: mssql.INTEGER,
     dt.Int64: mssql.BIGINT,
-    dt.Float16: mssql.FLOAT,
     dt.Float32: mssql.FLOAT,
     dt.Float64: mssql.REAL,
     dt.String: mssql.NVARCHAR,

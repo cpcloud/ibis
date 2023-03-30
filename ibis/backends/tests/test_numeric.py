@@ -171,32 +171,6 @@ except ImportError:
             id="uint64",
         ),
         param(
-            ibis.literal(1, type=dt.float16),
-            {
-                'bigquery': "FLOAT64",
-                'clickhouse': 'Float64',
-                'impala': 'DECIMAL(2,1)',
-                'snowflake': "INTEGER",
-                'sqlite': "real",
-                'trino': 'double',
-                "duckdb": "FLOAT",
-                "postgres": "numeric",
-            },
-            marks=[
-                pytest.mark.notimpl(
-                    ['polars'],
-                    "Unsupported type: Float16(nullable=True)",
-                    raises=NotImplementedError,
-                ),
-                pytest.mark.broken(
-                    ['datafusion'],
-                    "Expected np.float16 instance",
-                    raises=ArrowTypeError,
-                ),
-            ],
-            id="float16",
-        ),
-        param(
             ibis.literal(1, type=dt.float32),
             {
                 'bigquery': "FLOAT64",

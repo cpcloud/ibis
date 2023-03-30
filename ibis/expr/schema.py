@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping
-from typing import TYPE_CHECKING
 
 from multipledispatch import Dispatcher
 
@@ -12,31 +11,6 @@ from ibis.common.exceptions import IntegrityError
 from ibis.common.grounds import Concrete
 from ibis.common.validators import Coercible
 from ibis.util import indent
-
-if TYPE_CHECKING:
-    import pandas as pd
-
-convert = Dispatcher(
-    'convert',
-    doc="""\
-Convert `column` to the pandas dtype corresponding to `out_dtype`, where the
-dtype of `column` is `in_dtype`.
-
-Parameters
-----------
-in_dtype : Union[np.dtype, pandas_dtype]
-    The dtype of `column`, used for dispatching
-out_dtype : ibis.expr.datatypes.DataType
-    The requested ibis type of the output
-column : pd.Series
-    The column to convert
-
-Returns
--------
-result : pd.Series
-    The converted column
-""",
-)
 
 
 class Schema(Concrete, Coercible, MapSet):
@@ -75,11 +49,11 @@ class Schema(Concrete, Coercible, MapSet):
         return schema(value)
 
     @attribute.default
-    def names(self):
+    def names(self) -> tuple[str, ...]:
         return tuple(self.keys())
 
     @attribute.default
-    def types(self):
+    def types(self) -> tuple[dt.DataType, ...]:
         return tuple(self.values())
 
     @attribute.default
@@ -175,104 +149,6 @@ class Schema(Concrete, Coercible, MapSet):
         'b'
         """
         return self.names[i]
-
-    def apply_to(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply the schema `self` to a pandas `DataFrame`.
-
-        This method mutates the input `DataFrame`.
-
-        Parameters
-        ----------
-        df
-            Input DataFrame
-
-        Returns
-        -------
-        DataFrame
-            Type-converted DataFrame
-
-        Examples
-        --------
-        Import the necessary modules
-
-        >>> import numpy as np
-        >>> import pandas as pd
-        >>> import ibis
-        >>> import ibis.expr.datatypes as dt
-
-        Construct a DataFrame with string timestamps and an `int8` column that
-        we're going to upcast.
-
-        >>> data = dict(
-        ...     times=[
-        ...         "2022-01-01 12:00:00",
-        ...         "2022-01-01 13:00:01",
-        ...         "2022-01-01 14:00:02",
-        ...     ],
-        ...     x=np.array([-1, 0, 1], dtype="int8")
-        ... )
-        >>> df = pd.DataFrame(data)
-        >>> df
-                         times  x
-        0  2022-01-01 12:00:00 -1
-        1  2022-01-01 13:00:01  0
-        2  2022-01-01 14:00:02  1
-        >>> df.dtypes
-        times    object
-        x          int8
-        dtype: object
-
-        Construct an ibis Schema that we want to cast to.
-
-        >>> sch = ibis.schema({"times": dt.timestamp, "x": "int16"})
-        >>> sch
-        ibis.Schema {
-          times  timestamp
-          x      int16
-        }
-
-        Apply the schema
-
-        >>> sch.apply_to(df)
-                        times  x
-        0 2022-01-01 12:00:00 -1
-        1 2022-01-01 13:00:01  0
-        2 2022-01-01 14:00:02  1
-        >>> df.dtypes  # `df` is mutated by the method
-        times    datetime64[ns]
-        x                 int16
-        dtype: object
-        """
-        schema_names = self.names
-        data_columns = df.columns
-
-        assert len(schema_names) == len(
-            data_columns
-        ), "schema column count does not match input data column count"
-
-        for column, dtype in zip(data_columns, self.types):
-            pandas_dtype = dtype.to_pandas()
-
-            col = df[column]
-            col_dtype = col.dtype
-
-            try:
-                not_equal = pandas_dtype != col_dtype
-            except TypeError:
-                # ugh, we can't compare dtypes coming from pandas,
-                # assume not equal
-                not_equal = True
-
-            if not_equal or not dtype.is_primitive():
-                new_col = convert(col_dtype, dtype, col)
-            else:
-                new_col = col
-            df[column] = new_col
-
-        # return data with the schema's columns which may be different than the
-        # input columns
-        df.columns = schema_names
-        return df
 
 
 schema = Dispatcher('schema')

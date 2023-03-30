@@ -76,7 +76,6 @@ def parse(
 
     primitive = (
         spaceless_string("boolean", "bool").result(dt.boolean)
-        | spaceless_string("halffloat", "float16").result(dt.float16)
         | spaceless_string("float32").result(dt.float32)
         | spaceless_string("double", "float64", "float").result(dt.float64)
         | spaceless_string(

@@ -489,7 +489,7 @@ def test_date_truncate(backend, alltypes, df, unit):
     result = expr.execute()
     expected = backend.default_series_rename(expected)
 
-    backend.assert_series_equal(result, expected)
+    backend.assert_series_equal(result.astype("datetime64[ns]"), expected)
 
 
 @pytest.mark.parametrize(
@@ -730,7 +730,7 @@ def test_integer_to_interval_date(backend, con, alltypes, df, unit):
         expected = pd.to_datetime(df.date_string_col) + offset
     expected = backend.default_series_rename(expected)
 
-    backend.assert_series_equal(result, expected)
+    backend.assert_series_equal(result.astype("datetime64[ns]"), expected)
 
 
 date_value = pd.Timestamp('2017-12-31')
@@ -874,9 +874,12 @@ def test_temporal_binop(backend, con, alltypes, df, expr_fn, expected_fn):
     expected = expected_fn(df, backend)
 
     result = con.execute(expr)
+    breakpoint()
     expected = backend.default_series_rename(expected)
 
-    backend.assert_series_equal(result, expected)
+    backend.assert_series_equal(
+        result.astype(expr.type().to_pandas()), expected.astype(expr.type().to_pandas())
+    )
 
 
 plus = lambda t, td: t.timestamp_col + pd.Timedelta(td)
@@ -1324,11 +1327,12 @@ def test_interval_add_cast_column(backend, alltypes, df):
     df = df.sort_values('id').reset_index(drop=True)
     expected = (
         df['timestamp_col']
+        .astype("datetime64[ns]")
         .dt.normalize()
         .add(df.bigint_col.astype("timedelta64[D]"))
         .rename("tmp")
     )
-    backend.assert_series_equal(result, expected)
+    backend.assert_series_equal(result.astype("datetime64[ns]"), expected)
 
 
 @pytest.mark.parametrize(
@@ -1682,7 +1686,7 @@ def test_day_of_week_column_group_by(
 def test_now(con):
     expr = ibis.now()
     result = con.execute(expr.name("tmp"))
-    assert isinstance(result, pd.Timestamp)
+    assert isinstance(result, datetime.datetime)
 
     pattern = "%Y%m%d %H"
     result_strftime = con.execute(expr.strftime(pattern).name("now"))
@@ -1827,7 +1831,7 @@ TIMESTAMP_TIMEZONE_BACKEND_TYPES = {
     [
         param(
             'Europe/London',
-            '2022-02-04 16:20:00GMT',
+            '2022-02-04 16:20:00 GMT',
             id="name",
             marks=[
                 pytest.mark.broken(
@@ -1845,7 +1849,7 @@ TIMESTAMP_TIMEZONE_BACKEND_TYPES = {
         ),
         param(
             'PST8PDT',
-            '2022-02-04 08:20:00PST',
+            '2022-02-04 08:20:00 PST',
             # The time zone for Berkeley, California.
             id="iso",
             marks=[
@@ -1875,7 +1879,7 @@ def test_timestamp_with_timezone_literal(con, backend, timezone, expected_result
     expr = ibis.timestamp(2022, 2, 4, 16, 20, 0).cast(dt.Timestamp(timezone=timezone))
     result = con.execute(expr)
     if not isinstance(result, str):
-        result = result.strftime('%Y-%m-%d %H:%M:%S%Z')
+        result = result.strftime('%Y-%m-%d %H:%M:%S %Z')
     assert result == expected_result
 
     with contextlib.suppress(com.OperationNotDefinedError):
@@ -2035,7 +2039,7 @@ INTERVAL_BACKEND_TYPES = {
 def test_interval_literal(con, backend):
     expr = ibis.interval(1, unit="s")
     result = con.execute(expr)
-    assert str(result) == '0 days 00:00:01'
+    assert result == datetime.timedelta(seconds=1)
 
     with contextlib.suppress(com.OperationNotDefinedError):
         backend_name = backend.name()
@@ -2067,8 +2071,8 @@ def test_date_column_from_ymd(con, alltypes, df):
     tbl = alltypes[expr.name('timestamp_col')]
     result = con.execute(tbl)
 
-    golden = df.timestamp_col.dt.date.astype('datetime64[ns]')
-    tm.assert_series_equal(golden, result.timestamp_col)
+    golden = df.timestamp_col.astype("datetime64[ns]").dt.normalize()
+    tm.assert_series_equal(result.timestamp_col.astype("datetime64[ns]"), golden)
 
 
 @pytest.mark.notimpl(
@@ -2144,7 +2148,7 @@ def test_date_column_from_iso(con, alltypes, df):
 
     result = con.execute(expr.name("tmp"))
     golden = df.year.astype(str) + '-' + df.month.astype(str).str.rjust(2, '0') + '-13'
-    actual = result.dt.strftime('%Y-%m-%d')
+    actual = result.astype("datetime64[ns]").dt.strftime('%Y-%m-%d')
     tm.assert_series_equal(golden.rename('tmp'), actual.rename('tmp'))
 
 

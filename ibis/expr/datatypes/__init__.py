@@ -5,7 +5,6 @@ from ibis.expr.datatypes.core import *  # noqa: F403
 from ibis.expr.datatypes.parse import *  # noqa: F403
 from ibis.expr.datatypes.value import *  # noqa: F403
 
-halffloat = float16  # noqa: F405
 float = float64  # noqa: F405
 double = float64  # noqa: F405
 int = int64  # noqa: F405

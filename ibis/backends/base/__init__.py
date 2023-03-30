@@ -4,6 +4,7 @@ import abc
 import collections.abc
 import functools
 import importlib.metadata
+import json
 import keyword
 import re
 import sys
@@ -16,9 +17,14 @@ from typing import (
     ClassVar,
     Iterable,
     Iterator,
+    Literal,
     Mapping,
     MutableMapping,
 )
+
+import pyarrow as pa
+import pyarrow.csv as pcsv
+import pyarrow.parquet as pq
 
 import ibis
 import ibis.common.exceptions as exc
@@ -30,7 +36,6 @@ from ibis.common.caching import RefCountedCache
 
 if TYPE_CHECKING:
     import pandas as pd
-    import pyarrow as pa
 
 __all__ = ('BaseBackend', 'Database', 'connect')
 
@@ -216,17 +221,6 @@ class TablesAccessor(collections.abc.Mapping):
 
 
 class _FileIOHandler:
-    @staticmethod
-    def _import_pyarrow():
-        try:
-            import pyarrow  # noqa: ICN001
-        except ImportError:
-            raise ModuleNotFoundError(
-                "Exporting to arrow formats requires `pyarrow` but it is not installed"
-            )
-        else:
-            return pyarrow
-
     @util.experimental
     def to_pyarrow(
         self,
@@ -238,53 +232,44 @@ class _FileIOHandler:
     ) -> pa.Table:
         """Execute expression and return results in as a pyarrow table.
 
-        This method is eager and will execute the associated expression
-        immediately.
+        !!! note "This method will execute the input expression immediately."
 
         Parameters
         ----------
         expr
-            Ibis expression to export to pyarrow
+            Ibis expression
         params
             Mapping of scalar parameter expressions to value.
         limit
             An integer to effect a specific row limit. A value of `None` means
-            "no limit". The default is in `ibis/config.py`.
+            "no limit".
         kwargs
-            Keyword arguments
+            Backend-specific keyword arguments
 
         Returns
         -------
-        Table
-            A pyarrow table holding the results of the executed expression.
+        pyarrow.Table | pyarrow.Array | pyarrow.Scalar
+            A pyarrow table, array or scalar holding the results of the
+            executed expression.
         """
-        pa = self._import_pyarrow()
-        try:
-            # Can't construct an array from record batches
-            # so construct at one column table (if applicable)
-            # then return the column _from_ the table
-            table = pa.Table.from_batches(
-                self.to_pyarrow_batches(expr, params=params, limit=limit, **kwargs)
+        schema = expr.as_table().schema()
+        table = (
+            pa.Table.from_batches(
+                self.to_pyarrow_batches(expr, params=params, limit=limit, **kwargs),
+                schema=schema.to_pyarrow(),
             )
-        except ValueError:
-            # The pyarrow batches iterator is empty so pass in an empty
-            # iterator and a pyarrow schema
-            schema = expr.as_table().schema()
-            table = pa.Table.from_batches([], schema=schema.to_pyarrow())
+            .rename_columns(schema.names)
+            .cast(schema.to_pyarrow())
+        )
 
         if isinstance(expr, ir.Table):
             return table
         elif isinstance(expr, ir.Column):
-            # Column will be a ChunkedArray, `combine_chunks` will
-            # flatten it
-            if len(table.columns[0]):
-                return table.columns[0].combine_chunks()
-            else:
-                return pa.array(table.columns[0])
+            return table[0]
         elif isinstance(expr, ir.Scalar):
-            return table.columns[0][0]
+            return table[0][0]
         else:
-            raise ValueError
+            raise exc.IbisTypeError(f"Invalid input expression type: {type(expr)}")
 
     @util.experimental
     def to_pyarrow_batches(
@@ -397,8 +382,6 @@ class _FileIOHandler:
 
         https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetWriter.html
         """
-        self._import_pyarrow()
-        import pyarrow.parquet as pq
 
         batch_reader = expr.to_pyarrow_batches(params=params)
 
@@ -433,14 +416,55 @@ class _FileIOHandler:
 
         https://arrow.apache.org/docs/python/generated/pyarrow.csv.CSVWriter.html
         """
-        self._import_pyarrow()
-        import pyarrow.csv as pcsv
 
         batch_reader = expr.to_pyarrow_batches(params=params)
 
         with pcsv.CSVWriter(path, batch_reader.schema) as writer:
             for batch in batch_reader:
                 writer.write_batch(batch)
+
+
+def _deser(val):
+    return json.loads(val) if isinstance(val, str) else val
+
+
+def _deserialize_json_scalar(obj: Any, is_json: bool) -> Any:
+    return obj if obj is None or not is_json else json.loads(obj)
+
+
+def _deserialize_json(
+    obj: pd.DataFrame, json_columns: Iterable[str], is_column: bool
+) -> Any:
+    if not json_columns:
+        return obj
+    elif is_column:
+        return obj.apply(_deser, convert_dtype=False)
+    else:
+        return obj.assign(
+            **{
+                name: obj[name].apply(_deser, convert_dtype=False)
+                for name in json_columns
+            }
+        )
+
+
+def _arrow_to_pandas_nullable_dtypes():
+    import pandas as pd
+
+    return {
+        pa.int8(): pd.Int8Dtype(),
+        pa.int16(): pd.Int16Dtype(),
+        pa.int32(): pd.Int32Dtype(),
+        pa.int64(): pd.Int64Dtype(),
+        pa.uint8(): pd.UInt8Dtype(),
+        pa.uint16(): pd.UInt16Dtype(),
+        pa.uint32(): pd.UInt32Dtype(),
+        pa.uint64(): pd.UInt64Dtype(),
+        pa.bool_(): pd.BooleanDtype(),
+        pa.string(): pd.StringDtype(),
+        pa.float32(): pd.Float32Dtype(),
+        pa.float64(): pd.Float64Dtype(),
+    }
 
 
 class BaseBackend(abc.ABC, _FileIOHandler):
@@ -725,8 +749,52 @@ class BaseBackend(abc.ABC, _FileIOHandler):
         """
         raise NotImplementedError(f"Backend '{self.name}' backend doesn't support SQL")
 
-    def execute(self, expr: ir.Expr) -> Any:
-        """Execute an expression."""
+    def execute(
+        self,
+        expr: ir.Expr,
+        params: Mapping[ir.Scalar, Any] | None = None,
+        limit: int | Literal["default"] | None = None,
+        **kwargs,
+    ) -> Any:
+        """Compile and execute an Ibis expression.
+
+        Compile and execute Ibis expression using this backend client
+        interface, returning results in-memory in the appropriate object type
+
+        Parameters
+        ----------
+        expr
+            Ibis expression
+        limit
+            For expressions yielding result sets; retrieve at most this number
+            of values/rows. Overrides any limit already set on the expression.
+        params
+            Named unbound parameters
+        kwargs
+            Backend specific arguments. For example, the clickhouse backend
+            uses this to receive `external_tables` as a dictionary of pandas
+            DataFrames.
+
+        Returns
+        -------
+        DataFrame | Series | Scalar
+            * `Table`: pandas.DataFrame
+            * `Column`: pandas.Series
+            * `Scalar`: Python scalar value
+        """
+        if limit == "default":
+            limit = ibis.options.sql.default_limit
+        t = self.to_pyarrow(expr, params=params, limit=limit, **kwargs)
+        schema = expr.as_table().schema()
+        return (
+            _deserialize_json_scalar(t.as_py(), is_json=expr.type().is_json())
+            if isinstance(expr, ir.Scalar)
+            else _deserialize_json(
+                t.to_pandas(integer_object_nulls=True),
+                json_columns=[name for name, typ in schema.items() if typ.is_json()],
+                is_column=isinstance(expr, ir.Column),
+            )
+        )
 
     def add_operation(self, operation: ops.Node) -> Callable:
         """Add a translation function to the backend for a specific operation.

@@ -39,8 +39,8 @@ class PostgreSQLCompiler(AlchemyCompiler):
     translator_class = PostgreSQLExprTranslator
 
 
-@to_sqla_type.register(postgresql.dialect, (dt.Float16, dt.Float32))
-def _float16_float32(_, itype, type_map=None):
+@to_sqla_type.register(postgresql.dialect, dt.Float32)
+def _float32(_, itype, type_map=None):
     return postgresql.REAL
 
 

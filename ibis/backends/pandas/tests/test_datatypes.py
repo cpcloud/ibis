@@ -106,7 +106,6 @@ def test_infer_np_array(value, expected_dtypes):
         (np.uint16, dt.uint16),
         (np.uint32, dt.uint32),
         (np.uint64, dt.uint64),
-        (np.float16, dt.float16),
         (np.float32, dt.float32),
         (np.float64, dt.float64),
         (np.double, dt.double),

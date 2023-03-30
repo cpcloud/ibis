@@ -26,7 +26,6 @@ class Catalog(Dict[str, sch.Schema]):
         dt.Int16: "smallint",
         dt.Int32: "int",
         dt.Int64: "bigint",
-        dt.Float16: "halffloat",
         dt.Float32: "float",
         dt.Float64: "double",
         dt.Decimal: "decimal",

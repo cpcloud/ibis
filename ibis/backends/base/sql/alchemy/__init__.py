@@ -19,7 +19,6 @@ from ibis import util
 from ibis.backends.base.sql import BaseSQLBackend
 from ibis.backends.base.sql.alchemy.database import AlchemyDatabase, AlchemyTable
 from ibis.backends.base.sql.alchemy.datatypes import schema_from_table, to_sqla_type
-from ibis.backends.base.sql.alchemy.geospatial import geospatial_supported
 from ibis.backends.base.sql.alchemy.query_builder import AlchemyCompiler
 from ibis.backends.base.sql.alchemy.registry import (
     fixed_arity,
@@ -150,15 +149,6 @@ class BaseAlchemyBackend(BaseSQLBackend):
         if geom_col:
             df[geom_col] = gpd.array.GeometryArray(df[geom_col].values)
             df = gpd.GeoDataFrame(df, geometry=geom_col)
-        return df
-
-    def fetch_from_cursor(self, cursor, schema: sch.Schema) -> pd.DataFrame:
-        import pandas as pd
-
-        df = pd.DataFrame.from_records(cursor, columns=schema.names, coerce_float=True)
-        df = schema.apply_to(df)
-        if not df.empty and geospatial_supported:
-            return self._to_geodataframe(df, schema)
         return df
 
     @contextlib.contextmanager

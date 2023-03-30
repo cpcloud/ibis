@@ -29,7 +29,6 @@ ALTERNATE_SUFFIXES = {
 
 
 IBIS_TYPE_TO_PANDAS_TYPE: dict[dt.DataType, type | str] = {
-    dt.float16: np.float16,
     dt.float32: np.float32,
     dt.float64: np.float64,
     dt.float32: np.float32,

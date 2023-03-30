@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import pyarrow as pa
 import pytest
 import sqlalchemy as sa
 
@@ -377,29 +378,22 @@ class MockBackend(BaseSQLBackend):
     def list_databases(self):
         return ['mockdb']
 
-    def fetch_from_cursor(self, cursor, schema):
-        pass
-
     def get_schema(self, name):
         name = name.replace('`', '')
         return Schema.from_tuples(MOCK_TABLES[name])
 
-    def execute(self, expr, limit=None, params=None, **kwargs):
-        import pandas as pd
-
-        ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
+    def to_pyarrow(self, expr, limit=None, params=None, **kwargs):
+        ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params, **kwargs)
         for query in ast.queries:
             self.executed_queries.append(query.compile())
-        try:
-            schema = expr.schema()
-        except AttributeError:
-            schema = expr.as_table().schema()
-        df = schema.apply_to(pd.DataFrame([], columns=schema.names))
+        schema = expr.as_table().schema()
+        t = pa.Table.from_batches([], schema=schema.to_pyarrow())
         if isinstance(expr, ir.Scalar):
-            return None
+            return pa.nulls(1, t[0].type)[0]
         elif isinstance(expr, ir.Column):
-            return df.iloc[:, 0]
-        return df
+            return t[0]
+        else:
+            return t
 
     def compile(
         self,

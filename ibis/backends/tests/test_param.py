@@ -173,7 +173,10 @@ def test_scalar_param_date(backend, alltypes, value):
     )
     df = base.execute()
     expected = (
-        df.loc[df.date_col.dt.normalize() == pd.Timestamp(value).normalize()]
+        df.loc[
+            df.date_col.astype("datetime64[ns]").dt.normalize()
+            == pd.Timestamp(value).normalize()
+        ]
         .sort_values("id")
         .reset_index(drop=True)
         .drop(columns=["date_col"])

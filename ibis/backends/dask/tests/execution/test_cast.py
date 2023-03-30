@@ -20,7 +20,6 @@ TIMESTAMP = "2022-03-13 06:59:10.467417"
 @pytest.mark.parametrize(
     ('to', 'expected'),
     [
-        ('float16', 'float16'),
         ('float32', 'float32'),
         ('float64', 'float64'),
         ('double', 'float64'),

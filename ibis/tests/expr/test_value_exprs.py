@@ -1265,7 +1265,6 @@ def test_invalid_negate(value, expected_type):
 @pytest.mark.parametrize(
     'type',
     [
-        np.float16,
         np.float32,
         np.float64,
         np.int16,

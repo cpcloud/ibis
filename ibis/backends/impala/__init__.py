@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import fsspec
 import numpy as np
+import pyarrow as pa
 
 import ibis.common.exceptions as com
 import ibis.config
@@ -169,15 +170,6 @@ def _chunks_to_pandas_array(chunks):
     return target
 
 
-def _column_batches_to_dataframe(names, batches):
-    import pandas as pd
-
-    cols = {}
-    for name, chunks in zip(names, zip(*(b.columns for b in batches))):
-        cols[name] = _chunks_to_pandas_array(chunks)
-    return pd.DataFrame(cols, columns=names)
-
-
 class Backend(BaseSQLBackend):
     name = 'impala'
     # not 100% accurate, but very close
@@ -324,13 +316,17 @@ class Backend(BaseSQLBackend):
             [row[0] for row in self.raw_sql(statement).fetchall()]
         )
 
-    def fetch_from_cursor(self, cursor, schema):
+    def _fetch_from_cursor(self, cursor, schema):
         batches = cursor.fetchall(columnar=True)
         names = [x[0] for x in cursor.description]
-        df = _column_batches_to_dataframe(names, batches)
-        if schema:
-            return schema.apply_to(df)
-        return df
+        t = pa.Table.from_pydict(
+            {
+                name: _chunks_to_pandas_array(chunks)
+                for name, chunks in zip(names, zip(*(b.columns for b in batches)))
+            },
+            schema=schema.to_pyarrow(),
+        )
+        return t.to_pandas()
 
     @property
     def hdfs(self):
@@ -1290,7 +1286,7 @@ class Backend(BaseSQLBackend):
         return self._exec_statement(stmt)
 
     def _exec_statement(self, stmt):
-        return self.fetch_from_cursor(self.raw_sql(stmt), schema=None)
+        return self._fetch_from_cursor(self.raw_sql(stmt), schema=None)
 
     def _table_command(self, cmd, name, database=None):
         qualified_name = self._fully_qualified_name(name, database)

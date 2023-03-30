@@ -27,7 +27,6 @@ uint8_dtype = st.builds(dt.UInt8, nullable=nullable)
 uint16_dtype = st.builds(dt.UInt16, nullable=nullable)
 uint32_dtype = st.builds(dt.UInt32, nullable=nullable)
 uint64_dtype = st.builds(dt.UInt64, nullable=nullable)
-float16_dtype = st.builds(dt.Float16, nullable=nullable)
 float32_dtype = st.builds(dt.Float32, nullable=nullable)
 float64_dtype = st.builds(dt.Float64, nullable=nullable)
 
@@ -45,7 +44,7 @@ unsigned_integer_dtypes = st.one_of(
     uint8_dtype, uint16_dtype, uint32_dtype, uint64_dtype
 )
 integer_dtypes = st.one_of(signed_integer_dtypes, unsigned_integer_dtypes)
-floating_dtypes = st.one_of(float16_dtype, float32_dtype, float64_dtype)
+floating_dtypes = st.one_of(float32_dtype, float64_dtype)
 numeric_dtypes = st.one_of(integer_dtypes, floating_dtypes, decimal_dtype())
 
 date_dtype = st.builds(dt.Date, nullable=nullable)

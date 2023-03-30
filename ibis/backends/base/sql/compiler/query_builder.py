@@ -548,7 +548,7 @@ class Compiler:
         )
 
     @classmethod
-    def to_ast_ensure_limit(cls, expr, limit=None, params=None):
+    def to_ast_ensure_limit(cls, expr, limit=None, params=None, **_):
         context = cls.make_context(params=params)
         query_ast = cls.to_ast(expr, context)
 

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
+import json
 from functools import singledispatch
 from math import isfinite
+from typing import Any, Iterable
 
 import rich
 from rich.align import Align
 from rich.console import Console
+from rich.pretty import Pretty
 from rich.text import Text
 
 import ibis
@@ -17,43 +21,49 @@ simple_console = Console(force_terminal=False)
 
 
 @singledispatch
-def format_values(dtype, values):
+def format_values(dtype: dt.DataType, values: Iterable[Any]):
     interactive = ibis.options.repr.interactive
-    return [
-        rich.pretty.Pretty(
-            v,
-            max_length=interactive.max_length,
-            max_string=interactive.max_string,
-            max_depth=interactive.max_depth,
+    max_length = interactive.max_length
+    max_string = interactive.max_string
+    max_depth = interactive.max_depth
+    for v in values:
+        value = v
+        # very likely something that should be json decoded
+        if dtype.is_nested() and isinstance(value, str):
+            # don't fail if we guessed incorrectly that this was an nested type
+            # of JSON things
+            with contextlib.suppress(json.JSONDecodeError):
+                value = json.loads(value)
+
+        yield Pretty(
+            value, max_length=max_length, max_string=max_string, max_depth=max_depth
         )
-        for v in values
-    ]
 
 
 @format_values.register(dt.Boolean)
 @format_values.register(dt.UUID)
-def _(dtype, values):
-    return [Text(str(v)) for v in values]
+def _(_: dt.UUID | dt.Boolean, values):
+    return map(Text, map(str, values))
 
 
-@format_values.register(dt.Decimal)
-def _(dtype, values):
+@format_values.register
+def _(dtype: dt.Decimal, values):
     if dtype.scale is not None:
         fmt = f"{{:.{dtype.scale}f}}"
-        return [Text.styled(fmt.format(v), "bold cyan") for v in values]
+        return (Text.styled(fmt.format(v), style="bold cyan") for v in values)
     else:
         # No scale specified, convert to float and repr that way
-        return format_values(dt.float64, [float(v) for v in values])
+        return format_values(dt.float64, map(float, values))
 
 
-@format_values.register(dt.Integer)
-def _(dtype, values):
-    return [Text.styled(str(int(v)), "bold cyan") for v in values]
+@format_values.register
+def _(_: dt.Integer, values):
+    return (Text.styled(str(int(v)), style="bold cyan") for v in values)
 
 
-@format_values.register(dt.Floating)
-def _(dtype, values):
-    floats = [float(v) for v in values]
+@format_values.register
+def _(_: dt.Floating, values):
+    floats = list(map(float, values))
     # Extract and format all finite floats
     finites = [f for f in floats if isfinite(f)]
     if finites and all(f == 0 or 1e-6 < abs(f) < 1e6 for f in finites):
@@ -61,49 +71,50 @@ def _(dtype, values):
         # Trim matching trailing zeros
         while all(s.endswith("0") for s in strs):
             strs = [s[:-1] for s in strs]
-        strs = [s + "0" if s.endswith(".") else s for s in strs]
+        strs = [s + "0" * s.endswith(".") for s in strs]
     else:
         strs = [f"{f:e}" for f in finites]
     # Merge together the formatted finite floats with non-finite values
     iterstrs = iter(strs)
     strs2 = (next(iterstrs) if isfinite(f) else str(f) for f in floats)
-    return [Text.styled(s, "bold cyan") for s in strs2]
+    return (Text.styled(s, style="bold cyan") for s in strs2)
 
 
-@format_values.register(dt.Timestamp)
-def _(dtype, values):
-    if all(v.microsecond == 0 for v in values):
+@format_values.register
+def _(_: dt.Timestamp, values):
+    if all(v.microsecond for v in values):
         timespec = "seconds"
-    elif all(v.microsecond % 1000 == 0 for v in values):
+    elif all(not v.microsecond % 1000 for v in values):
         timespec = "milliseconds"
     else:
         timespec = "microseconds"
-    return [
-        Text.styled(v.isoformat(sep=" ", timespec=timespec), "magenta") for v in values
-    ]
+    return (
+        Text.styled(v.isoformat(sep=" ", timespec=timespec), style="magenta")
+        for v in values
+    )
 
 
-@format_values.register(dt.Date)
-def _(dtype, values):
-    dates = [v.date() if isinstance(v, datetime.datetime) else v for v in values]
-    return [Text.styled(d.isoformat(), "magenta") for d in dates]
+@format_values.register
+def _(_: dt.Date, values):
+    isoformat = "%Y-%m-%d"
+    return (Text.styled(d.strftime(isoformat), style="magenta") for d in values)
 
 
-@format_values.register(dt.Time)
-def _(dtype, values):
+@format_values.register
+def _(_: dt.Time, values):
     times = [v.time() if isinstance(v, datetime.datetime) else v for v in values]
-    if all(t.microsecond == 0 for t in times):
+    if all(not t.microsecond for t in times):
         timespec = "seconds"
-    elif all(t.microsecond % 1000 == 0 for t in times):
+    elif all(not t.microsecond % 1000 for t in times):
         timespec = "milliseconds"
     else:
         timespec = "microseconds"
-    return [Text.styled(t.isoformat(timespec=timespec), "magenta") for t in times]
+    return (Text.styled(t.isoformat(timespec=timespec), style="magenta") for t in times)
 
 
-@format_values.register(dt.Interval)
-def _(dtype, values):
-    return [Text.styled(str(v), "magenta") for v in values]
+@format_values.register
+def _(_: dt.Interval, values):
+    return (Text.styled(str(v), style="magenta") for v in values)
 
 
 _str_escapes = str.maketrans(
@@ -117,10 +128,9 @@ _str_escapes = str.maketrans(
 )
 
 
-@format_values.register(dt.String)
-def _(dtype, values):
+@format_values.register
+def _(_: dt.String, values):
     max_string = ibis.options.repr.interactive.max_string
-    out = []
     for v in values:
         v = str(v)
         if v:
@@ -137,17 +147,15 @@ def _(dtype, values):
                 v = "".join(
                     f"[dim]{repr(c)[1:-1]}[/]" if not c.isprintable() else c for c in v
                 )
-            text = Text.from_markup(v)
+            yield Text.from_markup(v)
         else:
-            text = Text.styled("~", "dim")
-        out.append(text)
-    return out
+            yield Text.styled("~", style="dim")
 
 
 def format_column(dtype, values):
     import pandas as pd
 
-    null_str = Text.styled("∅", "dim")
+    null_str = Text.styled("∅", style="dim")
     if dtype.is_floating():
         # We don't want to treat `nan` as `NULL` for floating point types
         def isnull(x):
@@ -163,7 +171,7 @@ def format_column(dtype, values):
     nonnull = [v for v in values if not isnull(v)]
     if nonnull:
         formatted = format_values(dtype, nonnull)
-        next_f = iter(formatted).__next__
+        next_f = formatted.__next__
         out = [null_str if isnull(v) else next_f() for v in values]
     else:
         out = [null_str] * len(values)
@@ -187,7 +195,7 @@ def format_dtype(dtype):
     strtyp = str(dtype)
     if len(strtyp) > max_string:
         strtyp = strtyp[: max_string - 1] + "…"
-    return Text.styled(strtyp, "dim")
+    return Text.styled(strtyp, style="dim")
 
 
 def to_rich_table(table, console_width=None):

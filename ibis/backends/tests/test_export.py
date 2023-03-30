@@ -169,14 +169,6 @@ def test_to_pyarrow_batches_memtable(con):
     assert n == 3
 
 
-def test_no_pyarrow_message(awards_players, monkeypatch):
-    monkeypatch.setitem(sys.modules, "pyarrow", None)
-    with pytest.raises(
-        ModuleNotFoundError, match="requires `pyarrow` but|import of pyarrow halted"
-    ):
-        awards_players.to_pyarrow()
-
-
 @pytest.mark.notimpl(["dask", "impala", "pyspark", "druid"])
 def test_table_to_parquet(tmp_path, backend, awards_players):
     outparquet = tmp_path / "out.parquet"

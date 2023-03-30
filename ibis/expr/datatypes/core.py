@@ -156,9 +156,6 @@ class DataType(Concrete, Coercible):
     def is_enum(self) -> bool:
         return isinstance(self, Enum)
 
-    def is_float16(self) -> bool:
-        return isinstance(self, Float16)
-
     def is_float32(self) -> bool:
         return isinstance(self, Float32)
 
@@ -272,6 +269,9 @@ class DataType(Concrete, Coercible):
 
     def is_variadic(self) -> bool:
         return isinstance(self, Variadic)
+
+    def is_nested(self) -> bool:
+        return isinstance(self, (Array, JSON, Map, Set, Struct))
 
 
 @dtype.register(DataType)
@@ -526,13 +526,6 @@ class UInt64(UnsignedInteger):
     """Unsigned 64-bit integers."""
 
     nbytes = 8
-
-
-@public
-class Float16(Floating):
-    """16-bit floating point numbers."""
-
-    nbytes = 2
 
 
 @public
@@ -865,7 +858,6 @@ uint8 = UInt8()
 uint16 = UInt16()
 uint32 = UInt32()
 uint64 = UInt64()
-float16 = Float16()
 float32 = Float32()
 float64 = Float64()
 string = String()
@@ -919,7 +911,6 @@ _numpy_dtypes = {
     np.dtype("uint16"): uint16,
     np.dtype("uint32"): uint32,
     np.dtype("uint64"): uint64,
-    np.dtype("float16"): float16,
     np.dtype("float32"): float32,
     np.dtype("float64"): float64,
     np.dtype("double"): float64,
@@ -969,7 +960,6 @@ public(
     uint16=uint16,
     uint32=uint32,
     uint64=uint64,
-    float16=float16,
     float32=float32,
     float64=float64,
     string=string,
