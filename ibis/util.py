@@ -404,10 +404,10 @@ def warn_deprecated(name, *, instead, as_of="", removed_in="", stacklevel=1):
 
 
 def append_admonition(
-    func: Callable, *, msg: str, body: str = "", kind: str = "warning"
+    docstr: str | None, *, msg: str, body: str = "", kind: str = "warning"
 ) -> str:
     """Append a `kind` admonition with `msg` to `func`'s docstring."""
-    if docstr := func.__doc__:
+    if docstr:
         preamble, *rest = docstr.split("\n\n", maxsplit=1)
 
         # count leading spaces and add them to the deprecation warning so the
@@ -438,7 +438,7 @@ def deprecated(*, instead: str, as_of: str = "", removed_in: str = ""):
             func.__qualname__, instead=instead, as_of=as_of, removed_in=removed_in
         )
 
-        func.__doc__ = append_admonition(func, msg=f"DEPRECATED: {msg}")
+        func.__doc__ = append_admonition(func.__doc__, msg=f"DEPRECATED: {msg}")
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -464,18 +464,18 @@ def backend_sensitive(
     """Indicate that an API may be sensitive to a backend."""
 
     def wrapper(func):
-        func.__doc__ = append_admonition(func, msg=msg, body=why, kind="info")
+        func.__doc__ = append_admonition(func.__doc__, msg=msg, body=why, kind="info")
         return func
 
     return wrapper
 
 
-def experimental(func):
+def experimental(func=None, *, msg="This API is experimental and subject to change."):
     """Decorate a callable to add warning about API instability in docstring."""
 
-    func.__doc__ = append_admonition(
-        func, msg="This API is experimental and subject to change."
-    )
+    if func is None:
+        return functools.partial(experimental, msg=msg)
+    func.__doc__ = append_admonition(func.__doc__, msg=msg)
     return func
 
 
