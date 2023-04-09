@@ -302,7 +302,6 @@ class Backend(BaseBackend):
             pd.DataFrame.from_records(iter(cursor), columns=schema.names),
             schema=schema.to_pyarrow(),
         )
-        breakpoint()
         if isinstance(expr, ir.Scalar):
             return t[0][0]
         elif isinstance(expr, ir.Column):

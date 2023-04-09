@@ -874,7 +874,6 @@ def test_temporal_binop(backend, con, alltypes, df, expr_fn, expected_fn):
     expected = expected_fn(df, backend)
 
     result = con.execute(expr)
-    breakpoint()
     expected = backend.default_series_rename(expected)
 
     backend.assert_series_equal(
