@@ -228,3 +228,12 @@ def test_register_numpy_str(con):
     data = pd.DataFrame({"a": [np.str_("xyz"), None]})
     result = con.read_in_memory(data)
     tm.assert_frame_equal(result.execute(), data)
+
+
+@pytest.mark.parametrize("database", ["main.test_schema", "test_schema"])
+def test_create_table_from_other_schema(con, database):
+    with con.begin() as c:
+        c.exec_driver_sql("CREATE SCHEMA IF NOT EXISTS test_schema")
+    con.create_table("t", schema=ibis.schema(dict(a="int")), database=database)
+    t = con.table("t", schema="test_schema")
+    assert t.execute().empty

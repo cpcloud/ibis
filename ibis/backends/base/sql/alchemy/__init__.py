@@ -213,11 +213,6 @@ class BaseAlchemyBackend(BaseSQLBackend):
             # avoid fully qualified name
             database = None
 
-        if database is not None:
-            raise NotImplementedError(
-                "Creating tables from a different database is not yet implemented"
-            )
-
         if obj is not None and schema is not None:
             if not obj.schema().equals(ibis.schema(schema)):
                 raise com.IbisTypeError(
@@ -283,18 +278,25 @@ class BaseAlchemyBackend(BaseSQLBackend):
         ]
 
     def _table_from_schema(
-        self, name: str, schema: sch.Schema, temp: bool = False, **_: Any
+        self,
+        name: str,
+        schema: sch.Schema,
+        temp: bool = False,
+        database: str | None = None,
+        **_: Any,
     ) -> sa.Table:
         prefixes = []
         if temp:
             prefixes.append('TEMPORARY')
         columns = self._columns_from_schema(name, schema)
+        *_, dbschema = database.rsplit(".", 1)
         return sa.Table(
             name,
             sa.MetaData(),
             *columns,
             prefixes=prefixes,
             quote=self.compiler.translator_class._quote_table_names,
+            schema=dbschema,
         )
 
     def drop_table(
