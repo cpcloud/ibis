@@ -59,7 +59,7 @@ doctest *args:
         -and -not -wholename '*test*.py' \
         -and -not -wholename '*__init__*' \
         -and -not -wholename '*gen_*.py' \
-        -and -not -wholename '*ibis/expr/selectors.py'
+        -and -not -wholename '*ibis/selectors.py'
     )
     pytest --doctest-modules {{ args }} "${doctest_modules[@]}"
 
