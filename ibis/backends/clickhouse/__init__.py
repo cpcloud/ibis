@@ -377,13 +377,14 @@ class Backend(BaseBackend):
         )
         external_data = self._normalize_external_tables(external_tables)
         df = self.con.query_df(
-            sql, external_data=external_data, use_na_values=False, use_none=True
+            sql, #external_data=external_data, use_na_values=False, use_none=True
         )
 
         if df.empty:
             df = pd.DataFrame(columns=schema.names)
 
-        result = schema.apply_to(df)
+        # result = schema.apply_to(df)
+        result = df
         if isinstance(expr, ir.Scalar):
             return result.iat[0, 0]
         elif isinstance(expr, ir.Column):
