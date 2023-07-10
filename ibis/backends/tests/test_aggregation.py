@@ -1028,6 +1028,11 @@ def test_quantile(
                     raises=com.OperationNotDefinedError,
                 ),
                 pytest.mark.notyet(
+                    ["duckdb"],
+                    raises=com.UnsupportedOperationError,
+                    reason="DuckDB only implements population correlation coefficient",
+                ),
+                pytest.mark.notyet(
                     ["impala", "mysql", "sqlite"],
                     raises=com.OperationNotDefinedError,
                 ),
@@ -1037,7 +1042,7 @@ def test_quantile(
                     reason="Correlation with how='sample' is not supported.",
                 ),
                 pytest.mark.notyet(
-                    ["trino", "postgres", "duckdb", "snowflake", "oracle"],
+                    ["trino", "postgres", "snowflake", "oracle"],
                     raises=ValueError,
                     reason="XXXXSQLExprTranslator only implements population correlation coefficient",
                 ),
@@ -1210,10 +1215,7 @@ def test_median(alltypes, df):
             "::",
             id="expr",
             marks=[
-                pytest.mark.notyet(
-                    ["duckdb", "trino"],
-                    raises=com.UnsupportedOperationError,
-                ),
+                pytest.mark.notyet(["trino"], raises=com.UnsupportedOperationError),
                 pytest.mark.notyet(
                     ["bigquery"],
                     raises=GoogleBadRequest,

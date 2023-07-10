@@ -24,10 +24,10 @@ try:
     import duckdb
 
     DuckDBConversionException = duckdb.ConversionException
+    DuckDBParserException = duckdb.ParserException
 except ImportError:
     duckdb = None
-    DuckDBConversionException = None
-
+    DuckDBConversionException = DuckDBParserException = None
 
 try:
     import clickhouse_connect as cc
@@ -385,9 +385,7 @@ def test_numeric_literal(con, backend, expr, expected_types):
                     raises=ImpalaHiveServer2Error,
                 ),
                 pytest.mark.broken(
-                    ["duckdb"],
-                    "(duckdb.ParserException) Parser Error: Width must be between 1 and 38!",
-                    raises=sa.exc.ProgrammingError,
+                    ["duckdb"], "Unsupported precision.", raises=DuckDBParserException
                 ),
                 pytest.mark.notyet(["datafusion"], raises=Exception),
                 pytest.mark.notyet(
@@ -409,13 +407,14 @@ def test_numeric_literal(con, backend, expr, expected_types):
                 "pandas": decimal.Decimal("Infinity"),
                 "dask": decimal.Decimal("Infinity"),
                 "impala": float("inf"),
+                "duckdb": float("inf"),
             },
             {
                 "bigquery": "FLOAT64",
                 "snowflake": "VARCHAR",
                 "sqlite": "real",
                 "trino": "decimal(2,1)",
-                "duckdb": "DECIMAL(18,3)",
+                "duckdb": "FLOAT",
                 "postgres": "numeric",
                 "impala": "DOUBLE",
             },
@@ -424,11 +423,6 @@ def test_numeric_literal(con, backend, expr, expected_types):
                     ["clickhouse"],
                     "Unsupported precision. Supported values: [1 : 76]. Current value: None",
                     raises=NotImplementedError,
-                ),
-                pytest.mark.broken(
-                    ["duckdb"],
-                    "duckdb.ConversionException: Conversion Error: Could not cast value inf to DECIMAL(18,3)",
-                    raises=DuckDBConversionException,
                 ),
                 pytest.mark.broken(
                     ["trino"],
@@ -489,26 +483,22 @@ def test_numeric_literal(con, backend, expr, expected_types):
                 "pandas": decimal.Decimal("-Infinity"),
                 "dask": decimal.Decimal("-Infinity"),
                 "impala": float("-inf"),
+                "duckdb": float("-inf"),
             },
             {
                 "bigquery": "FLOAT64",
                 "snowflake": "VARCHAR",
                 "sqlite": "real",
                 "trino": "decimal(2,1)",
-                "duckdb": "DECIMAL(18,3)",
                 "postgres": "numeric",
                 "impala": "DOUBLE",
+                "duckdb": "FLOAT",
             },
             marks=[
                 pytest.mark.broken(
                     ["clickhouse"],
                     "Unsupported precision. Supported values: [1 : 76]. Current value: None",
                     raises=NotImplementedError,
-                ),
-                pytest.mark.broken(
-                    ["duckdb"],
-                    "duckdb.ConversionException: Conversion Error: Could not cast value -inf to DECIMAL(18,3)",
-                    raises=DuckDBConversionException,
                 ),
                 pytest.mark.broken(
                     ["trino"],
@@ -569,29 +559,22 @@ def test_numeric_literal(con, backend, expr, expected_types):
                 "pandas": decimal.Decimal("NaN"),
                 "dask": decimal.Decimal("NaN"),
                 "impala": float("nan"),
+                "duckdb": float("nan"),
             },
             {
                 "bigquery": "FLOAT64",
                 "snowflake": "VARCHAR",
                 "sqlite": "null",
                 "trino": "decimal(2,1)",
-                "duckdb": "DECIMAL(18,3)",
                 "postgres": "numeric",
                 "impala": "DOUBLE",
+                "duckdb": "FLOAT",
             },
             marks=[
                 pytest.mark.broken(
                     ["clickhouse"],
                     "Unsupported precision. Supported values: [1 : 76]. Current value: None",
                     raises=NotImplementedError,
-                ),
-                pytest.mark.broken(
-                    ["duckdb"],
-                    "(duckdb.InvalidInputException) Invalid Input Error: Attempting "
-                    "to execute an unsuccessful or closed pending query result"
-                    "Error: Invalid Input Error: Type DOUBLE with value nan can't be "
-                    "cast because the value is out of range for the destination type INT64",
-                    raises=sa.exc.ProgrammingError,
                 ),
                 pytest.mark.broken(
                     ["trino"],
@@ -1370,7 +1353,6 @@ def test_divide_by_zero(backend, alltypes, df, column, denominator):
                 "mysql": 10,
                 "snowflake": 38,
                 "trino": 18,
-                "duckdb": None,
                 "sqlite": None,
                 "mssql": None,
                 "oracle": 38,
@@ -1380,7 +1362,6 @@ def test_divide_by_zero(backend, alltypes, df, column, denominator):
                 "mysql": 0,
                 "snowflake": 0,
                 "trino": 3,
-                "duckdb": None,
                 "sqlite": None,
                 "mssql": None,
                 "oracle": 0,
@@ -1394,6 +1375,7 @@ def test_divide_by_zero(backend, alltypes, df, column, denominator):
         "clickhouse",
         "dask",
         "datafusion",
+        "duckdb",
         "impala",
         "pandas",
         "pyspark",
@@ -1489,7 +1471,8 @@ def test_random(con):
 @pytest.mark.notimpl(["datafusion"], raises=com.OperationNotDefinedError)
 def test_clip(backend, alltypes, df, ibis_func, pandas_func):
     result = ibis_func(alltypes.int_col).execute()
-    expected = pandas_func(df.int_col).astype(result.dtype)
+    raw_expected = pandas_func(df.int_col)
+    expected = raw_expected.astype(result.dtype)
     # Names won't match in the PySpark backend since PySpark
     # gives 'tmp' name when executing a Column
     backend.assert_series_equal(result, expected, check_names=False)
