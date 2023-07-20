@@ -3875,15 +3875,13 @@ sql = ["pandas (>=1.0.5)", "pyarrow (>=1.0.0)"]
 
 [[package]]
 name = "pytest"
-version = "7.4.0"
+version = "7.4.1.dev1+ga9af78bc7"
 description = "pytest: simple powerful testing with Python"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
-files = [
-    {file = "pytest-7.4.0-py3-none-any.whl", hash = "sha256:78bf16451a2eb8c7a2ea98e32dc119fd2aa758f1d5d66dbf0a59d69a3969df32"},
-    {file = "pytest-7.4.0.tar.gz", hash = "sha256:b4bf8c45bd59934ed84001ad51e11b4ee40d40a1229d2c79f9c592b0a3f6bd8a"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 colorama = {version = "*", markers = "sys_platform == \"win32\""}
@@ -3895,6 +3893,12 @@ tomli = {version = ">=1.0.0", markers = "python_version < \"3.11\""}
 
 [package.extras]
 testing = ["argcomplete", "attrs (>=19.2.0)", "hypothesis (>=3.56)", "mock", "nose", "pygments (>=2.7.2)", "requests", "setuptools", "xmlschema"]
+
+[package.source]
+type = "git"
+url = "https://github.com/cpcloud/pytest.git"
+reference = "a9af78bc79b8ebc85a91b712ffcd79748246aef5"
+resolved_reference = "a9af78bc79b8ebc85a91b712ffcd79748246aef5"
 
 [[package]]
 name = "pytest-benchmark"
@@ -5501,4 +5505,4 @@ visualization = ["graphviz"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "b994a1395f025aa335bbd9d0f12e233054763342443e5dd970afdfe209356c72"
+content-hash = "90704025626e356e00c35ebd4cb5537d5bd973a599b72854ec7e2290dd3e06b2"
