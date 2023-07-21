@@ -8,42 +8,24 @@ from typing import Literal as LiteralType
 from public import public
 from typing_extensions import TypeVar
 
-import ibis.common.exceptions as com
 import ibis.expr.datashape as ds
 import ibis.expr.datatypes as dt
 import ibis.expr.rules as rlz
 from ibis.common.annotations import attribute
 from ibis.common.grounds import Singleton
-from ibis.common.typing import VarTuple  # noqa: TCH001
+from ibis.common.typing import VarTuple
 from ibis.expr.operations.core import Named, Scalar, Unary, Value
-from ibis.expr.operations.relations import Relation  # noqa: TCH001
+from ibis.expr.operations.relations import Relation
 
 
 @public
 class TableColumn(Value, Named):
     """Selects a column from a `Table`."""
 
-    table: Relation
     name: Union[str, int]
+    output_dtype: dt.DataType
 
     output_shape = ds.columnar
-
-    def __init__(self, table, name):
-        if isinstance(name, int):
-            name = table.schema.name_at_position(name)
-
-        if name not in table.schema:
-            columns_formatted = ', '.join(map(repr, table.schema.names))
-            raise com.IbisTypeError(
-                f"Column {name!r} is not found in table. "
-                f"Existing columns: {columns_formatted}."
-            )
-
-        super().__init__(table=table, name=name)
-
-    @property
-    def output_dtype(self):
-        return self.table.schema[self.name]
 
 
 @public
@@ -51,7 +33,6 @@ class RowID(Value, Named):
     """The row number (an autonumeric) of the returned result."""
 
     name = "rowid"
-    table: Relation
 
     output_shape = ds.columnar
     output_dtype = dt.int64

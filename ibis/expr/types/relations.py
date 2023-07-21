@@ -1665,9 +1665,8 @@ class Table(Expr, _FixedTextJupyterMixin):
                 "You must select at least one column for a valid projection"
             )
 
-        op = an.Projector(self, exprs).get_result()
-
-        return op.to_expr()
+        root = self.op()
+        return Project.as_root(root, *(expr.op() for expr in exprs)).to_expr()
 
     projection = select
 

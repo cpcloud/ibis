@@ -451,6 +451,7 @@ ignore = [
   "SIM118",  # remove .keys() calls from dictionaries
   "SIM300",  # yoda conditions
   "UP007",   # Optional[str] -> str | None
+  "TCH001"
 ]
 exclude = ["*_py310.py", "ibis/tests/*/snapshots/*"]
 target-version = "py38"

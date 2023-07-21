@@ -611,8 +611,8 @@ def _fmt_value_alias(op: ops.Alias, *, aliases: Aliases) -> str:
 
 
 @fmt_value.register
-def _fmt_value_table_column(op: ops.TableColumn, *, aliases: Aliases) -> str:
-    return f"{aliases[op.table]}.{op.name}"
+def _fmt_value_table_column(op: ops.TableColumn, **_) -> str:
+    return f"{op.name}"
 
 
 @fmt_value.register
