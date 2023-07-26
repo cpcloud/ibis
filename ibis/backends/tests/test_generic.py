@@ -1299,3 +1299,13 @@ def test_try_cast_table(con):
 )
 def test_try_cast_func(con, from_val, to_type, func):
     assert func(con.execute(ibis.literal(from_val).try_cast(to_type)))
+
+
+def test_chain_limit_doesnt_collapse(con):
+    df = pd.DataFrame({"idx": list(range(20))})
+    t = ibis.memtable(df)
+    expr = t.limit(10).limit(5, offset=5)
+    result = con.execute(expr)
+    expected = df.iloc[:10][-5:]
+    breakpoint()
+    ...
