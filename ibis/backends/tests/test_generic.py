@@ -1304,8 +1304,18 @@ def test_try_cast_func(con, from_val, to_type, func):
 def test_chain_limit_doesnt_collapse(con):
     df = pd.DataFrame({"idx": list(range(20))})
     t = ibis.memtable(df)
-    expr = t.limit(10).limit(5, offset=5)
+    expr = (
+        t
+        .limit(10)
+        .order_by(ibis.desc("idx"))
+        .limit(1)
+    )
     result = con.execute(expr)
-    expected = df.iloc[:10][-5:]
+    expected = (
+        df.sort_values(by=["idx"], ascending=False)
+        .iloc[:10][-5:]
+        .reset_index(drop=True)
+    )
     breakpoint()
+
     ...
