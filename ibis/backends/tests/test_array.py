@@ -732,3 +732,15 @@ def test_zip(backend):
     s = res.execute()
     assert len(s[0][0]) == len(res.type().value_type)
     assert len(x[0]) == len(s[0])
+
+
+@pytest.mark.notimpl(["datafusion"], raises=com.OperationNotDefinedError)
+@pytest.mark.notimpl(["pandas"], raises=TypeError)
+@pytest.mark.notimpl(["dask"], raises=AttributeError)
+def test_array_column_with_literals(backend, alltypes, df):
+    expr = ibis.array([alltypes['double_col'], 42.42])
+    assert isinstance(expr, ir.ArrayColumn)
+
+    result = expr.execute()
+    expected = df.apply(lambda row: [row['double_col'], 42.42], axis=1)
+    backend.assert_series_equal(result, expected, check_names=False)
