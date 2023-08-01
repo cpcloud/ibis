@@ -410,11 +410,6 @@ class BaseAlchemyBackend(BaseSQLBackend):
             # avoid fully qualified name
             database = None
 
-        if database is not None:
-            raise com.IbisInputError(
-                "Dropping tables from a different database is not yet implemented"
-            )
-
         t = self._get_sqla_table(name, schema=database, autoload=False)
         with self.begin() as bind:
             t.drop(bind=bind, checkfirst=force)
@@ -463,7 +458,7 @@ class BaseAlchemyBackend(BaseSQLBackend):
         return sa.MetaData()
 
     def _get_sqla_table(
-        self, name: str, schema: str | None = None, autoload: bool = True, **_: Any
+        self, name: str, schema: str | None = None, autoload: bool = True, **kwargs: Any
     ) -> sa.Table:
         meta = self._new_sa_metadata()
         with warnings.catch_warnings():
@@ -479,6 +474,7 @@ class BaseAlchemyBackend(BaseSQLBackend):
                 schema=schema,
                 autoload_with=self.con if autoload else None,
                 quote=self.compiler.translator_class._quote_table_names,
+                **kwargs,
             )
             nulltype_cols = frozenset(
                 col.name for col in table.c if isinstance(col.type, sa.types.NullType)

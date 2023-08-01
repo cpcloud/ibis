@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import warnings
 from functools import cached_property
-from typing import Iterator
+from typing import Any, Iterator
 
 import sqlalchemy as sa
 import toolz
@@ -16,7 +16,7 @@ from ibis import util
 from ibis.backends.base.sql.alchemy import BaseAlchemyBackend
 from ibis.backends.base.sql.alchemy.datatypes import ArrayType
 from ibis.backends.trino.compiler import TrinoSQLCompiler
-from ibis.backends.trino.datatypes import ROW, parse
+from ibis.backends.trino.datatypes import ROW, TrinoType, parse
 
 
 class Backend(BaseAlchemyBackend):
@@ -80,6 +80,48 @@ class Backend(BaseAlchemyBackend):
                 )
 
         return meta
+
+    def _get_sqla_table(
+        self,
+        name: str,
+        schema: str | None = None,
+        database: str | None = None,
+        **kwargs: Any,
+    ) -> sa.Table:
+        default_catalog, default_schema = self.con.url.database.split("/", 1)
+        if schema is None:
+            schema = default_schema
+        *db, schema = schema.split(".")
+        catalog = "".join(db) or database or default_catalog
+        meta = self._new_sa_metadata()
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Did not recognize type", category=sa.exc.SAWarning
+            )
+            warnings.filterwarnings(
+                "ignore", message="index key", category=sa.exc.SAWarning
+            )
+            full_name = ".".join(filter(None, (catalog, schema, name)))
+            columns = [
+                sa.Column(name, type_=TrinoType.from_ibis(typ))
+                for name, typ in self._metadata(f"SELECT * FROM {full_name}")
+            ]
+            table = sa.Table(
+                name,
+                meta,
+                *columns,
+                schema=schema,
+                quote=self.compiler.translator_class._quote_table_names,
+                trino_catalog=catalog,
+                **kwargs,
+            )
+            nulltype_cols = frozenset(
+                col.name for col in table.c if isinstance(col.type, sa.types.NullType)
+            )
+
+            if not nulltype_cols:
+                return table
+            return self._handle_failed_column_type_inference(table, nulltype_cols)
 
     @contextlib.contextmanager
     def _prepare_metadata(self, query: str) -> Iterator[dict[str, str]]:
