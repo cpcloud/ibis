@@ -6,7 +6,6 @@ import pyarrow as pa
 import pytest
 
 import ibis
-from ibis.backends.snowflake.tests.conftest import _get_url
 from ibis.util import gen_name
 
 
@@ -34,11 +33,6 @@ def test_cross_db_access(con, temp_db, temp_schema):
     assert t.execute().empty
 
 
-@pytest.fixture(scope="session")
-def simple_con():
-    return ibis.connect(_get_url())
-
-
 @pytest.mark.parametrize(
     "data",
     [
@@ -50,31 +44,31 @@ def simple_con():
         pa.Table.from_pydict({"key": list("abc"), "value": [[1], [2], [3]]}),
     ],
 )
-def test_basic_memtable_registration(simple_con, data):
+def test_basic_memtable_registration(con, data):
     expected = pd.DataFrame({"key": list("abc"), "value": [[1], [2], [3]]})
     t = ibis.memtable(data)
-    result = simple_con.execute(t)
+    result = con.execute(t)
     tm.assert_frame_equal(result, expected)
 
 
-def test_repeated_memtable_registration(simple_con, mocker):
+def test_repeated_memtable_registration(con, mocker):
     data = {"key": list("abc"), "value": [[1], [2], [3]]}
     expected = pd.DataFrame(data)
     t = ibis.memtable(data)
 
-    spy = mocker.spy(simple_con, "_register_in_memory_table")
+    spy = mocker.spy(con, "_register_in_memory_table")
 
     n = 2
 
     for _ in range(n):
-        tm.assert_frame_equal(simple_con.execute(t), expected)
+        tm.assert_frame_equal(con.execute(t), expected)
 
     # assert that we called _register_in_memory_table exactly n times
     assert spy.call_count == n
 
 
-def test_timestamp_tz_column(simple_con):
-    t = simple_con.create_table(
+def test_timestamp_tz_column(con):
+    t = con.create_table(
         ibis.util.gen_name("snowflake_timestamp_tz_column"),
         schema=ibis.schema({"ts": "string"}),
         temp=True,
