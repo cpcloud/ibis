@@ -5,7 +5,6 @@ import os
 from typing import TYPE_CHECKING, Any
 
 import pytest
-import sqlalchemy as sa
 
 import ibis
 from ibis.backends.conftest import TEST_TABLES
@@ -40,8 +39,7 @@ def _get_url():
         return f"snowflake://{user}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
 
 
-def copy_into(con, data_dir: Path, table: str) -> None:
-    stage = "ibis_testing"
+def copy_into(con, *, data_dir: Path, table: str, stage: str = "ibis_testing") -> None:
     csv = f"{table}.csv"
     con.exec_driver_sql(
         f"PUT file://{data_dir.joinpath('csv', csv).absolute()} @{stage}/{csv}"
@@ -58,33 +56,18 @@ class TestConf(BackendTest, RoundAwayFromZero):
 
     def _load_data(self, **_: Any) -> None:
         """Load test data into a Snowflake backend instance."""
-        snowflake_url = _get_url()
 
-        raw_url = sa.engine.make_url(snowflake_url)
-        _, schema = raw_url.database.rsplit("/", 1)
-        url = raw_url.set(database="")
-        con = sa.create_engine(
-            url, connect_args={"session_parameters": {"MULTI_STATEMENT_COUNT": "0"}}
-        )
+        stmts = self.script_dir.joinpath("snowflake.sql").read_text().split(";")
 
-        dbschema = f"ibis_testing.{schema}"
+        with self.connection.begin() as c:
+            for stmt in stmts:
+                c.exec_driver_sql(stmt)
 
-        with con.begin() as c:
-            c.exec_driver_sql(
-                f"""\
-CREATE DATABASE IF NOT EXISTS ibis_testing;
-USE DATABASE ibis_testing;
-CREATE SCHEMA IF NOT EXISTS {dbschema};
-USE SCHEMA {dbschema};
-{self.script_dir.joinpath("snowflake.sql").read_text()}"""
-            )
-
-        with con.begin() as c:
             # not much we can do to make this faster, but running these in
             # multiple threads seems to save about 2x
             with concurrent.futures.ThreadPoolExecutor() as exe:
                 for future in concurrent.futures.as_completed(
-                    exe.submit(copy_into, c, self.data_dir, table)
+                    exe.submit(copy_into, c, data_dir=self.data_dir, table=table)
                     for table in TEST_TABLES.keys()
                 ):
                     future.result()
