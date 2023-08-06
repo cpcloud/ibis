@@ -107,6 +107,10 @@ poetry-dynamic-versioning = ">=0.18.0,<1"
 pre-commit = ">=3.1,<4"
 pydeps = ">=1.12.7,<2"
 ruff = ">=0.0.271"
+jupyterlab = "^4.0.4"
+altair = "^5.0.1"
+matplotlib = "^3.7.2"
+matplotlib-inline = "^0.1.6"
 
 [tool.poetry.group.test.dependencies]
 black = ">=22.1.0,<24"
