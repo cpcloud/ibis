@@ -1288,3 +1288,26 @@ def test_try_cast_table(con):
 )
 def test_try_cast_func(con, from_val, to_type, func):
     assert func(con.execute(ibis.literal(from_val).try_cast(to_type)))
+
+
+@pytest.mark.xfail_version(
+    datafusion=["datafusion==28.0.0"],
+    reason="datafusion panics with with the float_col * 2 filter",
+)
+def test_where_multiple_conditions(backend, alltypes, df):
+    expr = alltypes.filter(
+        [
+            alltypes.float_col > 0,
+            alltypes.smallint_col == 9,
+            alltypes.int_col < alltypes.float_col * 2,
+        ]
+    )
+    result = expr.execute()
+
+    expected = df[
+        (df["float_col"] > 0)
+        & (df["smallint_col"] == 9)
+        & (df["int_col"] < df["float_col"] * 2)
+    ]
+
+    backend.assert_frame_equal(result, expected)
