@@ -295,29 +295,29 @@ def pytest_collection_modifyitems(session, config, items):
                 item.add_marker(pytest.mark.core)
 
         # skip or xfail pyspark tests that run afoul of our non-ancient stack
-        for _ in item.iter_markers(name="pyspark"):
-            if not isinstance(item, pytest.DoctestItem):
-                additional_markers.append(
-                    (
-                        item,
-                        [
-                            pytest.mark.xfail(
-                                sys.version_info >= (3, 11),
-                                reason="PySpark doesn't support Python 3.11",
-                            ),
-                            pytest.mark.xfail(
-                                vparse(pd.__version__) >= vparse("2"),
-                                reason="PySpark doesn't support pandas>=2",
-                            ),
-                            pytest.mark.skipif(
-                                pyspark is not None
-                                and vparse(pyspark.__version__) < vparse("3.3.3")
-                                and vparse(np.__version__) >= vparse("1.24"),
-                                reason="PySpark doesn't support numpy >= 1.24",
-                            ),
-                        ],
-                    )
-                )
+        additional_markers.extend(
+            (
+                item,
+                [
+                    pytest.mark.xfail(
+                        sys.version_info >= (3, 11),
+                        reason="PySpark doesn't support Python 3.11",
+                    ),
+                    pytest.mark.xfail(
+                        vparse(pd.__version__) >= vparse("2"),
+                        reason="PySpark doesn't support pandas>=2",
+                    ),
+                    pytest.mark.skipif(
+                        pyspark is not None
+                        and vparse(pyspark.__version__) < vparse("3.3.3")
+                        and vparse(np.__version__) >= vparse("1.24"),
+                        reason="PySpark doesn't support numpy >= 1.24",
+                    ),
+                ],
+            )
+            for _ in item.iter_markers(name="pyspark")
+            if not isinstance(item, pytest.DoctestItem)
+        )
 
     if unrecognized_backends:
         raise pytest.PytestCollectionWarning("\n" + "\n".join(unrecognized_backends))

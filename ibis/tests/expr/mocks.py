@@ -389,8 +389,7 @@ class MockBackend(BaseSQLBackend):
         import pandas as pd
 
         ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        for query in ast.queries:
-            self.executed_queries.append(query.compile())
+        self.executed_queries.extend(query.compile() for query in ast.queries)
         try:
             schema = expr.schema()
         except AttributeError:

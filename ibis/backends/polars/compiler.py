@@ -860,7 +860,7 @@ def array_concat(op, **kw):
     for arg in rest:
         try:
             result = result.arr.concat(arg)
-        except AttributeError:
+        except AttributeError:  # noqa: PERF203
             result = result.list.concat(arg)
 
     return result

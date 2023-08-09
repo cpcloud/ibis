@@ -388,9 +388,7 @@ def contains_first_or_last_agg(exprs):
 
 def simplify_aggregation(agg):
     def _pushdown(nodes):
-        subbed = []
-        for node in nodes:
-            subbed.append(sub_for(node, {agg.table: agg.table.table}))
+        subbed = [sub_for(node, {agg.table: agg.table.table}) for node in nodes]
 
         # TODO(kszucs): perhaps this validation could be omitted
         if subbed:

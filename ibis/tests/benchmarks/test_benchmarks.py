@@ -91,9 +91,9 @@ def make_large_expr(base):
         valid_seconds=300,
     )
 
-    aggs = []
-    for meas in ["meas1", "meas2"]:
-        aggs.append(src_table[meas].sum().cast("float").name(meas))
+    aggs = [
+        src_table[meas].sum().cast("float").name(meas) for meas in ["meas1", "meas2"]
+    ]
     src_table = src_table.aggregate(
         aggs, by=["_timestamp", "dim1", "dim2", "valid_seconds"]
     )
