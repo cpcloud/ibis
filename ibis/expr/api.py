@@ -644,6 +644,18 @@ def random() -> ir.FloatingScalar:
     -------
     FloatingScalar
         Random float value expression
+
+    Examples
+    --------
+    >>> import ibis
+    >>> ibis.options.interactive = True
+    >>> ibis.random()  # doctest: +ELLIPSIS
+    ...
+    >>> t = ibis.example.penguins.fetch()
+
+    Generate a random number per row
+
+    >>> t.select(rand=ibis.random())
     """
     return ops.RandomScalar().to_expr()
 
