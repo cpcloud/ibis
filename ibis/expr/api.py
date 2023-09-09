@@ -558,6 +558,32 @@ def and_(*predicates: ir.BooleanValue) -> ir.BooleanValue:
     BooleanValue
         A new predicate that evaluates to True if all composing predicates are
         True. If no predicates were provided, returns True.
+
+    Examples
+    --------
+    >>> import ibis
+    >>> ibis.options.interactive = True
+    >>> t = ibis.examples.penguins.fetch()
+    >>> ibis.and_(t.sex == "male", t.year == 2007)
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃ And(Equals(sex, 'male'), Equals(year, 2007)) ┃
+    ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+    │ boolean                                      │
+    ├──────────────────────────────────────────────┤
+    │ True                                         │
+    │ False                                        │
+    │ False                                        │
+    │ NULL                                         │
+    │ False                                        │
+    │ True                                         │
+    │ False                                        │
+    │ True                                         │
+    │ NULL                                         │
+    │ NULL                                         │
+    │ …                                            │
+    └──────────────────────────────────────────────┘
+    >>> ibis.and_()
+    True
     """
     if not predicates:
         return literal(True)
@@ -577,6 +603,32 @@ def or_(*predicates: ir.BooleanValue) -> ir.BooleanValue:
     BooleanValue
         A new predicate that evaluates to True if any composing predicates are
         True. If no predicates were provided, returns False.
+
+    Examples
+    --------
+    >>> import ibis
+    >>> ibis.options.interactive = True
+    >>> t = ibis.examples.penguins.fetch()
+    >>> ibis.or_(t.sex == "male", t.year == 2007)
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃ Or(Equals(sex, 'male'), Equals(year, 2007)) ┃
+    ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+    │ boolean                                     │
+    ├─────────────────────────────────────────────┤
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ True                                        │
+    │ …                                           │
+    └─────────────────────────────────────────────┘
+    >>> ibis.or_()
+    False
     """
     if not predicates:
         return literal(False)
