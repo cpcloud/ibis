@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import ibis
@@ -19,7 +20,13 @@ if TYPE_CHECKING:
 # These backends load the data directly using `read_csv`/`read_parquet`. All
 # other backends load the data using pyarrow, then passing it off to
 # `create_table`.
-_DIRECT_BACKENDS = frozenset({"duckdb", "polars"})
+_POSSIBLE_DIRECT_BACKENDS = frozenset(
+    ("clickhouse", "datafusion", "duckdb", "polars", "pyspark", "snowflake")
+)
+_DIRECT_BACKENDS = {
+    "csv.gz": {"backends": _POSSIBLE_DIRECT_BACKENDS - {"datafusion"}, "method": "csv"},
+    "parquet": {"backends": _POSSIBLE_DIRECT_BACKENDS, "method": "parquet"},
+}
 
 
 class Example(Concrete):
@@ -44,18 +51,19 @@ class Example(Concrete):
 
         (path,) = board.pin_download(name)
 
-        if backend.name in _DIRECT_BACKENDS:
+        suffix = "".join(Path(path).suffixes)[1:]  # skip the leading dot
+        direct_backends = _DIRECT_BACKENDS[suffix]
+
+        if backend.name in direct_backends["backends"]:
             # Read directly into these backends. This helps reduce memory
             # usage, making the larger example datasets easier to work with.
-            if path.endswith(".parquet"):
-                return backend.read_parquet(path, table_name=table_name)
-            else:
-                return backend.read_csv(path, table_name=table_name)
+            method = getattr(backend, f"read_{direct_backends['method']}")
+            return method(path, table_name=table_name)
         else:
-            if path.endswith(".parquet"):
-                import pyarrow.parquet
+            if suffix == "parquet":
+                import pyarrow.parquet as pq
 
-                table = pyarrow.parquet.read_table(path)
+                table = pq.read_table(path)
             else:
                 import pyarrow.csv
 
