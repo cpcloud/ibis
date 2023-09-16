@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import collections
 import contextlib
+import copy
 import functools
 import itertools
 import operator
@@ -2321,38 +2321,46 @@ class Table(Expr, _FixedTextJupyterMixin):
         Table
             Table expression
         """
-        schema = self.schema()
+        from ibis.selectors import castable_to
 
-        if isinstance(replacements, collections.abc.Mapping):
-            for col, val in replacements.items():
-                if col not in schema:
-                    columns_formatted = ", ".join(map(repr, schema.names))
-                    raise com.IbisTypeError(
-                        f"Column {col!r} is not found in table. "
-                        f"Existing columns: {columns_formatted}."
-                    ) from None
+        if isinstance(replacements, Mapping):
+            # check that replacements' column names are a subset of the table's
+            # schema
+            schema = dict(self.schema())
+            replacements_schema = toolz.valmap(dt.infer, replacements)
+            if extra := (replacements_schema.keys() - schema.keys()):
+                formatted = "\n".join(f"- {key}" for key in extra)
+                raise com.IbisTypeError(
+                    f"The following replacement candidates do not exist in the table:\n{formatted}"
+                )
 
-                col_type = schema[col]
-                val_type = val.type() if isinstance(val, Expr) else dt.infer(val)
-                if not dt.castable(val_type, col_type):
-                    raise com.IbisTypeError(
-                        f"Cannot fillna on column {col!r} of type {col_type} with a "
-                        f"value of type {val_type}"
-                    )
-        else:
-            val_type = (
-                replacements.type()
-                if isinstance(replacements, Expr)
-                else dt.infer(replacements)
+            # check that each column is castable to its replacement value's
+            # type
+            if all(
+                dt.castable(schema[key], replacements_schema[key])
+                for key in schema.keys() & replacements_schema.keys()
+            ):
+                return ops.FillNaMany(self, replacements=replacements)
+
+            raise com.IbisTypeError("Replacement types are not castable to ")
+
+        replacements_type = dt.infer(replacements)
+        cols = castable_to(replacements_type).expand(self)
+
+        if not cols:
+            raise com.IbisTypeError(
+                "No columns found that are compatible with the replacement value's inferred type of "
+                f"{replacements_type}"
             )
-            for col, col_type in schema.items():
-                if col_type.nullable and not dt.castable(val_type, col_type):
-                    raise com.IbisTypeError(
-                        f"Cannot fillna on column {col!r} of type {col_type} with a "
-                        f"value of type {val_type} - pass in an explicit mapping "
-                        f"of fill values to `fillna` instead."
-                    )
-        return ops.FillNa(self, replacements).to_expr()
+
+        # len is sufficient because we're selecting from self
+        if len(cols) == len(self.columns):
+            return ops.FillNaOne(self, replacement=replacements)
+
+        return ops.FillNaMany(
+            self,
+            replacements={col.op().name: copy.deepcopy(replacements) for col in cols},
+        )
 
     def unpack(self, *columns: str) -> Table:
         """Project the struct fields of each of `columns` into `self`.

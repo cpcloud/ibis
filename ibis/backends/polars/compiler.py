@@ -325,31 +325,44 @@ def dropna(op, **kw):
     return lf.drop_nulls(subset)
 
 
-@translate.register(ops.FillNa)
-def fillna(op, **kw):
-    table = translate(op.table, **kw)
+def replace_column(name, value, dtype):
+    column = pl.col(name)
 
-    columns = []
-    for name, dtype in op.table.schema.items():
-        column = pl.col(name)
-        if isinstance(op.replacements, Mapping):
-            value = op.replacements.get(name)
+    if value is not None:
+        if dtype.is_floating():
+            column = column.fill_nan(value)
         else:
-            _assert_literal(op.replacements)
-            value = op.replacements.value
-
-        if value is not None:
-            if dtype.is_floating():
-                column = column.fill_nan(value)
             column = column.fill_null(value)
 
         # requires special treatment if the fill value has different datatype
         if dtype.is_timestamp():
             column = column.cast(pl.Datetime)
 
-        columns.append(column)
+    return column
 
-    return table.select(columns)
+
+@translate.register(ops.FillNaOne)
+def fillna_one(op, **kw):
+    repls = op.replacements
+    _assert_literal(repls)
+
+    table = op.table
+    value = repls.value
+    columns = [
+        replace_column(name, value, dtype) for name, dtype in table.schema.items()
+    ]
+    return translate(table, **kw).select(columns)
+
+
+@translate.register(ops.FillNaMany)
+def fillna_many(op, **kw):
+    repls = op.replacements
+    table = op.table
+    columns = [
+        replace_column(name, repls.get(name), dtype)
+        for name, dtype in table.schema.items()
+    ]
+    return translate(table, **kw).select(columns)
 
 
 @translate.register(ops.IdenticalTo)

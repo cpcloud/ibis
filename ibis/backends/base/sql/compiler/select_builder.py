@@ -162,22 +162,23 @@ class SelectBuilder:
             self.select_set = [op.table]
             self.filters = filters
 
-    def _collect_FillNa(self, op, toplevel=False):
+    def _collect_FillNaOne(self, op, toplevel=False):
+        return self._collect(
+            ops.FillNaMany(
+                table=op.table,
+                replacements=dict.fromkeys(op.schema.keys(), op.replacement),
+            ),
+            toplevel=toplevel,
+        )
+
+    def _collect_FillNaMany(self, op, toplevel=False):
         if toplevel:
             table = op.table.to_expr()
-            if isinstance(op.replacements, Mapping):
-                mapping = op.replacements
-            else:
-                mapping = {
-                    name: op.replacements
-                    for name, type in table.schema().items()
-                    if type.nullable
-                }
             new_op = table.mutate(
-                [
-                    table[name].fillna(value).name(name)
-                    for name, value in mapping.items()
-                ]
+                {
+                    name: table[name].fillna(value)
+                    for name, value in op.replacements.items()
+                }
             ).op()
             self._collect(new_op, toplevel=toplevel)
 

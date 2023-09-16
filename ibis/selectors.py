@@ -412,6 +412,56 @@ def c(*names: str | ir.Column) -> Predicate:
     return where(func)
 
 
+@public
+def nullable() -> Predicate:
+    """Select all nullable columns.
+
+    Examples
+    --------
+    >>> import ibis
+    >>> t = ibis.table(dict(a="int", b="!int"))
+    >>> t.select(nullable()).columns
+    ['a']
+    >>> t.select(~nullable()).columns
+    ['b']
+    """
+    return where(lambda col: col.type().nullable)
+
+
+@public
+def type_of(name: str) -> Predicate:
+    """Select columns that have the same type as another column `name`.
+
+    Examples
+    --------
+    >>> import ibis
+    >>> t = ibis.table(dict(a="int", b="float", c="int"))
+    >>> t.select(type_of("a")).columns
+    ['a', 'c']
+    """
+
+    def predicate(col):
+        table = col.op().table
+        return table.schema[name] == col.type()
+
+    return where(predicate)
+
+
+@public
+def castable_to(dtype: str | dt.DataType) -> Predicate:
+    dtype = dt.dtype(dtype)
+
+    def predicate(col):
+        coltype = col.type()
+        try:
+            promoted_type = dt.higher_precedence(dtype, coltype)
+        except exc.IbisTypeError:
+            return False
+        return dt.castable(coltype, promoted_type)
+
+    return where(predicate)
+
+
 class Across(Selector):
     selector: Selector
     funcs: Union[

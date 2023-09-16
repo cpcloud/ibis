@@ -232,7 +232,8 @@ def _sql_query_result(op, query, **kwargs):
     return top + render_fields({"query": query, "schema": schema}, 1)
 
 
-@fmt.register(ops.FillNa)
+@fmt.register(ops.FillNaMany)
+@fmt.register(ops.FillNaOne)
 @fmt.register(ops.DropNa)
 def _fill_na(op, table, **kwargs):
     name = f"{op.__class__.__name__}[{table}]\n"

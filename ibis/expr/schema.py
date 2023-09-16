@@ -10,6 +10,7 @@ from ibis.common.dispatch import lazy_singledispatch
 from ibis.common.exceptions import InputTypeError, IntegrityError
 from ibis.common.grounds import Concrete
 from ibis.common.patterns import Coercible
+from ibis.expr.rules import castable
 from ibis.util import deprecated, indent
 
 if TYPE_CHECKING:

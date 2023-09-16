@@ -1768,16 +1768,10 @@ def compile_dropna_table(t, op, **kwargs):
     return table.dropna(how=op.how, subset=subset)
 
 
-@compiles(ops.FillNa)
+@compiles(ops.FillNaMany)
 def compile_fillna_table(t, op, **kwargs):
     table = t.translate(op.table, **kwargs)
-    raw_replacements = op.replacements
-    replacements = (
-        dict(raw_replacements)
-        if isinstance(raw_replacements, frozendict)
-        else raw_replacements.value
-    )
-    return table.fillna(replacements)
+    return table.fillna(dict(op.replacements))
 
 
 # ------------------------- User defined function ------------------------

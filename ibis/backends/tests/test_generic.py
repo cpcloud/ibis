@@ -408,18 +408,21 @@ def test_select_filter_mutate(backend, alltypes, df):
 
 
 def test_table_fillna_invalid(alltypes):
-    with pytest.raises(
-        com.IbisTypeError, match=r"Column 'invalid_col' is not found in table"
-    ):
+    with pytest.raises(com.IbisTypeError, match="The following columns"):
         alltypes.fillna({"invalid_col": 0.0})
 
     with pytest.raises(
-        com.IbisTypeError, match="Cannot fillna on column 'string_col' of type.*"
+        com.IbisTypeError, match="Replacement types are not castable to"
     ):
-        alltypes[["int_col", "string_col"]].fillna(0)
+        alltypes.fillna({"string_col": 0.0})
 
     with pytest.raises(
-        com.IbisTypeError, match="Cannot fillna on column 'int_col' of type.*"
+        com.IbisTypeError, match="No columns found that are compatible .+ type of int8"
+    ):
+        alltypes[["string_col"]].fillna(0)
+
+    with pytest.raises(
+        com.IbisTypeError, match="Replacement types are not castable to"
     ):
         alltypes.fillna({"int_col": "oops"})
 
@@ -432,7 +435,7 @@ def test_table_fillna_invalid(alltypes):
         {"double_col": -1.5, "string_col": "missing"},
     ],
 )
-@pytest.mark.notimpl(["datafusion", "mssql", "clickhouse", "druid", "oracle"])
+@pytest.mark.notimpl(["datafusion", "mssql", "druid", "oracle"])
 def test_table_fillna_mapping(backend, alltypes, replacements):
     table = alltypes.mutate(
         int_col=alltypes.int_col.nullif(1),

@@ -579,15 +579,24 @@ class Distinct(Relation):
         return self.table.schema
 
 
-# TODO(kszucs): split it into two operations, one working with a single replacement
-# value and the other with a mapping
-# TODO(kszucs): the single value case was limited to numeric and string types
 @public
-class FillNa(Relation):
-    """Fill null values in the table."""
+class FillNaOne(Relation):
+    """Fill NULL values in `table`."""
 
     table: Relation
-    replacements: UnionType[Value[dt.Numeric | dt.String], FrozenDict[str, Any]]
+    replacement: Value[dt.Any]
+
+    @attribute
+    def schema(self):
+        return self.table.schema
+
+
+@public
+class FillNaMany(Relation):
+    """Fill NULL values in the table with a replacements mapping."""
+
+    table: Relation
+    replacements: FrozenDict[str, Value[dt.Any]]
 
     @attribute
     def schema(self):

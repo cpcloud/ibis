@@ -140,10 +140,10 @@ DASK_DISPATCH_TYPES: TypeRegistrationDict = {
         )
     ],
     ops.DropNa: [((dd.DataFrame,), execute_node_dropna_dataframe)],
-    ops.FillNa: [
+    ops.FillNaOne: [
         ((dd.DataFrame, simple_types), execute_node_fillna_dataframe_scalar),
-        ((dd.DataFrame,), execute_node_fillna_dataframe_dict),
     ],
+    ops.FillNaMany: [((dd.DataFrame,), execute_node_fillna_dataframe_dict)],
     ops.IsNull: [((dd.Series,), execute_series_isnull)],
     ops.NotNull: [((dd.Series,), execute_series_notnnull)],
     ops.IsNan: [((dd.Series,), execute_isnan)],
