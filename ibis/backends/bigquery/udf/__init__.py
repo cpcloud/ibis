@@ -305,12 +305,16 @@ return {f.__name__}({args});\
             False: "NOT DETERMINISTIC\n",
             None: "",
         }.get(determinism)
-        sql_code = f'''\
-CREATE TEMPORARY FUNCTION {udf_node.__name__}({bigquery_signature})
-RETURNS {return_type}
-{determinism_formatted}LANGUAGE js AS """
-{body}
-"""{libraries_opts};'''
+
+        sql_lines = [
+            f"CREATE TEMPORARY FUNCTION {udf_node.__name__}({bigquery_signature})",
+            f"RETURNS {return_type}",
+            libraries_opts,
+            f'{determinism_formatted}LANGUAGE js AS """',
+            body,
+            '""";',
+        ]
+        sql_code = "\n".join(sql_lines)
 
         def wrapped(*args, **kwargs):
             node = udf_node(*args, **kwargs)
