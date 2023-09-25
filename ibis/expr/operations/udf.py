@@ -306,6 +306,24 @@ class scalar(_UDF):
     ) -> Callable:
         """Construct a **vectorized** scalar user-defined function that accepts PyArrow Arrays as input.
 
+        ::: {.callout-warning collapsed="true"}
+        ## PyArrow UDFs **must** return a PyArrow Array or Scalar object.
+
+        For example, to return a constant from a pyarrow UDF, wrap it in a call to `pyarrow.scalar`
+
+        ```{python}
+        import pyarrow as pa
+
+        import ibis
+
+        @ibis.udf.scalar.pyarrow
+        def one() -> ir.Column[dt.Int64]:
+            return pc.scalar(1)
+
+        ibis.examples.penguins.fetch().mutate(one=lambda t: one(t.bill_length_mm, ))
+        ```
+        :::
+
         Parameters
         ----------
         fn
