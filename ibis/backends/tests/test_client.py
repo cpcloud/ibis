@@ -1355,3 +1355,31 @@ def test_list_databases_schemas(con_create_database_schema):
             con_create_database_schema.drop_schema(schema, database=database)
     finally:
         con_create_database_schema.drop_database(database)
+
+
+@pytest.mark.notyet(
+    ["datafusion"],
+    raises=NotImplementedError,
+    reason="datafusion doesn't support dropping schemas",
+)
+def test_create_table_in_non_default_schema(con_create_schema):
+    con = con_create_schema
+
+    table_name = gen_name("test_create_table")
+    schema = gen_name("test_create_schema")
+
+    db = con.current_database
+
+    con.create_schema(schema)
+    try:
+        t = con.create_table(
+            name=table_name,
+            schema=ibis.schema(dict(a="int")),
+            database=f"{db}.{schema}",
+        )
+        try:
+            assert t.op().namespace == db
+        finally:
+            con.drop_table(table_name, force=True)
+    finally:
+        con.drop_schema(schema, force=True)
