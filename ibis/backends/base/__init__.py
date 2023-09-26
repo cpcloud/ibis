@@ -965,7 +965,8 @@ class BaseBackend(abc.ABC, _FileIOHandler):
             provided.
         database
             Name of the database where the table will be created, if not the
-            default.
+            default. This can be a dotted path for backends that support more
+            than one level of namespacing.
         temp
             Whether a table is temporary or not
         overwrite

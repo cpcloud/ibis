@@ -268,7 +268,8 @@ class BaseAlchemyBackend(BaseSQLBackend):
             provided.
         database
             Name of the database where the table will be created, if not the
-            default.
+            default. This can be a dotted path for backends that support more
+            than one level of namespacing.
         temp
             Should the table be temporary for the session.
         overwrite
