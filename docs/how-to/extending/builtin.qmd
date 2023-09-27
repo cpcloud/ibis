@@ -119,11 +119,14 @@ Now let's connect to Snowflake and call our `jw_sim` function:
 import os
 
 con = ibis.connect(os.environ["SNOWFLAKE_URL"])
+ibis.set_backend(con)  # <1>
 ```
+
+1. Set `con` to be the default backend for this session
 
 ```{python}
 expr = jw_sim("snow", "shoe")
-con.execute(expr)
+expr
 ```
 
 And let's take a look at the SQL
@@ -156,11 +159,11 @@ def cardinality(arr) -> int:
 We can pass arrays with different element types to our `cardinality` function:
 
 ```{python}
-con.execute(cardinality([1, 2, 3]))
+cardinality([1, 2, 3])
 ```
 
 ```{python}
-con.execute(cardinality(["a", "b"]))
+cardinality(["a", "b"])
 ```
 
 When you bypass input types the errors you get back are backend dependent:
@@ -218,7 +221,7 @@ from ibis import _
 expr = (
    ibis.examples.imdb_title_ratings.fetch()
    .rename("snake_case")
-   .agg(kurt=lambda t: kurtosis(t.num_votes))
+   .agg(kurt=kurtosis(_.num_votes))
 )
 expr
 ```
@@ -242,7 +245,7 @@ basics_ratings = ratings.join(basics, "tconst")
 
 expr = (
    basics_ratings.group_by("title_type")
-   .agg(kurt=lambda t: kurtosis(t.num_votes))
+   .agg(kurt=kurtosis(_.num_votes))
    .order_by(_.kurt.desc())
    .head()
 )
@@ -254,7 +257,7 @@ Similarly for window functions:
 ```{python}
 expr = (
    basics_ratings.mutate(
-      kurt=lambda t: kurtosis(t.num_votes).over(group_by="title_type")
+      kurt=kurtosis(_.num_votes).over(group_by="title_type")
    )
    .relocate("kurt", after="tconst")
    .filter(
