@@ -4,7 +4,7 @@ import ast
 import atexit
 import glob
 import json
-from contextlib import closing, suppress
+from contextlib import closing, contextmanager, suppress
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -578,6 +578,75 @@ class Backend(BaseBackend, CanCreateDatabase):
                 **kwargs,
             )
         return table
+
+    @contextmanager
+    def _temp_setting(self, key: str, value: Any):
+        with closing(self.raw_sql(f"SHOW SETTINGS LIKE '{key}'")) as results:
+            [(_, _, curvalue)] = results.result_rows
+        self.raw_sql(f"SET {key} = {value!r}")
+        try:
+            yield
+        finally:
+            self.raw_sql(f"SET {key} = {curvalue!r}")
+
+    @util.experimental
+    def read_json(
+        self, path: str | Path, table_name: str | None = None, **kwargs
+    ) -> ir.Table:
+        """Read newline-delimited JSON into an ibis table.
+
+        Parameters
+        ----------
+        path
+            Path to a local JSON file
+        table_name
+            Optional table name
+        kwargs
+            Additional keyword arguments passed to ClickHouse
+
+        Returns
+        -------
+        Table
+            An ibis table expression
+        """
+        from clickhouse_connect.driver.tools import insert_file
+
+        paths = list(glob.glob(str(path)))
+        name = table_name or util.gen_name("read_json")
+        schema = ibis.schema({"data": "!json"})
+        with self._temp_setting("allow_experimental_object_type", 1):
+            self.create_table(
+                name, engine="MergeTree", order_by="tuple()", schema=schema, temp=True
+            )
+        for file_path in paths:
+            insert_file(
+                client=self.con,
+                table=name,
+                file_path=file_path,
+                fmt="JSONAsObject",
+                **kwargs,
+            )
+
+        query = f"DESCRIBE {name} SETTINGS describe_extend_object_types = 1"
+        with closing(self.raw_sql(query)) as results:
+            [(_, rowtype, *_)] = results.result_rows
+
+        columns = [
+            sg.cast(
+                sg.alias(
+                    sg.exp.Dot(
+                        this=sg.column("data"), expression=sg.to_identifier(col)
+                    ),
+                    col,
+                ),
+                ClickhouseType.from_ibis(typ),
+            )
+            for col, typ in ClickhouseType.from_string(rowtype).items()
+        ]
+
+        view_name = f"{name}_view"
+        self._create_temp_view(view_name, sg.select(*columns).from_(name))
+        return self.table(view_name)
 
     def read_csv(
         self,
