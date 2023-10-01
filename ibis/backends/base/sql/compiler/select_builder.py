@@ -90,6 +90,10 @@ class SelectBuilder:
             for arg in node.args:
                 if isinstance(arg, ops.TableNode):
                     self._make_table_aliases(arg)
+        elif isinstance(node, ops.JoinProjection):
+            self._make_table_aliases(node.table)
+            for arg in node.rest:
+                self._make_table_aliases(arg)
         elif not ctx.is_extracted(node):
             ctx.make_alias(node)
         else:
@@ -129,6 +133,8 @@ class SelectBuilder:
             self._collect_Join(op, toplevel=toplevel)
         elif isinstance(op, ops.WindowingTVF):
             self._collect_WindowingTVF(op, toplevel=toplevel)
+        elif isinstance(op, ops.JoinProjection):
+            self._collect_JoinProjection(op, toplevel=toplevel)
         else:
             raise NotImplementedError(type(op))
 
@@ -218,6 +224,11 @@ class SelectBuilder:
         if toplevel:
             self.table_set = op
             self.select_set = [op]
+
+    def _collect_JoinProjection(self, op, toplevel=False):
+        if toplevel:
+            self.select_set = op.selections
+            self.table_set = op
 
     def _collect_PhysicalTable(self, op, toplevel=False):
         if toplevel:

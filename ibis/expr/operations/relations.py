@@ -17,7 +17,7 @@ from ibis.common.annotations import annotated, attribute
 from ibis.common.collections import FrozenDict  # noqa: TCH001
 from ibis.common.deferred import Deferred
 from ibis.common.grounds import Concrete, Immutable
-from ibis.common.patterns import Between, Coercible, Eq
+from ibis.common.patterns import Between, Coercible, Eq, Length
 from ibis.common.typing import VarTuple  # noqa: TCH001
 from ibis.expr.operations.core import Column, Named, Node, Scalar, Value
 from ibis.expr.operations.sortkeys import SortKey  # noqa: TCH001
@@ -427,6 +427,14 @@ class Projection(Relation):
                 types.extend(schema.types)
 
         return Schema.from_tuples(zip(names, types))
+
+
+@public
+class JoinProjection(Projection):
+    table: Relation
+    rest: Annotated[VarTuple[Relation], Length(at_least=1)]
+    hows: Annotated[VarTuple[str], Length(at_least=1)]
+    predicates: Annotated[VarTuple[Value], Length(at_least=1)]
 
 
 def _add_alias(op: ops.Value | ops.TableNode):

@@ -141,7 +141,25 @@ def _table_array_view(t, op):
     # TODO: handle the case of `op.table` being a join
     first, *_ = an.find_immediate_parent_tables(op.table, keep_input=False)
     ref = ctx.get_ref(first)
-    return table.correlate_except(ref)
+
+    # TODO: it's strange that we have to introduce an alias here
+    #
+    # this suggests the compiler is not traversing scalar subqueries during
+    # alias generation
+    #
+    # yeah, it sucks, but the sqlglot compiler does not have this problem so
+    # let's leave the hack until we can send all of this code to the
+    # bin
+    if ref is None:
+        ctx.make_alias(first)
+        ref = ctx.get_ref(first)
+
+    if isinstance(ref, str):
+        result = ctx.get_compiled_expr(first).alias(ref)
+        ctx.set_ref(first, result)
+    else:
+        result = ref
+    return table.correlate_except(result)
 
 
 def _exists_subquery(t, op):

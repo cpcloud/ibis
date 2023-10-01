@@ -26,56 +26,60 @@ from ibis.backends.base.sql.compiler.base import SetOp
 
 class _AlchemyTableSetFormatter(TableSetFormatter):
     def get_result(self):
-        # Got to unravel the join stack; the nesting order could be
-        # arbitrary, so we do a depth first search and push the join tokens
-        # and predicates onto a flat list, then format them
         op = self.node
 
-        if isinstance(op, ops.Join):
-            self._walk_join_tree(op)
+        # TODO: why do i need to check for already-compiled ops?
+        # if i don't then we get cartesian products everywhere
+        ref = self.context.get_ref(op)
+        if ref is not None and not isinstance(ref, str):
+            return ref
+
+        if isinstance(op, ops.JoinProjection):
+            table = op.table
+            result = self._format_table(table)
+            self.context.set_ref(op, result)
+
+            for right, how, predicate in zip(op.rest, op.hows, op.predicates):
+                sqla_right = self._format_table(right)
+                self.context.set_ref(right, sqla_right)
+                # NB: the right side of the join **must** be compiled and
+                # cached BEFORE translating the predicate so that when the
+                # predicate looks up column names it receives a sqlalchemy
+                # table object and not a string table alias
+                onclause = self._translate(predicate)
+
+                if how == "inner":
+                    result = result.join(sqla_right, onclause)
+                elif how == "cross":
+                    result = result.join(sqla_right, sa.literal(True))
+                elif how == "left":
+                    result = result.join(sqla_right, onclause, isouter=True)
+                elif how == "right":
+                    result = sqla_right.join(result, onclause, isouter=True)
+                elif how == "outer":
+                    result = result.outerjoin(sqla_right, onclause, full=True)
+                elif how == "semi":
+                    # subquery is required for semi and anti joins done using
+                    # sqlalchemy, otherwise multiple references to the original
+                    # select are treated as distinct tables
+                    #
+                    # with a subquery, the result is a distinct table and so there's only one
+                    # thing for subsequent expressions to reference
+                    result = (
+                        result.select()
+                        .where(sa.exists(sa.select(1).where(onclause)))
+                        .subquery()
+                    )
+                elif how == "anti":
+                    result = (
+                        result.select()
+                        .where(~sa.exists(sa.select(1).where(onclause)))
+                        .subquery()
+                    )
+                else:
+                    raise NotImplementedError(f"join type `{how}` not supported")
         else:
-            self.join_tables.append(self._format_table(op))
-
-        result = self.join_tables[0]
-        for jtype, table, preds in zip(
-            self.join_types, self.join_tables[1:], self.join_predicates
-        ):
-            if preds:
-                sqla_preds = [self._translate(pred) for pred in preds]
-                onclause = functools.reduce(sql.and_, sqla_preds)
-            else:
-                onclause = None
-
-            if jtype is ops.InnerJoin:
-                result = result.join(table, onclause)
-            elif jtype is ops.CrossJoin:
-                result = result.join(table, sa.literal(True))
-            elif jtype is ops.LeftJoin:
-                result = result.join(table, onclause, isouter=True)
-            elif jtype is ops.RightJoin:
-                result = table.join(result, onclause, isouter=True)
-            elif jtype is ops.OuterJoin:
-                result = result.outerjoin(table, onclause, full=True)
-            elif jtype is ops.LeftSemiJoin:
-                # subquery is required for semi and anti joins done using
-                # sqlalchemy, otherwise multiple references to the original
-                # select are treated as distinct tables
-                #
-                # with a subquery, the result is a distinct table and so there's only one
-                # thing for subsequent expressions to reference
-                result = (
-                    result.select()
-                    .where(sa.exists(sa.select(1).where(onclause)))
-                    .subquery()
-                )
-            elif jtype is ops.LeftAntiJoin:
-                result = (
-                    result.select()
-                    .where(~sa.exists(sa.select(1).where(onclause)))
-                    .subquery()
-                )
-            else:
-                raise NotImplementedError(jtype)
+            result = self._format_table(op)
 
         self.context.set_ref(op, result)
         return result

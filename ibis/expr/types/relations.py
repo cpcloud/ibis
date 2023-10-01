@@ -35,6 +35,18 @@ if TYPE_CHECKING:
 
 _ALIASES = (f"_ibis_view_{n:d}" for n in itertools.count())
 
+How = Literal[
+    "inner",
+    "left",
+    "outer",
+    "right",
+    "semi",
+    "anti",
+    "any_inner",
+    "any_left",
+    "left_semi",
+]
+
 
 def _ensure_expr(table, expr):
     from ibis.selectors import Selector
@@ -53,19 +65,7 @@ def _ensure_expr(table, expr):
         return literal(expr)
 
 
-def _regular_join_method(
-    name: str,
-    how: Literal[
-        "inner",
-        "left",
-        "outer",
-        "right",
-        "semi",
-        "anti",
-        "any_inner",
-        "any_left",
-    ],
-):
+def _regular_join_method(name: str, how: How):
     def f(  # noqa: D417
         self: Table,
         right: Table,
@@ -2723,17 +2723,7 @@ class Table(Expr, _FixedTextJupyterMixin):
         | Sequence[
             str | tuple[str | ir.Column, str | ir.Column] | ir.BooleanColumn
         ] = (),
-        how: Literal[
-            "inner",
-            "left",
-            "outer",
-            "right",
-            "semi",
-            "anti",
-            "any_inner",
-            "any_left",
-            "left_semi",
-        ] = "inner",
+        how: How = "inner",
         *,
         lname: str = "",
         rname: str = "{name}_right",
@@ -2835,29 +2825,31 @@ class Table(Expr, _FixedTextJupyterMixin):
         │       5 │ Father of the Bride P… │ Comedy                 │ 0113041 │  11862 │
         └─────────┴────────────────────────┴────────────────────────┴─────────┴────────┘
         """
+        import pandas as pd
+        import ibis.expr.builders as bld
 
-        _join_classes = {
-            "inner": ops.InnerJoin,
-            "left": ops.LeftJoin,
-            "any_inner": ops.AnyInnerJoin,
-            "any_left": ops.AnyLeftJoin,
-            "outer": ops.OuterJoin,
-            "right": ops.RightJoin,
-            "left_semi": ops.LeftSemiJoin,
-            "semi": ops.LeftSemiJoin,
-            "anti": ops.LeftAntiJoin,
-            "cross": ops.CrossJoin,
-        }
+        if isinstance(left, Table):
+            left = left.op()
+        elif isinstance(left, pd.DataFrame):
+            left = ibis.memtable(left).op()
+        else:
+            raise com.IbisTypeError("left must be a table expression")
 
-        klass = _join_classes[how.lower()]
-        expr = klass(left, right, predicates).to_expr()
+        if isinstance(right, Table):
+            right = right.op()
+        elif isinstance(right, pd.DataFrame):
+            right = ibis.memtable(right).op()
+        else:
+            raise com.IbisTypeError("right must be a table expression")
 
-        # semi/anti join only give access to the left table's fields, so
-        # there's never overlap
-        if how in ("left_semi", "semi", "anti"):
-            return expr
-
-        return ops.relations._dedup_join_columns(expr, lname=lname, rname=rname)
+        predicate = bld._clean_join_predicates(
+            tables=(left, right),
+            predicates=util.promote_list(predicates),
+        )
+        return bld.JoinBuilder(
+            left,
+            (bld.JoinFragment(right=right, how=how.lower(), predicate=predicate),),
+        )
 
     def asof_join(
         left: Table,

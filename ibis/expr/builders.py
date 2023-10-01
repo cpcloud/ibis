@@ -1,28 +1,212 @@
 from __future__ import annotations
 
+import contextlib
+import functools
 import math
+import operator
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import ibis
+import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.rules as rlz
 import ibis.expr.types as ir
 from ibis import util
-from ibis.common.annotations import annotated
-from ibis.common.deferred import Deferred, Resolver, deferrable
+from ibis.common.annotations import annotated, attribute
+from ibis.common.deferred import Deferred, deferrable
 from ibis.common.exceptions import IbisInputError
 from ibis.common.grounds import Concrete
-from ibis.common.typing import VarTuple  # noqa: TCH001
+from ibis.common.typing import VarTuple  # noqa: TCH001  # noqa: TCH001
+from ibis.expr.operations.core import Value
 from ibis.expr.operations.relations import Relation  # noqa: TCH001
 from ibis.expr.types.relations import bind_expr
 
 if TYPE_CHECKING:
     from typing_extensions import Self
 
+    from ibis.common.deferred import Resolver
+
 
 class Builder(Concrete):
     pass
+
+
+def _find_in_tables(key, tables):
+    keys = {ops.TableColumn(table, key) for table in tables if key in table.schema}
+    if len(keys) > 1:
+        raise com.RelationError(f"Ambiguous reference to column name {key!r}")
+    elif not keys:
+        raise com.RelationError(f"Column {key!r} not found in any joined tables")
+    return keys.pop()
+
+
+def _resolve(tables, deferred):
+    keys = set()
+
+    for table in tables:
+        with contextlib.suppress(com.IbisError):
+            keys.add(deferred.resolve(table.to_expr()))
+
+    if len(keys) > 1:
+        # XXX: better error message
+        raise com.RelationError("Deferred expression is ambiguous")
+    elif not keys:
+        # XXX: better error message
+        raise com.RelationError("Deferred expression cannot be resolved")
+    return keys.pop().op()
+
+
+def _clean_join_predicates(tables, predicates):
+    import ibis.expr.analysis as an
+    import ibis.expr.types as ir
+
+    result = []
+
+    *all_but_last, last = tables
+    for pred in predicates:
+        if isinstance(pred, tuple):  # t.join(s, [("a", "b")])
+            if len(pred) != 2:
+                raise com.ExpressionError("Join key tuple must be length 2")
+            lk, rk = pred
+            lk = _find_in_tables(lk, all_but_last)
+            rk = _find_in_tables(rk, [last])
+            pred = ops.Equals(lk, rk)
+        elif isinstance(pred, str):  # t.join(s, ["a"])
+            lk = _find_in_tables(pred, all_but_last)
+            rk = _find_in_tables(pred, [last])
+            pred = ops.Equals(lk, rk)
+        elif pred is True or pred is False:  # t.join(s, True)
+            pred = ops.Literal(pred, dtype="bool")
+        elif isinstance(pred, Value):  # t.join(s, arbitrary_predicate_expression)
+            pass
+        elif isinstance(pred, Deferred):
+            # t.join(s, t.a == _.b)
+            #
+            # deferred is resolved against the left set of tables
+            #
+            # the right isn't included because it should already be present in
+            # the deferred expression as a **non**-deferred expression
+            pred = _resolve(all_but_last, pred)
+        elif not isinstance(pred, ir.Expr):
+            raise NotImplementedError(type(pred))
+        else:
+            pred = pred.op()
+
+        assert isinstance(pred, ops.Node), type(pred)
+
+        if not pred.dtype.is_boolean():
+            raise com.ExpressionError("Join predicate must be a boolean expression")
+
+        result.extend(an.flatten_predicate(pred))
+
+    assert all(isinstance(pred, ops.Node) for pred in result)
+
+    return functools.reduce(ops.And, result)
+
+
+class JoinFragment(Concrete):
+    right: ops.Relation
+    how: str
+    predicate: ops.Value
+
+
+class JoinBuilder(Builder):
+    first: ops.Relation
+    rest: VarTuple[JoinFragment]
+
+    def __getattr__(self, name: str):
+        return getattr(self.finish(), name)
+
+    def __getitem__(self, key):
+        if isinstance(key, (tuple, list)):
+            return self.select(*key)
+        return self.finish().__getitem__(key)
+
+    def finish(self) -> ir.Table:
+        rest, hows, predicates = [], [], []
+
+        for obj in self.rest:
+            rest.append(obj.right)
+            hows.append(obj.how)
+            predicates.append(obj.predicate)
+
+        return ops.JoinProjection(
+            table=self.first,
+            # select everything, because the user asked us to
+            selections=tuple(
+                ops.TableColumn(table, name)
+                for table in (self.first, *rest)
+                for name in table.schema.names
+            ),
+            rest=rest,
+            hows=hows,
+            predicates=predicates,
+        ).to_expr()
+
+    def __repr__(self):
+        return self.finish().__repr__()
+
+    @attribute
+    def tables(self) -> VarTuple[ops.Relation]:
+        return (self.first, *map(operator.attrgetter("right"), self.rest))
+
+    def join(
+        self,
+        right,
+        predicates,
+        how: str = "inner",
+        lname: str = "",
+        rname: str = "{name}_right",
+    ) -> Self:
+        predicate = _clean_join_predicates(
+            tables=(*self.tables, right), predicates=util.promote_list(predicates)
+        )
+        return self.__class__(
+            self.first,
+            rest=(*self.rest, JoinFragment(right=right, how=how, predicate=predicate)),
+        )
+
+    def select(self, col, *cols):
+        import ibis.expr.analysis as an
+
+        rest, hows, predicates = [], [], []
+
+        for obj in self.rest:
+            rest.append(obj.right)
+            hows.append(obj.how)
+            predicates.append(obj.predicate)
+
+        newcols = []
+        tables = self.tables
+        table_set = frozenset(tables)
+
+        for expr in (col, *cols):
+            if isinstance(expr, str):
+                new_op = _find_in_tables(expr, tables)
+            elif isinstance(expr, Deferred):
+                new_op = _resolve(tables, expr)
+            else:
+                new_op = expr.op()
+                for col in an.find_toplevel_columns(new_op):
+                    if col.table not in table_set:
+                        new_base_col = _find_in_tables(col.name, tables)
+                        new_op = an.sub_for(new_op, {col: new_base_col})
+
+            newcols.append(new_op.to_expr())
+
+        return ops.JoinProjection(
+            table=self.first,
+            selections=newcols,
+            rest=rest,
+            hows=hows,
+            predicates=predicates,
+        ).to_expr()
+
+
+class CaseBuilder(Builder):
+    results: VarTuple[Value] = ()
+    default: Optional[ops.Value] = None
 
 
 @deferrable(repr="<case>")

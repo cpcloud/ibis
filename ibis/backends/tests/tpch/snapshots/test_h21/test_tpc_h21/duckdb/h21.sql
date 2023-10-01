@@ -31,20 +31,20 @@ FROM (
       EXISTS(
         SELECT
           CAST(1 AS TINYINT) AS anon_1
-        FROM main.lineitem AS t2
+        FROM main.lineitem AS t6
         WHERE
-          t2.l_orderkey = t0.l1_orderkey AND t2.l_suppkey <> t0.l1_suppkey
+          t6.l_orderkey = t0.l1_orderkey AND t6.l_suppkey <> t0.l1_suppkey
       )
     )
     AND NOT (
       EXISTS(
         SELECT
           CAST(1 AS TINYINT) AS anon_2
-        FROM main.lineitem AS t2
+        FROM main.lineitem AS t6
         WHERE
-          t2.l_orderkey = t0.l1_orderkey
-          AND t2.l_suppkey <> t0.l1_suppkey
-          AND t2.l_receiptdate > t2.l_commitdate
+          t6.l_orderkey = t0.l1_orderkey
+          AND t6.l_suppkey <> t0.l1_suppkey
+          AND t6.l_receiptdate > t6.l_commitdate
       )
     )
   GROUP BY

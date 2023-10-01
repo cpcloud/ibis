@@ -1,4 +1,4 @@
-WITH t1 AS (
+WITH t3 AS (
   SELECT
     t7."S_SUPPKEY" AS "s_suppkey",
     t7."S_NAME" AS "s_name",
@@ -27,7 +27,7 @@ WITH t1 AS (
     t7."L_SHIPMODE" AS "l_shipmode",
     t7."L_COMMENT" AS "l_comment"
   FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM" AS t7
-), t2 AS (
+), t4 AS (
   SELECT
     t7."O_ORDERKEY" AS "o_orderkey",
     t7."O_CUSTKEY" AS "o_custkey",
@@ -39,7 +39,7 @@ WITH t1 AS (
     t7."O_SHIPPRIORITY" AS "o_shippriority",
     t7."O_COMMENT" AS "o_comment"
   FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."ORDERS" AS t7
-), t3 AS (
+), t2 AS (
   SELECT
     t7."C_CUSTKEY" AS "c_custkey",
     t7."C_NAME" AS "c_name",
@@ -50,7 +50,7 @@ WITH t1 AS (
     t7."C_MKTSEGMENT" AS "c_mktsegment",
     t7."C_COMMENT" AS "c_comment"
   FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."CUSTOMER" AS t7
-), t4 AS (
+), t1 AS (
   SELECT
     t7."N_NATIONKEY" AS "n_nationkey",
     t7."N_NAME" AS "n_name",
@@ -59,7 +59,7 @@ WITH t1 AS (
   FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."NATION" AS t7
 ), t5 AS (
   SELECT
-    t4."n_name" AS "supp_nation",
+    t1."n_name" AS "supp_nation",
     t7."n_name" AS "cust_nation",
     t0."l_shipdate" AS "l_shipdate",
     t0."l_extendedprice" AS "l_extendedprice",
@@ -68,17 +68,17 @@ WITH t1 AS (
     t0."l_extendedprice" * (
       1 - t0."l_discount"
     ) AS "volume"
-  FROM t1
+  FROM t3
   JOIN t0
-    ON t1."s_suppkey" = t0."l_suppkey"
-  JOIN t2
-    ON t2."o_orderkey" = t0."l_orderkey"
-  JOIN t3
-    ON t3."c_custkey" = t2."o_custkey"
+    ON t3."s_suppkey" = t0."l_suppkey"
   JOIN t4
-    ON t1."s_nationkey" = t4."n_nationkey"
-  JOIN t4 AS t7
-    ON t3."c_nationkey" = t7."n_nationkey"
+    ON t4."o_orderkey" = t0."l_orderkey"
+  JOIN t2
+    ON t2."c_custkey" = t4."o_custkey"
+  JOIN t1
+    ON t3."s_nationkey" = t1."n_nationkey"
+  JOIN t1 AS t7
+    ON t2."c_nationkey" = t7."n_nationkey"
 )
 SELECT
   t6."supp_nation",
