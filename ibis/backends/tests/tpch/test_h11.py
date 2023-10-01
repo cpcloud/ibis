@@ -31,6 +31,6 @@ def test_tpc_h11(partsupp, supplier, nation):
 
     gq = q.group_by([q.ps_partkey])
     q = gq.aggregate(value=(q.ps_supplycost * q.ps_availqty).sum())
-    q = q.filter([q.value > innerq.total * FRACTION])
+    q = q.filter([q.value > innerq.to_array() * FRACTION])
     q = q.order_by(ibis.desc(q.value))
     return q

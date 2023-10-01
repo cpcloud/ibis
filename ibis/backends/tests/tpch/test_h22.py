@@ -30,7 +30,8 @@ def test_tpc_h22(customer, orders):
     custsale = customer.filter(
         [
             customer.c_phone.substr(0, 2).isin(COUNTRY_CODES),
-            customer.c_acctbal > q.avg_bal,
+            # TODO: figure out how to bring back q.avg_bal
+            customer.c_acctbal > q.to_array(),
             ~(orders.o_custkey == customer.c_custkey).any(),
         ]
     )
