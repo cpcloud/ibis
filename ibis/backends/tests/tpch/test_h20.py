@@ -32,7 +32,7 @@ def test_tpc_h20(supplier, nation, partsupp, part, lineitem):
 
     q2 = q2.filter(
         [
-            partsupp.ps_partkey.isin(q3[["p_partkey"]].to_array()),
+            partsupp.ps_partkey.isin(q3.p_partkey),
             partsupp.ps_availqty > 0.5 * q4.l_quantity.sum(),
         ]
     )
