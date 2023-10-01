@@ -37,14 +37,14 @@ def test_tpc_h08(part, supplier, region, lineitem, orders, customer, nation):
     q = q.join(region, n1.n_regionkey == region.r_regionkey)
     q = q.join(n2, supplier.s_nationkey == n2.n_nationkey)
 
-    q = q[
+    q = q.select(
         orders.o_orderdate.year().name("o_year"),
         (lineitem.l_extendedprice * (1 - lineitem.l_discount)).name("volume"),
         n2.n_name.name("nation"),
         region.r_name,
         orders.o_orderdate,
         part.p_type,
-    ]
+    )
 
     q = q.filter(
         [

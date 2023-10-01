@@ -21,7 +21,7 @@ def test_tpc_h07(supplier, lineitem, orders, customer, nation):
     q = q.join(n1, supplier.s_nationkey == n1.n_nationkey)
     q = q.join(n2, customer.c_nationkey == n2.n_nationkey)
 
-    q = q[
+    q = q.select(
         n1.n_name.name("supp_nation"),
         n2.n_name.name("cust_nation"),
         lineitem.l_shipdate,
@@ -29,7 +29,7 @@ def test_tpc_h07(supplier, lineitem, orders, customer, nation):
         lineitem.l_discount,
         lineitem.l_shipdate.year().name("l_year"),
         (lineitem.l_extendedprice * (1 - lineitem.l_discount)).name("volume"),
-    ]
+    )
 
     q = q.filter(
         [
