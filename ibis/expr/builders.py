@@ -151,14 +151,7 @@ class JoinBuilder(Builder):
     def tables(self) -> VarTuple[ops.Relation]:
         return (self.first, *map(operator.attrgetter("right"), self.rest))
 
-    def join(
-        self,
-        right,
-        predicates,
-        how: str = "inner",
-        lname: str = "",
-        rname: str = "{name}_right",
-    ) -> Self:
+    def join(self, right, predicates, how: str = "inner") -> Self:
         predicate = _clean_join_predicates(
             tables=(*self.tables, right), predicates=util.promote_list(predicates)
         )
