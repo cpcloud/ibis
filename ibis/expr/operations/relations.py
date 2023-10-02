@@ -431,7 +431,6 @@ class Projection(Relation):
 
 @public
 class JoinProjection(Projection):
-    table: Relation
     rest: Annotated[VarTuple[Relation], Length(at_least=1)]
     hows: Annotated[VarTuple[str], Length(at_least=1)]
     predicates: Annotated[VarTuple[Value], Length(at_least=1)]

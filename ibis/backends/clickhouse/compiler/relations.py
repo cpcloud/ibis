@@ -31,50 +31,24 @@ def _database_table(op: ops.DatabaseTable, *, name, namespace, **_):
     return sg.table(name, db=namespace.schema, catalog=namespace.database)
 
 
-def replace_tables_with_star_selection(node, alias=None):
+def replace_tables_with_star_selection(node, alias: str | None = None):
     if isinstance(node, (sg.exp.Subquery, sg.exp.Table, sg.exp.CTE)):
-        return sg.exp.Column(
-            this=STAR,
-            table=sg.to_identifier(alias if alias is not None else node.alias_or_name),
-        )
+        if alias is None:
+            alias = node.alias_or_name
+        return sg.exp.Column(this=STAR, table=sg.to_identifier(alias))
     return node
 
 
 @translate_rel.register
 def _selection(op: ops.Selection, *, table, selections, predicates, sort_keys, **_):
-    # needs_alias should never be true here in explicitly, but it may get
-    # passed via a (recursive) call to translate_val
-    if isinstance(op.table, ops.Join) and not isinstance(
-        op.table, (ops.LeftSemiJoin, ops.LeftAntiJoin)
-    ):
-        args = table.this.args
-        from_ = args["from"]
-        (join,) = args["joins"]
-    else:
-        from_ = join = None
-
     alias = table.alias_or_name
     selections = tuple(
-        replace_tables_with_star_selection(
-            node,
-            # replace the table name with the alias if the table is **not** a
-            # join, because we may be selecting from a subquery or an aliased
-            # table; otherwise we'll select from the _unaliased_ table or the
-            # _child_ table, which may have a different alias than the one we
-            # generated for the input table
-            alias if from_ is None and join is None else None,
-        )
-        for node in selections
+        replace_tables_with_star_selection(node, alias) for node in selections
     ) or (STAR,)
 
-    sel = sg.select(*selections).from_(from_ if from_ is not None else table)
-
-    if join is not None:
-        sel = sel.join(join)
+    sel = sg.select(*selections).from_(table)
 
     if predicates:
-        if join is not None:
-            sel = sg.select(STAR).from_(sel.subquery(alias))
         sel = sel.where(*predicates)
 
     if sort_keys:
@@ -107,40 +81,28 @@ def _aggregation(
     return sel
 
 
-_JOIN_TYPES = {
-    ops.InnerJoin: "INNER",
-    ops.AnyInnerJoin: "ANY",
-    ops.LeftJoin: "LEFT OUTER",
-    ops.AnyLeftJoin: "LEFT ANY",
-    ops.RightJoin: "RIGHT OUTER",
-    ops.OuterJoin: "FULL OUTER",
-    ops.CrossJoin: "CROSS",
-    ops.LeftSemiJoin: "LEFT SEMI",
-    ops.LeftAntiJoin: "LEFT ANTI",
-    ops.AsOfJoin: "LEFT ASOF",
+_CLICKHOUSE_JOIN_TYPES = {
+    "any_left": "LEFT ANY",
+    "any_inner": "ANY",
+    "left_semi": "SEMI",
+    "asof": "LEFT ASOF",
 }
 
 
 @translate_rel.register
-def _join(op: ops.Join, *, left, right, predicates, **_):
-    on = sg.and_(*predicates) if predicates else None
-    join_type = _JOIN_TYPES[type(op)]
-    try:
-        # dialect must be passed to allow clickhouse's ANY/LEFT ANY/ASOF joins
-        return left.join(right, join_type=join_type, on=on, dialect="clickhouse")
-    except AttributeError:
-        select_args = [f"{left.alias_or_name}.*"]
-
-        # select from both the left and right side of the join if the join
-        # is not a filtering join (semi join or anti join); filtering joins
-        # only return the left side columns
-        if not isinstance(op, (ops.LeftSemiJoin, ops.LeftAntiJoin)):
-            select_args.append(f"{right.alias_or_name}.*")
-        return (
-            sg.select(*select_args)
-            .from_(left)
-            .join(right, join_type=join_type, on=on, dialect="clickhouse")
+def _join(op: ops.JoinProjection, *, table, selections, rest, hows, predicates, **_):
+    selections = tuple(
+        replace_tables_with_star_selection(node) for node in selections
+    ) or (STAR,)
+    result = sg.select(*selections).from_(table)
+    for right, how, predicate in zip(rest, hows, predicates):
+        result = result.join(
+            right,
+            join_type=_CLICKHOUSE_JOIN_TYPES.get(how, how),
+            on=predicate,
+            dialect="clickhouse",
         )
+    return result
 
 
 @translate_rel.register
