@@ -113,7 +113,7 @@ class JoinFragment(Concrete):
 
 class JoinBuilder(Builder):
     first: ops.Relation
-    rest: VarTuple[JoinFragment]
+    rest: VarTuple[JoinFragment] = ()
 
     def __getattr__(self, name: str):
         return getattr(self.finish(), name)
@@ -145,7 +145,7 @@ class JoinBuilder(Builder):
         ).to_expr()
 
     def __repr__(self):
-        return self.finish().__repr__()
+        return repr(self.finish())
 
     @attribute
     def tables(self) -> VarTuple[ops.Relation]:
