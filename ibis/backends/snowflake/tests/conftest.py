@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 import pyarrow.parquet as pq
 import pytest
+import snowflake.connector
 import sqlalchemy as sa
 import sqlglot as sg
+import tomli
 
 import ibis
 from ibis.backends.conftest import TEST_TABLES
@@ -20,10 +22,16 @@ if TYPE_CHECKING:
 
     from ibis.backends.base import BaseBackend
 
+CONNECTIONS_FILE_PATH = snowflake.connector.config_manager.CONNECTIONS_FILE
+CONNECTION_NAME = os.environ.get("SNOWFLAKE_DEFAULT_CONNECTION_NAME")
+SNOWFLAKE_URL = os.environ.get("SNOWFLAKE_URL")
+
 
 def _get_url():
-    if (url := os.environ.get("SNOWFLAKE_URL")) is not None:
-        return url
+    if SNOWFLAKE_URL is not None:
+        return SNOWFLAKE_URL
+    elif CONNECTIONS_FILE_PATH is not None and CONNECTION_NAME is not None:
+        return "snowflake://"
     else:
         try:
             user, password, account, database, schema, warehouse = tuple(
@@ -98,12 +106,26 @@ class TestConf(BackendTest, RoundAwayFromZero):
         snowflake_url = _get_url()
 
         raw_url = sa.engine.make_url(snowflake_url)
-        _, schema = raw_url.database.rsplit("/", 1)
-        url = raw_url.set(database="")
-        con = sa.create_engine(
-            url, connect_args={"session_parameters": {"MULTI_STATEMENT_COUNT": "0"}}
-        )
+        if raw_url.database is not None:
+            _, schema = raw_url.database.rsplit("/", 1)
+            url = raw_url.set(database="")
+        else:
+            url = raw_url
+            schema = None
 
+        connect_args = {"session_parameters": {"MULTI_STATEMENT_COUNT": "0"}}
+
+        if CONNECTIONS_FILE_PATH is not None and CONNECTION_NAME is not None:
+            connect_args["connections_file_path"] = CONNECTIONS_FILE_PATH
+            connect_args["connection_name"] = CONNECTION_NAME
+            with CONNECTIONS_FILE_PATH.open(mode="rb") as f:
+                connect_args["schema"] = schema = tomli.load(f)[CONNECTION_NAME][
+                    "schema"
+                ]
+
+        con = sa.create_engine(url, connect_args=connect_args)
+
+        assert schema is not None
         dbschema = f"ibis_testing.{schema}"
 
         with con.begin() as c:

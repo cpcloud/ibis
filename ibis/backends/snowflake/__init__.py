@@ -46,7 +46,7 @@ with warnings.catch_warnings():
             message="You have an incompatible version of 'pyarrow' installed",
             category=UserWarning,
         )
-    from snowflake.sqlalchemy import ARRAY, DOUBLE, OBJECT, URL
+    from snowflake.sqlalchemy import ARRAY, DOUBLE, OBJECT
 
     from ibis.backends.snowflake.converter import SnowflakePandasData
     from ibis.backends.snowflake.datatypes import SnowflakeType
@@ -172,9 +172,9 @@ $$ {defn["source"]} $$"""
 
     def do_connect(
         self,
-        user: str,
-        account: str,
-        database: str,
+        user: str | None = None,
+        account: str | None = None,
+        database: str | None = None,
         password: str | None = None,
         authenticator: str | None = None,
         connect_args: Mapping[str, Any] | None = None,
@@ -186,16 +186,22 @@ $$ {defn["source"]} $$"""
         Parameters
         ----------
         user
-            Username
+            Username. Can be `None` if authenticator or `connections_file_path`
+            and `connection_name` are passed.
         account
-            A Snowflake organization ID and a Snowflake user ID, separated by a hyphen.
-            Note that a Snowflake user ID is a separate identifier from a username.
-            See https://ibis-project.org/backends/Snowflake/ for details
+            A Snowflake organization ID and a Snowflake user ID, separated by a
+            hyphen. Note that a Snowflake user ID is a separate identifier from
+            a username. See https://ibis-project.org/backends/Snowflake/ for
+            details. Can be `None` if authenticator or `connections_file_path`
+            and `connection_name` are passed.
         database
             A Snowflake database and a Snowflake schema, separated by a `/`.
-            See https://ibis-project.org/backends/Snowflake/ for details
+            See https://ibis-project.org/backends/Snowflake/ for details. Can
+            be `None` if authenticator or `connections_file_path` and
+            `connection_name` are passed.
         password
-            Password. If empty or `None` then `authenticator` must be passed.
+            Password. If empty or `None` then `authenticator` or
+            `connections_file_path` and `connection_name` must be passed.
         authenticator
             String indicating authentication method. See
             https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-example#connecting-with-oauth
@@ -215,22 +221,49 @@ $$ {defn["source"]} $$"""
             See https://docs.snowflake.com/en/developer-guide/python-connector/sqlalchemy#additional-connection-parameters
             for more details
         """
-        dbparams = dict(zip(("database", "schema"), database.split("/", 1)))
-        if dbparams.get("schema") is None:
-            raise ValueError(
-                "Schema must be non-None. Pass the schema as part of the "
-                f"database e.g., {dbparams['database']}/my_schema"
-            )
+        if database is not None:
+            dbparams = dict(zip(("database", "schema"), database.split("/", 1)))
+            if dbparams.get("schema") is None:
+                raise ValueError(
+                    "Schema must be non-None. Pass the schema as part of the "
+                    f"database e.g., {dbparams['database']}/my_schema"
+                )
+        else:
+            dbparams = {}
 
         # snowflake-connector-python does not handle `None` for password, but
         # accepts the empty string
-        url = URL(
-            account=account, user=user, password=password or "", **dbparams, **kwargs
-        )
+
         if connect_args is None:
             connect_args = {}
 
+        if account is not None:
+            connect_args["account"] = account
+        if user is not None:
+            connect_args["user"] = user
+        if password is not None:
+            connect_args["password"] = password or ""
+
+        connect_args.update(dbparams)
+        connect_args.update(kwargs)
+
         session_parameters = connect_args.setdefault("session_parameters", {})
+
+        if (
+            connections_file_path := os.environ.get("SNOWFLAKE_CONNECTIONS")
+        ) is not None:
+            connect_args.setdefault(
+                "connections_file_path", Path(connections_file_path)
+            )
+        elif (snowflake_home := os.environ.get("SNOWFLAKE_HOME")) is not None:
+            connect_args.setdefault(
+                "connections_file_path", Path(snowflake_home) / "connections.toml"
+            )
+
+        if (
+            connection_name := os.environ.get("SNOWFLAKE_DEFAULT_CONNECTION_NAME")
+        ) is not None:
+            connect_args.setdefault("connection_name", connection_name)
 
         # enable multiple SQL statements by default
         session_parameters.setdefault("MULTI_STATEMENT_COUNT", "0")
@@ -254,7 +287,7 @@ $$ {defn["source"]} $$"""
             connect_args.setdefault("authenticator", authenticator)
 
         engine = sa.create_engine(
-            url, connect_args=connect_args, poolclass=sa.pool.StaticPool
+            "snowflake://", connect_args=connect_args, poolclass=sa.pool.StaticPool
         )
 
         @sa.event.listens_for(engine, "connect")
