@@ -50,6 +50,8 @@ class Example(Concrete):
             if path.endswith(".parquet"):
                 return backend.read_parquet(path, table_name=table_name)
             else:
+                if backend.name == "duckdb":
+                    return backend.read_csv(path, table_name=table_name, parallel=False)
                 return backend.read_csv(path, table_name=table_name)
         else:
             if path.endswith(".parquet"):
