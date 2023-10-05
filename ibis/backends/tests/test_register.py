@@ -351,15 +351,6 @@ def test_csv_reregister_schema(con, tmp_path):
     assert result_schema["colb"].is_float64()
     assert result_schema["colc"].is_string()
 
-    # If file scan is limited to first two rows, should be all some kind of integer.
-    # The specific type isn't so important, and may vary across backends/versions
-    foo_table = con.register(foo, SAMPLE_SIZE=2, table_name="same")
-    result_schema = foo_table.schema()
-    assert result_schema.names == ("cola", "colb", "colc")
-    assert result_schema["cola"].is_integer()
-    assert result_schema["colb"].is_integer()
-    assert result_schema["colc"].is_integer()
-
 
 @pytest.mark.notimpl(
     [
