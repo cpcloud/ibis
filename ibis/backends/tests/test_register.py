@@ -308,10 +308,6 @@ def test_register_pyarrow_tables(con):
     assert t.x.sum().execute() == 6
 
 
-@pytest.mark.broken(
-    ["polars"], reason="it's working but polars infers the int column as 32"
-)
-@pytest.mark.notimpl(["datafusion"])
 @pytest.mark.notyet(
     [
         "bigquery",
@@ -322,7 +318,6 @@ def test_register_pyarrow_tables(con):
         "mysql",
         "pandas",
         "postgres",
-        "pyspark",
         "snowflake",
         "sqlite",
         "trino",
