@@ -658,26 +658,29 @@ class Value(Expr):
         >>> import ibis
         >>> ibis.options.interactive = True
         >>> t = ibis.examples.penguins.fetch()
-        >>> t.island.value_counts()
+        >>> t.island.value_counts().order_by(ibis.desc("island_count"))
         ┏━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
         ┃ island    ┃ island_count ┃
         ┡━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
         │ string    │ int64        │
         ├───────────┼──────────────┤
+        │ Biscoe    │          168 │
         │ Dream     │          124 │
         │ Torgersen │           52 │
-        │ Biscoe    │          168 │
         └───────────┴──────────────┘
-        >>> t.island.substitute({"Torgersen": "torg", "Biscoe": "bisc"}).value_counts()
-        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-        ┃ SimpleCase(island, island) ┃ SimpleCase(island, island)_count ┃
-        ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-        │ string                     │ int64                            │
-        ├────────────────────────────┼──────────────────────────────────┤
-        │ Dream                      │                              124 │
-        │ bisc                       │                              168 │
-        │ torg                       │                               52 │
-        └────────────────────────────┴──────────────────────────────────┘
+        >>> mapping = {"Torgersen": "torg", "Biscoe": "bisc"}
+        >>> t.island.substitute(mapping).name("island").value_counts().order_by(
+        ...     "island_count"
+        ... )
+        ┏━━━━━━━━┳━━━━━━━━━━━━━━┓
+        ┃ island ┃ island_count ┃
+        ┡━━━━━━━━╇━━━━━━━━━━━━━━┩
+        │ string │ int64        │
+        ├────────┼──────────────┤
+        │ torg   │           52 │
+        │ Dream  │          124 │
+        │ bisc   │          168 │
+        └────────┴──────────────┘
         """
         expr = self.case()
         if isinstance(value, dict):
