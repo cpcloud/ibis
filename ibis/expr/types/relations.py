@@ -1044,68 +1044,68 @@ class Table(Expr, _FixedTextJupyterMixin):
         >>> import ibis.selectors as s
         >>> ibis.options.interactive = True
         >>> t = ex.penguins.fetch()
-        >>> t
-        ┏━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━┓
-        ┃ species ┃ island    ┃ bill_length_mm ┃ bill_depth_mm ┃ flipper_length_mm ┃ … ┃
-        ┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━┩
-        │ string  │ string    │ float64        │ float64       │ int64             │ … │
-        ├─────────┼───────────┼────────────────┼───────────────┼───────────────────┼───┤
-        │ Adelie  │ Torgersen │           39.1 │          18.7 │               181 │ … │
-        │ Adelie  │ Torgersen │           39.5 │          17.4 │               186 │ … │
-        │ Adelie  │ Torgersen │           40.3 │          18.0 │               195 │ … │
-        │ Adelie  │ Torgersen │            nan │           nan │              NULL │ … │
-        │ Adelie  │ Torgersen │           36.7 │          19.3 │               193 │ … │
-        │ Adelie  │ Torgersen │           39.3 │          20.6 │               190 │ … │
-        │ Adelie  │ Torgersen │           38.9 │          17.8 │               181 │ … │
-        │ Adelie  │ Torgersen │           39.2 │          19.6 │               195 │ … │
-        │ Adelie  │ Torgersen │           34.1 │          18.1 │               193 │ … │
-        │ Adelie  │ Torgersen │           42.0 │          20.2 │               190 │ … │
-        │ …       │ …         │              … │             … │                 … │ … │
-        └─────────┴───────────┴────────────────┴───────────────┴───────────────────┴───┘
+        >>> t.order_by(t.columns)
+        ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━┓
+        ┃ species ┃ island ┃ bill_length_mm ┃ bill_depth_mm ┃ flipper_length_mm ┃ … ┃
+        ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━┩
+        │ string  │ string │ float64        │ float64       │ int64             │ … │
+        ├─────────┼────────┼────────────────┼───────────────┼───────────────────┼───┤
+        │ Adelie  │ Biscoe │           34.5 │          18.1 │               187 │ … │
+        │ Adelie  │ Biscoe │           35.0 │          17.9 │               190 │ … │
+        │ Adelie  │ Biscoe │           35.0 │          17.9 │               192 │ … │
+        │ Adelie  │ Biscoe │           35.3 │          18.9 │               187 │ … │
+        │ Adelie  │ Biscoe │           35.5 │          16.2 │               195 │ … │
+        │ Adelie  │ Biscoe │           35.7 │          16.9 │               185 │ … │
+        │ Adelie  │ Biscoe │           35.9 │          19.2 │               189 │ … │
+        │ Adelie  │ Biscoe │           36.4 │          17.1 │               184 │ … │
+        │ Adelie  │ Biscoe │           36.5 │          16.6 │               181 │ … │
+        │ Adelie  │ Biscoe │           37.6 │          17.0 │               185 │ … │
+        │ …       │ …      │              … │             … │                 … │ … │
+        └─────────┴────────┴────────────────┴───────────────┴───────────────────┴───┘
 
         Compute the distinct rows of a subset of columns
 
-        >>> t[["species", "island"]].distinct()
+        >>> t[["species", "island"]].distinct().order_by(["species", "island"])
         ┏━━━━━━━━━━━┳━━━━━━━━━━━┓
         ┃ species   ┃ island    ┃
         ┡━━━━━━━━━━━╇━━━━━━━━━━━┩
         │ string    │ string    │
         ├───────────┼───────────┤
-        │ Adelie    │ Torgersen │
         │ Adelie    │ Biscoe    │
         │ Adelie    │ Dream     │
-        │ Gentoo    │ Biscoe    │
+        │ Adelie    │ Torgersen │
         │ Chinstrap │ Dream     │
+        │ Gentoo    │ Biscoe    │
         └───────────┴───────────┘
 
         Drop all duplicate rows except the first
 
-        >>> t.distinct(on=["species", "island"], keep="first")
+        >>> t.distinct(on=["species", "island"], keep="first").order_by(t.columns)
         ┏━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━┓
         ┃ species   ┃ island    ┃ bill_length_mm ┃ bill_depth_… ┃ flipper_length_mm ┃  ┃
         ┡━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━┩
         │ string    │ string    │ float64        │ float64      │ int64             │  │
         ├───────────┼───────────┼────────────────┼──────────────┼───────────────────┼──┤
-        │ Adelie    │ Torgersen │           39.1 │         18.7 │               181 │  │
         │ Adelie    │ Biscoe    │           37.8 │         18.3 │               174 │  │
         │ Adelie    │ Dream     │           39.5 │         16.7 │               178 │  │
-        │ Gentoo    │ Biscoe    │           46.1 │         13.2 │               211 │  │
+        │ Adelie    │ Torgersen │           39.1 │         18.7 │               181 │  │
         │ Chinstrap │ Dream     │           46.5 │         17.9 │               192 │  │
+        │ Gentoo    │ Biscoe    │           46.1 │         13.2 │               211 │  │
         └───────────┴───────────┴────────────────┴──────────────┴───────────────────┴──┘
 
         Drop all duplicate rows except the last
 
-        >>> t.distinct(on=["species", "island"], keep="last")
+        >>> t.distinct(on=["species", "island"], keep="last").order_by(t.columns)
         ┏━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━┓
         ┃ species   ┃ island    ┃ bill_length_mm ┃ bill_depth_… ┃ flipper_length_mm ┃  ┃
         ┡━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━┩
         │ string    │ string    │ float64        │ float64      │ int64             │  │
         ├───────────┼───────────┼────────────────┼──────────────┼───────────────────┼──┤
-        │ Adelie    │ Torgersen │           43.1 │         19.2 │               197 │  │
         │ Adelie    │ Biscoe    │           42.7 │         18.3 │               196 │  │
         │ Adelie    │ Dream     │           41.5 │         18.5 │               201 │  │
-        │ Gentoo    │ Biscoe    │           49.9 │         16.1 │               213 │  │
+        │ Adelie    │ Torgersen │           43.1 │         19.2 │               197 │  │
         │ Chinstrap │ Dream     │           50.2 │         18.7 │               198 │  │
+        │ Gentoo    │ Biscoe    │           49.9 │         16.1 │               213 │  │
         └───────────┴───────────┴────────────────┴──────────────┴───────────────────┴──┘
 
         Drop all duplicated rows
@@ -1120,26 +1120,26 @@ class Table(Expr, _FixedTextJupyterMixin):
 
         You can pass [`selectors`](./selectors.qmd) to `on`
 
-        >>> t.distinct(on=~s.numeric())
+        >>> t.distinct(on=~s.numeric()).order_by(t.columns)
         ┏━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━┓
         ┃ species   ┃ island    ┃ bill_length_mm ┃ bill_depth_… ┃ flipper_length_mm ┃  ┃
         ┡━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━┩
         │ string    │ string    │ float64        │ float64      │ int64             │  │
         ├───────────┼───────────┼────────────────┼──────────────┼───────────────────┼──┤
         │ Adelie    │ Biscoe    │           37.7 │         18.7 │               180 │  │
-        │ Gentoo    │ Biscoe    │           50.0 │         16.3 │               230 │  │
-        │ Gentoo    │ Biscoe    │           44.5 │         14.3 │               216 │  │
         │ Adelie    │ Biscoe    │           37.8 │         18.3 │               174 │  │
-        │ Gentoo    │ Biscoe    │           46.1 │         13.2 │               211 │  │
+        │ Adelie    │ Dream     │           37.2 │         18.1 │               178 │  │
+        │ Adelie    │ Dream     │           37.5 │         18.9 │               179 │  │
         │ Adelie    │ Dream     │           39.5 │         16.7 │               178 │  │
-        │ Chinstrap │ Dream     │           50.0 │         19.5 │               196 │  │
+        │ Adelie    │ Torgersen │           39.1 │         18.7 │               181 │  │
         │ Adelie    │ Torgersen │           39.5 │         17.4 │               186 │  │
         │ Adelie    │ Torgersen │            nan │          nan │              NULL │  │
-        │ Adelie    │ Dream     │           37.2 │         18.1 │               178 │  │
+        │ Chinstrap │ Dream     │           46.5 │         17.9 │               192 │  │
+        │ Chinstrap │ Dream     │           50.0 │         19.5 │               196 │  │
         │ …         │ …         │              … │            … │                 … │  │
         └───────────┴───────────┴────────────────┴──────────────┴───────────────────┴──┘
 
-        The only valid values of `keep` are `"first"`, `"last"` and [`None][None]
+        The only valid values of `keep` are `"first"`, `"last"` and [](`None`).
 
         >>> t.distinct(on="species", keep="second")  # quartodoc: +EXPECTED_FAILURE
         Traceback (most recent call last):
@@ -2231,34 +2231,34 @@ class Table(Expr, _FixedTextJupyterMixin):
         >>> import ibis
         >>> ibis.options.interactive = True
         >>> t = ibis.examples.penguins.fetch()
-        >>> t
-        ┏━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━┓
-        ┃ species ┃ island    ┃ bill_length_mm ┃ bill_depth_mm ┃ flipper_length_mm ┃ … ┃
-        ┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━┩
-        │ string  │ string    │ float64        │ float64       │ int64             │ … │
-        ├─────────┼───────────┼────────────────┼───────────────┼───────────────────┼───┤
-        │ Adelie  │ Torgersen │           39.1 │          18.7 │               181 │ … │
-        │ Adelie  │ Torgersen │           39.5 │          17.4 │               186 │ … │
-        │ Adelie  │ Torgersen │           40.3 │          18.0 │               195 │ … │
-        │ Adelie  │ Torgersen │            nan │           nan │              NULL │ … │
-        │ Adelie  │ Torgersen │           36.7 │          19.3 │               193 │ … │
-        │ Adelie  │ Torgersen │           39.3 │          20.6 │               190 │ … │
-        │ Adelie  │ Torgersen │           38.9 │          17.8 │               181 │ … │
-        │ Adelie  │ Torgersen │           39.2 │          19.6 │               195 │ … │
-        │ Adelie  │ Torgersen │           34.1 │          18.1 │               193 │ … │
-        │ Adelie  │ Torgersen │           42.0 │          20.2 │               190 │ … │
-        │ …       │ …         │              … │             … │                 … │ … │
-        └─────────┴───────────┴────────────────┴───────────────┴───────────────────┴───┘
+        >>> t.order_by(t.columns)
+        ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━┓
+        ┃ species ┃ island ┃ bill_length_mm ┃ bill_depth_mm ┃ flipper_length_mm ┃ … ┃
+        ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━┩
+        │ string  │ string │ float64        │ float64       │ int64             │ … │
+        ├─────────┼────────┼────────────────┼───────────────┼───────────────────┼───┤
+        │ Adelie  │ Biscoe │           34.5 │          18.1 │               187 │ … │
+        │ Adelie  │ Biscoe │           35.0 │          17.9 │               190 │ … │
+        │ Adelie  │ Biscoe │           35.0 │          17.9 │               192 │ … │
+        │ Adelie  │ Biscoe │           35.3 │          18.9 │               187 │ … │
+        │ Adelie  │ Biscoe │           35.5 │          16.2 │               195 │ … │
+        │ Adelie  │ Biscoe │           35.7 │          16.9 │               185 │ … │
+        │ Adelie  │ Biscoe │           35.9 │          19.2 │               189 │ … │
+        │ Adelie  │ Biscoe │           36.4 │          17.1 │               184 │ … │
+        │ Adelie  │ Biscoe │           36.5 │          16.6 │               181 │ … │
+        │ Adelie  │ Biscoe │           37.6 │          17.0 │               185 │ … │
+        │ …       │ …      │              … │             … │                 … │ … │
+        └─────────┴────────┴────────────────┴───────────────┴───────────────────┴───┘
         >>> t.filter(
         ...     [t.species == "Adelie", t.body_mass_g > 3500]
-        ... ).sex.value_counts().dropna("sex")
+        ... ).sex.value_counts().dropna("sex").order_by(ibis.desc("sex_count"))
         ┏━━━━━━━━┳━━━━━━━━━━━┓
         ┃ sex    ┃ sex_count ┃
         ┡━━━━━━━━╇━━━━━━━━━━━┩
         │ string │ int64     │
         ├────────┼───────────┤
-        │ female │        22 │
         │ male   │        68 │
+        │ female │        22 │
         └────────┴───────────┘
         """
         import ibis.expr.analysis as an
@@ -3517,136 +3517,119 @@ class Table(Expr, _FixedTextJupyterMixin):
         >>> import ibis.selectors as s
         >>> from ibis import _
         >>> ibis.options.interactive = True
+        >>> ibis.options.repr.interactive.max_rows = 5
 
         Basic usage
 
-        >>> fish_encounters = ibis.examples.fish_encounters.fetch()
-        >>> fish_encounters
+        >>> fish = ibis.examples.fish_encounters.fetch()
+        >>> fish.order_by(fish.columns)
         ┏━━━━━━━┳━━━━━━━━━┳━━━━━━━┓
         ┃ fish  ┃ station ┃ seen  ┃
         ┡━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
         │ int64 │ string  │ int64 │
         ├───────┼─────────┼───────┤
-        │  4842 │ Release │     1 │
-        │  4842 │ I80_1   │     1 │
-        │  4842 │ Lisbon  │     1 │
-        │  4842 │ Rstr    │     1 │
-        │  4842 │ Base_TD │     1 │
         │  4842 │ BCE     │     1 │
-        │  4842 │ BCW     │     1 │
         │  4842 │ BCE2    │     1 │
+        │  4842 │ BCW     │     1 │
         │  4842 │ BCW2    │     1 │
-        │  4842 │ MAE     │     1 │
+        │  4842 │ Base_TD │     1 │
         │     … │ …       │     … │
         └───────┴─────────┴───────┘
-        >>> fish_encounters.pivot_wider(names_from="station", values_from="seen")
-        ┏━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━┓
-        ┃ fish  ┃ Lisbon ┃ Base_TD ┃ MAE   ┃ MAW   ┃ Release ┃ BCE   ┃ BCE2  ┃ … ┃
-        ┡━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━┩
-        │ int64 │ int64  │ int64   │ int64 │ int64 │ int64   │ int64 │ int64 │ … │
-        ├───────┼────────┼─────────┼───────┼───────┼─────────┼───────┼───────┼───┤
-        │  4848 │      1 │    NULL │  NULL │  NULL │       1 │  NULL │  NULL │ … │
-        │  4865 │      1 │    NULL │  NULL │  NULL │       1 │  NULL │  NULL │ … │
-        │  4843 │      1 │       1 │     1 │     1 │       1 │     1 │     1 │ … │
-        │  4844 │      1 │       1 │     1 │     1 │       1 │     1 │     1 │ … │
-        │  4845 │      1 │       1 │  NULL │  NULL │       1 │  NULL │  NULL │ … │
-        │  4849 │   NULL │    NULL │  NULL │  NULL │       1 │  NULL │  NULL │ … │
-        │  4859 │      1 │       1 │  NULL │  NULL │       1 │  NULL │  NULL │ … │
-        │  4861 │      1 │       1 │     1 │     1 │       1 │     1 │     1 │ … │
-        │  4847 │      1 │    NULL │  NULL │  NULL │       1 │  NULL │  NULL │ … │
-        │  4850 │   NULL │       1 │  NULL │  NULL │       1 │     1 │  NULL │ … │
-        │     … │      … │       … │     … │     … │       … │     … │     … │ … │
-        └───────┴────────┴─────────┴───────┴───────┴─────────┴───────┴───────┴───┘
+        >>> t = fish.pivot_wider(
+        ...     names_from="station", values_from="seen", names_sort=True
+        ... )
+        >>> t.order_by(t.columns)
+        ┏━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━┓
+        ┃ fish  ┃ BCE   ┃ BCE2  ┃ BCW   ┃ BCW2  ┃ Base_TD ┃ I80_1 ┃ Lisbon ┃ MAE   ┃ … ┃
+        ┡━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━┩
+        │ int64 │ int64 │ int64 │ int64 │ int64 │ int64   │ int64 │ int64  │ int64 │ … │
+        ├───────┼───────┼───────┼───────┼───────┼─────────┼───────┼────────┼───────┼───┤
+        │  4842 │     1 │     1 │     1 │     1 │       1 │     1 │      1 │     1 │ … │
+        │  4843 │     1 │     1 │     1 │     1 │       1 │     1 │      1 │     1 │ … │
+        │  4844 │     1 │     1 │     1 │     1 │       1 │     1 │      1 │     1 │ … │
+        │  4845 │  NULL │  NULL │  NULL │  NULL │       1 │     1 │      1 │  NULL │ … │
+        │  4847 │  NULL │  NULL │  NULL │  NULL │    NULL │     1 │      1 │  NULL │ … │
+        │     … │     … │     … │     … │     … │       … │     … │      … │     … │ … │
+        └───────┴───────┴───────┴───────┴───────┴─────────┴───────┴────────┴───────┴───┘
 
         Fill missing pivoted values using `values_fill`
 
-        >>> fish_encounters.pivot_wider(
-        ...     names_from="station", values_from="seen", values_fill=0
+        >>> t = fish.pivot_wider(
+        ...     names_from="station",
+        ...     values_from="seen",
+        ...     values_fill=0,
+        ...     names_sort=True,
         ... )
-        ┏━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━┓
-        ┃ fish  ┃ Lisbon ┃ Base_TD ┃ MAE   ┃ MAW   ┃ Release ┃ BCE   ┃ BCE2  ┃ … ┃
-        ┡━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━┩
-        │ int64 │ int64  │ int64   │ int64 │ int64 │ int64   │ int64 │ int64 │ … │
-        ├───────┼────────┼─────────┼───────┼───────┼─────────┼───────┼───────┼───┤
-        │  4848 │      1 │       0 │     0 │     0 │       1 │     0 │     0 │ … │
-        │  4865 │      1 │       0 │     0 │     0 │       1 │     0 │     0 │ … │
-        │  4843 │      1 │       1 │     1 │     1 │       1 │     1 │     1 │ … │
-        │  4844 │      1 │       1 │     1 │     1 │       1 │     1 │     1 │ … │
-        │  4845 │      1 │       1 │     0 │     0 │       1 │     0 │     0 │ … │
-        │  4849 │      0 │       0 │     0 │     0 │       1 │     0 │     0 │ … │
-        │  4859 │      1 │       1 │     0 │     0 │       1 │     0 │     0 │ … │
-        │  4861 │      1 │       1 │     1 │     1 │       1 │     1 │     1 │ … │
-        │  4847 │      1 │       0 │     0 │     0 │       1 │     0 │     0 │ … │
-        │  4850 │      0 │       1 │     0 │     0 │       1 │     1 │     0 │ … │
-        │     … │      … │       … │     … │     … │       … │     … │     … │ … │
-        └───────┴────────┴─────────┴───────┴───────┴─────────┴───────┴───────┴───┘
+        >>> t.order_by(t.columns)
+        ┏━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━┓
+        ┃ fish  ┃ BCE   ┃ BCE2  ┃ BCW   ┃ BCW2  ┃ Base_TD ┃ I80_1 ┃ Lisbon ┃ MAE   ┃ … ┃
+        ┡━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━┩
+        │ int64 │ int64 │ int64 │ int64 │ int64 │ int64   │ int64 │ int64  │ int64 │ … │
+        ├───────┼───────┼───────┼───────┼───────┼─────────┼───────┼────────┼───────┼───┤
+        │  4842 │     1 │     1 │     1 │     1 │       1 │     1 │      1 │     1 │ … │
+        │  4843 │     1 │     1 │     1 │     1 │       1 │     1 │      1 │     1 │ … │
+        │  4844 │     1 │     1 │     1 │     1 │       1 │     1 │      1 │     1 │ … │
+        │  4845 │     0 │     0 │     0 │     0 │       1 │     1 │      1 │     0 │ … │
+        │  4847 │     0 │     0 │     0 │     0 │       0 │     1 │      1 │     0 │ … │
+        │     … │     … │     … │     … │     … │       … │     … │      … │     … │ … │
+        └───────┴───────┴───────┴───────┴───────┴─────────┴───────┴────────┴───────┴───┘
 
         Compute multiple values columns
 
         >>> us_rent_income = ibis.examples.us_rent_income.fetch()
         >>> us_rent_income
-        ┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━┓
-        ┃ geoid  ┃ name       ┃ variable ┃ estimate ┃ moe   ┃
-        ┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━┩
-        │ string │ string     │ string   │ int64    │ int64 │
-        ├────────┼────────────┼──────────┼──────────┼───────┤
-        │ 01     │ Alabama    │ income   │    24476 │   136 │
-        │ 01     │ Alabama    │ rent     │      747 │     3 │
-        │ 02     │ Alaska     │ income   │    32940 │   508 │
-        │ 02     │ Alaska     │ rent     │     1200 │    13 │
-        │ 04     │ Arizona    │ income   │    27517 │   148 │
-        │ 04     │ Arizona    │ rent     │      972 │     4 │
-        │ 05     │ Arkansas   │ income   │    23789 │   165 │
-        │ 05     │ Arkansas   │ rent     │      709 │     5 │
-        │ 06     │ California │ income   │    29454 │   109 │
-        │ 06     │ California │ rent     │     1358 │     3 │
-        │ …      │ …          │ …        │        … │     … │
-        └────────┴────────────┴──────────┴──────────┴───────┘
-        >>> us_rent_income.pivot_wider(
-        ...     names_from="variable", values_from=["estimate", "moe"]
+        ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━┓
+        ┃ geoid  ┃ name    ┃ variable ┃ estimate ┃ moe   ┃
+        ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━┩
+        │ string │ string  │ string   │ int64    │ int64 │
+        ├────────┼─────────┼──────────┼──────────┼───────┤
+        │ 01     │ Alabama │ income   │    24476 │   136 │
+        │ 01     │ Alabama │ rent     │      747 │     3 │
+        │ 02     │ Alaska  │ income   │    32940 │   508 │
+        │ 02     │ Alaska  │ rent     │     1200 │    13 │
+        │ 04     │ Arizona │ income   │    27517 │   148 │
+        │ …      │ …       │ …        │        … │     … │
+        └────────┴─────────┴──────────┴──────────┴───────┘
+        >>> t = us_rent_income.pivot_wider(
+        ...     names_from="variable",
+        ...     values_from=["estimate", "moe"],
+        ...     names_sort=True,
         ... )
-        ┏━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━┓
-        ┃ geoid  ┃ name         ┃ estimate_income ┃ moe_income ┃ estimate_rent ┃ … ┃
-        ┡━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━┩
-        │ string │ string       │ int64           │ int64      │ int64         │ … │
-        ├────────┼──────────────┼─────────────────┼────────────┼───────────────┼───┤
-        │ 05     │ Arkansas     │           23789 │        165 │           709 │ … │
-        │ 16     │ Idaho        │           25298 │        208 │           792 │ … │
-        │ 30     │ Montana      │           26249 │        206 │           751 │ … │
-        │ 39     │ Ohio         │           27435 │         94 │           764 │ … │
-        │ 47     │ Tennessee    │           25453 │        102 │           808 │ … │
-        │ 06     │ California   │           29454 │        109 │          1358 │ … │
-        │ 13     │ Georgia      │           27024 │        106 │           927 │ … │
-        │ 15     │ Hawaii       │           32453 │        218 │          1507 │ … │
-        │ 38     │ North Dakota │           32336 │        245 │           775 │ … │
-        │ 40     │ Oklahoma     │           26207 │        101 │           766 │ … │
-        │ …      │ …            │               … │          … │             … │ … │
-        └────────┴──────────────┴─────────────────┴────────────┴───────────────┴───┘
+        >>> t.order_by(t.columns)
+        ┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━┓
+        ┃ geoid  ┃ name       ┃ estimate_income ┃ moe_income ┃ estimate_rent ┃ … ┃
+        ┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━┩
+        │ string │ string     │ int64           │ int64      │ int64         │ … │
+        ├────────┼────────────┼─────────────────┼────────────┼───────────────┼───┤
+        │ 01     │ Alabama    │           24476 │        136 │           747 │ … │
+        │ 02     │ Alaska     │           32940 │        508 │          1200 │ … │
+        │ 04     │ Arizona    │           27517 │        148 │           972 │ … │
+        │ 05     │ Arkansas   │           23789 │        165 │           709 │ … │
+        │ 06     │ California │           29454 │        109 │          1358 │ … │
+        │ …      │ …          │               … │          … │             … │ … │
+        └────────┴────────────┴─────────────────┴────────────┴───────────────┴───┘
 
         The column name separator can be changed using the `names_sep` parameter
 
-        >>> us_rent_income.pivot_wider(
+        >>> t = us_rent_income.pivot_wider(
         ...     names_from="variable",
         ...     names_sep=".",
         ...     values_from=("estimate", "moe"),
+        ...     names_sort=True,
         ... )
-        ┏━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━┓
-        ┃ geoid  ┃ name         ┃ estimate.income ┃ moe.income ┃ estimate.rent ┃ … ┃
-        ┡━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━┩
-        │ string │ string       │ int64           │ int64      │ int64         │ … │
-        ├────────┼──────────────┼─────────────────┼────────────┼───────────────┼───┤
-        │ 05     │ Arkansas     │           23789 │        165 │           709 │ … │
-        │ 16     │ Idaho        │           25298 │        208 │           792 │ … │
-        │ 30     │ Montana      │           26249 │        206 │           751 │ … │
-        │ 39     │ Ohio         │           27435 │         94 │           764 │ … │
-        │ 47     │ Tennessee    │           25453 │        102 │           808 │ … │
-        │ 06     │ California   │           29454 │        109 │          1358 │ … │
-        │ 13     │ Georgia      │           27024 │        106 │           927 │ … │
-        │ 15     │ Hawaii       │           32453 │        218 │          1507 │ … │
-        │ 38     │ North Dakota │           32336 │        245 │           775 │ … │
-        │ 40     │ Oklahoma     │           26207 │        101 │           766 │ … │
-        │ …      │ …            │               … │          … │             … │ … │
-        └────────┴──────────────┴─────────────────┴────────────┴───────────────┴───┘
+        >>> t.order_by(t.columns)
+        ┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━┓
+        ┃ geoid  ┃ name       ┃ estimate.income ┃ moe.income ┃ estimate.rent ┃ … ┃
+        ┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━┩
+        │ string │ string     │ int64           │ int64      │ int64         │ … │
+        ├────────┼────────────┼─────────────────┼────────────┼───────────────┼───┤
+        │ 01     │ Alabama    │           24476 │        136 │           747 │ … │
+        │ 02     │ Alaska     │           32940 │        508 │          1200 │ … │
+        │ 04     │ Arizona    │           27517 │        148 │           972 │ … │
+        │ 05     │ Arkansas   │           23789 │        165 │           709 │ … │
+        │ 06     │ California │           29454 │        109 │          1358 │ … │
+        │ …      │ …          │               … │          … │             … │ … │
+        └────────┴────────────┴─────────────────┴────────────┴───────────────┴───┘
 
         Supply an alternative function to summarize values
 
@@ -3664,24 +3647,22 @@ class Table(Expr, _FixedTextJupyterMixin):
         │ A      │ L       │     54 │
         │ A      │ L       │     25 │
         │ A      │ L       │     70 │
-        │ A      │ L       │     52 │
-        │ A      │ L       │     51 │
-        │ A      │ L       │     26 │
-        │ A      │ L       │     67 │
-        │ A      │ M       │     18 │
         │ …      │ …       │      … │
         └────────┴─────────┴────────┘
         >>> warpbreaks.pivot_wider(
-        ...     names_from="wool", values_from="breaks", values_agg="mean"
-        ... )
+        ...     names_from="wool",
+        ...     values_from="breaks",
+        ...     values_agg="mean",
+        ...     names_sort=True,
+        ... ).order_by("tension")
         ┏━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
         ┃ tension ┃ A         ┃ B         ┃
         ┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━┩
         │ string  │ float64   │ float64   │
         ├─────────┼───────────┼───────────┤
+        │ H       │ 24.555556 │ 18.777778 │
         │ L       │ 44.555556 │ 28.222222 │
         │ M       │ 24.000000 │ 28.777778 │
-        │ H       │ 24.555556 │ 18.777778 │
         └─────────┴───────────┴───────────┘
 
         Passing `Deferred` objects to `values_agg` is supported
@@ -3690,14 +3671,15 @@ class Table(Expr, _FixedTextJupyterMixin):
         ...     names_from="tension",
         ...     values_from="breaks",
         ...     values_agg=_.sum(),
-        ... )
+        ...     names_sort=True,
+        ... ).order_by("wool")
         ┏━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┓
-        ┃ wool   ┃ L     ┃ M     ┃ H     ┃
+        ┃ wool   ┃ H     ┃ L     ┃ M     ┃
         ┡━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━┩
         │ string │ int64 │ int64 │ int64 │
         ├────────┼───────┼───────┼───────┤
-        │ A      │   401 │   216 │   221 │
-        │ B      │   254 │   259 │   169 │
+        │ A      │   221 │   401 │   216 │
+        │ B      │   169 │   254 │   259 │
         └────────┴───────┴───────┴───────┘
 
         Use a custom aggregate function
@@ -3706,15 +3688,16 @@ class Table(Expr, _FixedTextJupyterMixin):
         ...     names_from="wool",
         ...     values_from="breaks",
         ...     values_agg=lambda col: col.std() / col.mean(),
-        ... )
+        ...     names_sort=True,
+        ... ).order_by("tension")
         ┏━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┓
         ┃ tension ┃ A        ┃ B        ┃
         ┡━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
         │ string  │ float64  │ float64  │
         ├─────────┼──────────┼──────────┤
+        │ H       │ 0.418344 │ 0.260590 │
         │ L       │ 0.406183 │ 0.349325 │
         │ M       │ 0.360844 │ 0.327719 │
-        │ H       │ 0.418344 │ 0.260590 │
         └─────────┴──────────┴──────────┘
 
         Generate some random data, setting the random seed for reproducibility
@@ -3748,11 +3731,6 @@ class Table(Expr, _FixedTextJupyterMixin):
         │ B       │ AI      │  2002 │   0.260492 │
         │ B       │ AI      │  2003 │   0.805028 │
         │ B       │ AI      │  2004 │   0.548699 │
-        │ B       │ AI      │  2005 │   0.014042 │
-        │ B       │ AI      │  2006 │   0.719705 │
-        │ B       │ AI      │  2007 │   0.398824 │
-        │ B       │ AI      │  2008 │   0.824845 │
-        │ B       │ AI      │  2009 │   0.668153 │
         │ …       │ …       │     … │          … │
         └─────────┴─────────┴───────┴────────────┘
 
@@ -3761,22 +3739,18 @@ class Table(Expr, _FixedTextJupyterMixin):
         >>> production.pivot_wider(
         ...     names_from=["product", "country"],
         ...     values_from="production",
-        ... )
+        ...     names_sort=True,
+        ... ).order_by("year")
         ┏━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┓
-        ┃ year  ┃ B_AI     ┃ B_EI     ┃ A_AI     ┃
+        ┃ year  ┃ A_AI     ┃ B_AI     ┃ B_EI     ┃
         ┡━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
         │ int64 │ float64  │ float64  │ float64  │
         ├───────┼──────────┼──────────┼──────────┤
-        │  2001 │ 0.865310 │ 0.191067 │ 0.757954 │
-        │  2003 │ 0.805028 │ 0.238616 │ 0.258917 │
-        │  2009 │ 0.668153 │ 0.507941 │ 0.583382 │
-        │  2012 │ 0.867603 │ 0.551267 │ 0.281838 │
-        │  2004 │ 0.548699 │ 0.967540 │ 0.511275 │
-        │  2007 │ 0.398824 │ 0.080446 │ 0.303313 │
-        │  2011 │ 0.493578 │ 0.109058 │ 0.504687 │
-        │  2006 │ 0.719705 │ 0.447970 │ 0.783799 │
-        │  2008 │ 0.824845 │ 0.320055 │ 0.476597 │
-        │  2000 │ 0.477010 │ 0.870471 │ 0.844422 │
+        │  2000 │ 0.844422 │ 0.477010 │ 0.870471 │
+        │  2001 │ 0.757954 │ 0.865310 │ 0.191067 │
+        │  2002 │ 0.420572 │ 0.260492 │ 0.567511 │
+        │  2003 │ 0.258917 │ 0.805028 │ 0.238616 │
+        │  2004 │ 0.511275 │ 0.548699 │ 0.967540 │
         │     … │        … │        … │        … │
         └───────┴──────────┴──────────┴──────────┘
 
@@ -3787,49 +3761,20 @@ class Table(Expr, _FixedTextJupyterMixin):
         ...     names_from=["product", "country"],
         ...     names=[("A", "AI"), ("B", "AI")],
         ...     values_from="production",
-        ... )
+        ...     names_sort=True,
+        ... ).order_by("year")
         ┏━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┓
         ┃ year  ┃ A_AI     ┃ B_AI     ┃
         ┡━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
         │ int64 │ float64  │ float64  │
         ├───────┼──────────┼──────────┤
-        │  2001 │ 0.757954 │ 0.865310 │
-        │  2003 │ 0.258917 │ 0.805028 │
-        │  2009 │ 0.583382 │ 0.668153 │
-        │  2012 │ 0.281838 │ 0.867603 │
-        │  2004 │ 0.511275 │ 0.548699 │
-        │  2007 │ 0.303313 │ 0.398824 │
-        │  2011 │ 0.504687 │ 0.493578 │
-        │  2006 │ 0.783799 │ 0.719705 │
-        │  2008 │ 0.476597 │ 0.824845 │
         │  2000 │ 0.844422 │ 0.477010 │
+        │  2001 │ 0.757954 │ 0.865310 │
+        │  2002 │ 0.420572 │ 0.260492 │
+        │  2003 │ 0.258917 │ 0.805028 │
+        │  2004 │ 0.511275 │ 0.548699 │
         │     … │        … │        … │
         └───────┴──────────┴──────────┘
-
-        Sort the new columns' names
-
-        >>> production.pivot_wider(
-        ...     names_from=["product", "country"],
-        ...     values_from="production",
-        ...     names_sort=True,
-        ... )
-        ┏━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┓
-        ┃ year  ┃ A_AI     ┃ B_AI     ┃ B_EI     ┃
-        ┡━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
-        │ int64 │ float64  │ float64  │ float64  │
-        ├───────┼──────────┼──────────┼──────────┤
-        │  2001 │ 0.757954 │ 0.865310 │ 0.191067 │
-        │  2003 │ 0.258917 │ 0.805028 │ 0.238616 │
-        │  2009 │ 0.583382 │ 0.668153 │ 0.507941 │
-        │  2012 │ 0.281838 │ 0.867603 │ 0.551267 │
-        │  2004 │ 0.511275 │ 0.548699 │ 0.967540 │
-        │  2007 │ 0.303313 │ 0.398824 │ 0.080446 │
-        │  2011 │ 0.504687 │ 0.493578 │ 0.109058 │
-        │  2006 │ 0.783799 │ 0.719705 │ 0.447970 │
-        │  2008 │ 0.476597 │ 0.824845 │ 0.320055 │
-        │  2000 │ 0.844422 │ 0.477010 │ 0.870471 │
-        │     … │        … │        … │        … │
-        └───────┴──────────┴──────────┴──────────┘
         """
         import pandas as pd
 
