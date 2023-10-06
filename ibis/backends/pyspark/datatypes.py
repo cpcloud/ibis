@@ -3,7 +3,6 @@ from __future__ import annotations
 import pyspark
 import pyspark.sql.types as pt
 from packaging.version import parse as vparse
-from pyarrow.util import contextlib
 
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
@@ -15,6 +14,7 @@ _sql_type_names = dict(sql_type_names, date="date")
 # DayTimeIntervalType introduced in Spark 3.2 (at least) but didn't show up in
 # PySpark until version 3.3
 PYSPARK_33 = vparse(pyspark.__version__) >= vparse("3.3")
+HAS_TIMESTAMP_NTZ = hasattr(pt, "TimestampNTZType")
 
 
 def type_to_sql_string(tval):
@@ -39,12 +39,7 @@ _from_pyspark_dtypes = {
     pt.NullType: dt.Null,
     pt.ShortType: dt.Int16,
     pt.StringType: dt.String,
-    pt.TimestampType: dt.Timestamp,
 }
-
-with contextlib.suppress(AttributeError):
-    _from_pyspark_dtypes[pt.TimestampNTZType] = dt.Timestamp
-
 
 _to_pyspark_dtypes = {v: k for k, v in _from_pyspark_dtypes.items()}
 _to_pyspark_dtypes[dt.JSON] = pt.StringType
@@ -87,6 +82,10 @@ class PySparkType(TypeMapper):
                 raise com.IbisTypeError(f"{typ!r} couldn't be converted to Interval")
         elif isinstance(typ, pt.UserDefinedType):
             return cls.to_ibis(typ.sqlType(), nullable=nullable)
+        elif isinstance(typ, pt.TimestampType) or (
+            HAS_TIMESTAMP_NTZ and isinstance(typ, pt.TimestampNTZType)
+        ):
+            return dt.Timestamp(nullable=nullable)
         else:
             try:
                 return _from_pyspark_dtypes[type(typ)](nullable=nullable)
@@ -114,6 +113,10 @@ class PySparkType(TypeMapper):
                 for n, t in dtype.fields.items()
             ]
             return pt.StructType(fields)
+        elif dtype.is_timestamp():
+            if not HAS_TIMESTAMP_NTZ:
+                return pt.TimestampType()
+            return pt.TimestampNTZType()
         else:
             try:
                 return _to_pyspark_dtypes[type(dtype)]()
