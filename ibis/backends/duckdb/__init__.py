@@ -392,6 +392,7 @@ WHERE catalog_name = :database"""
         Table
             An ibis table expression
         """
+        self.load_extension("json")
         if not table_name:
             table_name = util.gen_name("read_json")
 
