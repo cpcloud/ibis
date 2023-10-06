@@ -14,9 +14,9 @@ from ibis import util
 from ibis.formats.pyarrow import PyArrowType
 
 try:
-    from pyspark.sql.utils import ParseException
+    from pyspark.errors import ArithmeticException
 except ImportError:
-    ParseException = None
+    ArithmeticException = None
 
 try:
     from deltalake import PyDeltaTableError
@@ -331,7 +331,7 @@ def test_table_to_csv(tmp_path, backend, awards_players):
                 pytest.mark.notyet(["oracle"], raises=sa.exc.DatabaseError),
                 pytest.mark.notyet(["dask"], raises=NotImplementedError),
                 pytest.mark.notyet(["mssql", "mysql"], raises=sa.exc.OperationalError),
-                pytest.mark.notyet(["pyspark"], raises=ParseException),
+                pytest.mark.notyet(["pyspark"], raises=ArithmeticException),
             ],
         ),
     ],

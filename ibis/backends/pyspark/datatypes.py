@@ -3,6 +3,7 @@ from __future__ import annotations
 import pyspark
 import pyspark.sql.types as pt
 from packaging.version import parse as vparse
+from pyarrow.util import contextlib
 
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
@@ -40,6 +41,10 @@ _from_pyspark_dtypes = {
     pt.StringType: dt.String,
     pt.TimestampType: dt.Timestamp,
 }
+
+with contextlib.suppress(AttributeError):
+    _from_pyspark_dtypes[pt.TimestampNTZType] = dt.Timestamp
+
 
 _to_pyspark_dtypes = {v: k for k, v in _from_pyspark_dtypes.items()}
 _to_pyspark_dtypes[dt.JSON] = pt.StringType

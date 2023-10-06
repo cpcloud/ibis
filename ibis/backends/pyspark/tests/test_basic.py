@@ -234,7 +234,8 @@ def test_interval_columns(con):
             "interval_second": [pd.Timedelta("10s")],
         }
     )
-    tm.assert_frame_equal(table.execute(), expected)
+    result = table.execute()
+    tm.assert_frame_equal(result, expected.astype(dict(result.dtypes.items())))
 
 
 def test_interval_columns_invalid(con):

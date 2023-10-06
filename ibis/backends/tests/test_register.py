@@ -44,21 +44,8 @@ def gzip_csv(data_dir, tmp_path):
     ("fname", "in_table_name", "out_table_name"),
     [
         param("diamonds.csv", None, "ibis_read_csv_", id="default"),
-        param(
-            "csv://diamonds.csv",
-            "Diamonds2",
-            "Diamonds2",
-            id="csv_name",
-            marks=pytest.mark.notyet(
-                ["pyspark"], reason="pyspark lowercases view names"
-            ),
-        ),
-        param(
-            "file://diamonds.csv",
-            "fancy_stones",
-            "fancy_stones",
-            id="file_name",
-        ),
+        param("csv://diamonds.csv", "Diamonds2", "Diamonds2", id="csv_name"),
+        param("file://diamonds.csv", "fancy_stones", "fancy_stones", id="file_name"),
         param(
             "file://diamonds.csv",
             "fancy stones",

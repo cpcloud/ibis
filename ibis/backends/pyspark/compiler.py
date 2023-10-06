@@ -262,18 +262,39 @@ def compile_self_reference(t, op, **kwargs):
 
 @compiles(ops.Cast)
 def compile_cast(t, op, **kwargs):
-    if op.to.is_interval():
-        if isinstance(op.arg, ops.Literal):
-            return interval(op.arg.value, op.to.unit).op()
+    arg = op.arg
+    to = op.to
+
+    if to.is_interval():
+        if isinstance(arg, ops.Literal):
+            return interval(arg.value, to.unit).op()
         else:
             raise com.UnsupportedArgumentError(
                 "Casting to intervals is only supported for literals "
-                f"in the PySpark backend. {type(op.arg)} not allowed."
+                f"in the PySpark backend. {type(arg)} not allowed."
             )
 
-    cast_type = PySparkType.from_ibis(op.to)
+    src_column = t.translate(arg, **kwargs)
 
-    src_column = t.translate(op.arg, **kwargs)
+    dtype = arg.dtype
+    if dtype.is_integer() and to.is_timestamp():
+        return F.to_timestamp(F.from_unixtime(src_column))
+
+    if dtype.is_timestamp() and to.is_integer():
+        scale = dtype.scale
+        if scale is None:
+            return F.unix_micros(src_column)
+        elif scale == 0:
+            return F.unix_seconds(src_column)
+        elif 1 <= scale <= 3:
+            return F.unix_millis(src_column)
+        elif 4 <= scale <= 6:
+            return F.unix_micros(src_column)
+        else:
+            return F.unix_micros(src_column) * 1_000
+
+    cast_type = PySparkType.from_ibis(to)
+
     return src_column.cast(cast_type)
 
 
@@ -1211,7 +1232,9 @@ def compile_window_function(t, op, **kwargs):
 
     # Timestamp needs to be cast to long for window bounds in spark
     ordering_keys = [
-        F.col(sort.name).cast("long") if sort.dtype.is_timestamp() else sort.name
+        F.unix_micros(F.col(sort.name).cast("timestamp"))
+        if sort.dtype.is_timestamp()
+        else sort.name
         for sort in op.frame.order_by
     ]
     aggcontext = AggregationContext.WINDOW
