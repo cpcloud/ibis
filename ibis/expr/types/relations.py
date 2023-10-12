@@ -36,15 +36,16 @@ if TYPE_CHECKING:
 _ALIASES = (f"_ibis_view_{n:d}" for n in itertools.count())
 
 How = Literal[
-    "inner",
-    "left",
-    "outer",
-    "right",
-    "semi",
     "anti",
     "any_inner",
     "any_left",
+    "cross",
+    "inner",
+    "left",
     "left_semi",
+    "outer",
+    "right",
+    "semi",
 ]
 
 
@@ -73,9 +74,6 @@ def _regular_join_method(name: str, how: How):
         | Sequence[
             str | tuple[str | ir.Column, str | ir.Column] | ir.BooleanValue
         ] = (),
-        *,
-        lname: str = "",
-        rname: str = "{name}_right",
     ) -> Table:
         """Perform a join between two tables.
 
@@ -85,19 +83,13 @@ def _regular_join_method(name: str, how: How):
             Right table to join
         predicates
             Boolean or column names to join on
-        lname
-            A format string to use to rename overlapping columns in the left
-            table (e.g. ``"left_{name}"``).
-        rname
-            A format string to use to rename overlapping columns in the right
-            table (e.g. ``"right_{name}"``).
 
         Returns
         -------
         Table
             Joined table
         """
-        return self.join(right, predicates, how=how, lname=lname, rname=rname)
+        return self.join(right, predicates, how=how)
 
     f.__name__ = name
     return f
@@ -2724,9 +2716,7 @@ class Table(Expr, _FixedTextJupyterMixin):
             str | tuple[str | ir.Column, str | ir.Column] | ir.BooleanColumn
         ] = (),
         how: How = "inner",
-        *,
-        lname: str = "",
-        rname: str = "{name}_right",
+        **_,
     ) -> Table:
         """Perform a join between two tables.
 
@@ -2740,12 +2730,6 @@ class Table(Expr, _FixedTextJupyterMixin):
             Boolean or column names to join on
         how
             Join method
-        lname
-            A format string to use to rename overlapping columns in the left
-            table (e.g. ``"left_{name}"``).
-        rname
-            A format string to use to rename overlapping columns in the right
-            table (e.g. ``"right_{name}"``).
 
         Examples
         --------
@@ -2842,14 +2826,27 @@ class Table(Expr, _FixedTextJupyterMixin):
         else:
             raise com.IbisTypeError("right must be a table expression")
 
-        predicate = bld._clean_join_predicates(
-            tables=(left, right),
-            predicates=util.promote_list(predicates),
-        )
-        return bld.JoinBuilder(
-            left,
-            (bld.JoinFragment(right=right, how=how.lower(), predicate=predicate),),
-        )
+        if how in ("semi", "left_semi"):
+            return ops.LeftSemiJoin(left, right, predicates).to_expr()
+        elif how == "anti":
+            return ops.LeftAntiJoin(left, right, predicates).to_expr()
+
+        builder = bld.JoinBuilder(left)
+        return builder.join(right, predicates=util.promote_list(predicates), how=how)
+
+    def semi_join(
+        left: Table,
+        right: Table,
+        predicates: str | ir.BooleanColumn | Sequence[str | ir.BooleanColumn] = (),
+    ):
+        return ops.LeftSemiJoin(left, right, predicates).to_expr()
+
+    def anti_join(
+        left: Table,
+        right: Table,
+        predicates: str | ir.BooleanColumn | Sequence[str | ir.BooleanColumn] = (),
+    ):
+        return ops.LeftAntiJoin(left, right, predicates).to_expr()
 
     def asof_join(
         left: Table,
@@ -2857,9 +2854,6 @@ class Table(Expr, _FixedTextJupyterMixin):
         predicates: str | ir.BooleanColumn | Sequence[str | ir.BooleanColumn] = (),
         by: str | ir.Column | Sequence[str | ir.Column] = (),
         tolerance: str | ir.IntervalScalar | None = None,
-        *,
-        lname: str = "",
-        rname: str = "{name}_right",
     ) -> Table:
         """Perform an "as-of" join between `left` and `right`.
 
@@ -2880,12 +2874,6 @@ class Table(Expr, _FixedTextJupyterMixin):
             column to group by before joining
         tolerance
             Amount of time to look behind when joining
-        lname
-            A format string to use to rename overlapping columns in the left
-            table (e.g. ``"left_{name}"``).
-        rname
-            A format string to use to rename overlapping columns in the right
-            table (e.g. ``"right_{name}"``).
 
         Returns
         -------
@@ -2899,97 +2887,19 @@ class Table(Expr, _FixedTextJupyterMixin):
             by=by,
             tolerance=tolerance,
         )
-        return ops.relations._dedup_join_columns(op.to_expr(), lname=lname, rname=rname)
-
-    def cross_join(
-        left: Table,
-        right: Table,
-        *rest: Table,
-        lname: str = "",
-        rname: str = "{name}_right",
-    ) -> Table:
-        """Compute the cross join of a sequence of tables.
-
-        Parameters
-        ----------
-        left
-            Left table
-        right
-            Right table
-        rest
-            Additional tables to cross join
-        lname
-            A format string to use to rename overlapping columns in the left
-            table (e.g. ``"left_{name}"``).
-        rname
-            A format string to use to rename overlapping columns in the right
-            table (e.g. ``"right_{name}"``).
-
-        Returns
-        -------
-        Table
-            Cross join of `left`, `right` and `rest`
-
-        Examples
-        --------
-        >>> import ibis
-        >>> import ibis.selectors as s
-        >>> from ibis import _
-        >>> ibis.options.interactive = True
-        >>> t = ibis.examples.penguins.fetch()
-        >>> t.count()
-        344
-        >>> agg = t.drop("year").agg(s.across(s.numeric(), _.mean()))
-        >>> expr = t.cross_join(agg)
-        >>> expr
-        ┏━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━┓
-        ┃ species ┃ island    ┃ bill_length_mm ┃ bill_depth_mm ┃ flipper_length_mm ┃ … ┃
-        ┡━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━┩
-        │ string  │ string    │ float64        │ float64       │ int64             │ … │
-        ├─────────┼───────────┼────────────────┼───────────────┼───────────────────┼───┤
-        │ Adelie  │ Torgersen │           39.1 │          18.7 │               181 │ … │
-        │ Adelie  │ Torgersen │           39.5 │          17.4 │               186 │ … │
-        │ Adelie  │ Torgersen │           40.3 │          18.0 │               195 │ … │
-        │ Adelie  │ Torgersen │           NULL │          NULL │              NULL │ … │
-        │ Adelie  │ Torgersen │           36.7 │          19.3 │               193 │ … │
-        │ Adelie  │ Torgersen │           39.3 │          20.6 │               190 │ … │
-        │ Adelie  │ Torgersen │           38.9 │          17.8 │               181 │ … │
-        │ Adelie  │ Torgersen │           39.2 │          19.6 │               195 │ … │
-        │ Adelie  │ Torgersen │           34.1 │          18.1 │               193 │ … │
-        │ Adelie  │ Torgersen │           42.0 │          20.2 │               190 │ … │
-        │ …       │ …         │              … │             … │                 … │ … │
-        └─────────┴───────────┴────────────────┴───────────────┴───────────────────┴───┘
-        >>> expr.columns
-        ['species',
-         'island',
-         'bill_length_mm',
-         'bill_depth_mm',
-         'flipper_length_mm',
-         'body_mass_g',
-         'sex',
-         'year',
-         'bill_length_mm_right',
-         'bill_depth_mm_right',
-         'flipper_length_mm_right',
-         'body_mass_g_right']
-        >>> expr.count()
-        344
-        """
-        op = ops.CrossJoin(
-            left,
-            functools.reduce(Table.cross_join, rest, right),
-            [],
-        )
-        return ops.relations._dedup_join_columns(op.to_expr(), lname=lname, rname=rname)
+        return op.to_expr()
 
     inner_join = _regular_join_method("inner_join", "inner")
     left_join = _regular_join_method("left_join", "left")
-    outer_join = _regular_join_method("outer_join", "outer")
     right_join = _regular_join_method("right_join", "right")
-    semi_join = _regular_join_method("semi_join", "semi")
-    anti_join = _regular_join_method("anti_join", "anti")
+    outer_join = _regular_join_method("outer_join", "outer")
+
     any_inner_join = _regular_join_method("any_inner_join", "any_inner")
     any_left_join = _regular_join_method("any_left_join", "any_left")
+
+    def cross_join(left: Table, right: Table) -> Table:
+        """Cartesian product of two tables."""
+        return left.join(right, predicates=True, how="inner")
 
     def alias(self, alias: str) -> ir.Table:
         """Create a table expression with a specific name `alias`.

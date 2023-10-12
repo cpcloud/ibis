@@ -86,6 +86,7 @@ _CLICKHOUSE_JOIN_TYPES = {
     "any_inner": "ANY",
     "left_semi": "SEMI",
     "asof": "LEFT ASOF",
+    "outer": "FULL OUTER",
 }
 
 
@@ -103,6 +104,24 @@ def _join(op: ops.JoinProjection, *, table, selections, rest, hows, predicates, 
             dialect="clickhouse",
         )
     return result
+
+
+@translate_rel.register
+def _semi_join(op: ops.LeftSemiJoin, *, left, right, predicates, **_):
+    return (
+        sg.select(f"{left.alias_or_name}.*")
+        .from_(left)
+        .join(right, on=sg.condition(*predicates), join_type="SEMI")
+    )
+
+
+@translate_rel.register
+def _anti_join(op: ops.LeftAntiJoin, *, left, right, predicates, **_):
+    return (
+        sg.select(f"{left.alias_or_name}.*")
+        .from_(left)
+        .join(right, on=sg.condition(*predicates), join_type="ANTI")
+    )
 
 
 @translate_rel.register
