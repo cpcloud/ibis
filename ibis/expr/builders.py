@@ -14,7 +14,7 @@ import ibis.expr.rules as rlz
 import ibis.expr.types as ir
 from ibis import util
 from ibis.common.annotations import annotated, attribute
-from ibis.common.deferred import Deferred, deferrable
+from ibis.common.deferred import Deferred, Resolver, deferrable
 from ibis.common.exceptions import IbisInputError
 from ibis.common.grounds import Concrete
 from ibis.common.typing import VarTuple  # noqa: TCH001  # noqa: TCH001
@@ -24,8 +24,6 @@ from ibis.expr.types.relations import bind_expr
 
 if TYPE_CHECKING:
     from typing_extensions import Self
-
-    from ibis.common.deferred import Resolver
 
 
 class Builder(Concrete):
