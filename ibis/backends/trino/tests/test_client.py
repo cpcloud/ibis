@@ -83,7 +83,6 @@ def test_con_source(source, expected):
     ("schema", "table"),
     [
         # tables known to exist
-        ("memory.default", "diamonds"),
         ("postgresql.public", "map"),
         ("system.metadata", "table_comments"),
         ("tpcds.sf1", "store"),
@@ -111,13 +110,13 @@ def test_builtin_agg_udf(con):
     def geometric_mean(x) -> float:
         """Geometric mean of a series of numbers."""
 
-    t = con.table("diamonds")
+    t = con.table("diamonds", schema="postgresql.public")
     expr = geometric_mean(t.price)
     result = expr.execute()
 
     with con.begin() as c:
         expected = c.exec_driver_sql(
-            "SELECT GEOMETRIC_MEAN(price) FROM diamonds"
+            "SELECT GEOMETRIC_MEAN(price) FROM postgresql.public.diamonds"
         ).scalar()
 
     assert result == expected

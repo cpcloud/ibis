@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 import pytest
 import sqlglot as sg
 
@@ -11,11 +10,12 @@ import ibis
 from ibis.backends.conftest import TEST_TABLES
 from ibis.backends.postgres.tests.conftest import TestConf as PostgresTestConf
 from ibis.backends.tests.base import BackendTest, RoundAwayFromZero
-from ibis.backends.tests.data import struct_types
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterable
     from pathlib import Path
+
+    import ibis.expr.types as ir
 
 TRINO_USER = os.environ.get(
     "IBIS_TEST_TRINO_USER", os.environ.get("TRINO_USER", "user")
@@ -115,42 +115,6 @@ class TestConf(BackendTest, RoundAwayFromZero):
         TrinoPostgresTestConf.load_data(data_dir, tmpdir, worker_id, port=5433)
         return super().load_data(data_dir, tmpdir, worker_id, **kw)
 
-    @property
-    def ddl_script(self) -> Iterator[str]:
-        selects = []
-        for row in struct_types.abc:
-            if pd.isna(row):
-                datarow = "NULL"
-            else:
-                datarow = ", ".join(
-                    "NULL" if pd.isna(val) else repr(val) for val in row.values()
-                )
-                datarow = f"CAST(ROW({datarow}) AS ROW(a DOUBLE, b VARCHAR, c BIGINT))"
-            selects.append(f"SELECT {datarow} AS abc")
-
-        # mirror the existing tables except for intervals which are not supported
-        # and maps which we do natively in trino, because trino has more extensive
-        # map support
-        unsupported_memory_tables = ("intervals", "not_supported_intervals", "map")
-        with self.connection.begin() as c:
-            pg_tables = c.exec_driver_sql(
-                f"""
-                SELECT table_name
-                FROM postgresql.information_schema.tables
-                WHERE table_schema = 'public'
-                  AND table_name NOT IN {unsupported_memory_tables!r}
-                """
-            ).scalars()
-
-        for table in pg_tables:
-            dest = f"memory.default.{table}"
-            yield f"DROP VIEW IF EXISTS {dest}"
-            yield f"CREATE VIEW {dest} AS SELECT * FROM postgresql.public.{table}"
-
-        yield "DROP VIEW IF EXISTS struct"
-        yield f"CREATE VIEW struct AS {' UNION ALL '.join(selects)}"
-        yield from super().ddl_script
-
     @staticmethod
     def connect(*, tmpdir, worker_id, **kw):
         return ibis.trino.connect(
@@ -163,19 +127,49 @@ class TestConf(BackendTest, RoundAwayFromZero):
             **kw,
         )
 
-    def _remap_column_names(self, table_name: str) -> dict[str, str]:
-        table = self.connection.table(table_name)
+    def _remap_column_names(
+        self, table_name: str, schema: str | None = None
+    ) -> dict[str, str]:
+        table = self.connection.table(table_name, schema=schema)
         return table.rename(
             dict(zip(TEST_TABLES[table_name].names, table.schema().names))
         )
 
     @property
-    def batting(self):
-        return self._remap_column_names("batting")
+    def ddl_script(self):
+        # keep this in sync with the postgresql backend because we have tests that expect
+        # `functional_alltypes` to be available on the default connection
+        yield "CREATE OR REPLACE VIEW memory.default.functional_alltypes AS SELECT * FROM postgresql.public.functional_alltypes"
+        yield "CREATE OR REPLACE VIEW memory.default.astronauts AS SELECT * FROM postgresql.public.astronauts"
+        yield from super().ddl_script
 
     @property
-    def awards_players(self):
-        return self._remap_column_names("awards_players")
+    def batting(self) -> ir.Table:
+        return self._remap_column_names("batting", schema="postgresql.public")
+
+    @property
+    def awards_players(self) -> ir.Table:
+        return self._remap_column_names("awards_players", schema="postgresql.public")
+
+    @property
+    def diamonds(self) -> ir.Table:
+        return self.connection.table("diamonds", schema="postgresql.public")
+
+    @property
+    def astronauts(self) -> ir.Table:
+        return self.connection.table("astronauts", schema="postgresql.public")
+
+    @property
+    def array_types(self) -> ir.Table | None:
+        return self.connection.table("array_types", schema="postgresql.public")
+
+    @property
+    def json_t(self) -> ir.Table | None:
+        return self.connection.table("json_t", schema="postgresql.public")
+
+    @property
+    def win(self) -> ir.Table | None:
+        return self.connection.table("win", schema="postgresql.public")
 
 
 @pytest.fixture(scope="session")
