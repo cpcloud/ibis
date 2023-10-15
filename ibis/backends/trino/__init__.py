@@ -346,6 +346,22 @@ class Backend(AlchemyCrossSchemaBackend, AlchemyCanCreateSchema, CanListDatabase
             con.exec_driver_sql(create_stmt)
 
             if overwrite:
+                # check that the table was created
+                #
+                # this has a side effect of giving the database
+                # time to register the new table in the metastore
+                #
+                # kind of a hack, but it's hard to see whether there's an
+                # immediate better way
+                #
+                # this happens with the hive connector, but not the memory
+                # connector
+                #
+                # ideally trino would support CREATE OR REPLACE TABLE to avoid
+                # us having to hack it in with DROP and ALTER
+                if table_ref not in self.list_tables():
+                    raise com.IbisError(f"Table {table_ref} was not created")
+
                 # drop the original table
                 con.exec_driver_sql(
                     f"DROP TABLE IF EXISTS {self._quote(orig_table_ref)}"
