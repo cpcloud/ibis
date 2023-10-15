@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+import subprocess
+from typing import TYPE_CHECKING
 
 import pytest
 import sqlglot as sg
 
 import ibis
 from ibis.backends.conftest import TEST_TABLES
-from ibis.backends.postgres.tests.conftest import TestConf as PostgresTestConf
 from ibis.backends.tests.base import BackendTest, RoundAwayFromZero
 
 if TYPE_CHECKING:
@@ -26,24 +26,13 @@ TRINO_PASS = os.environ.get(
 TRINO_HOST = os.environ.get(
     "IBIS_TEST_TRINO_HOST", os.environ.get("TRINO_HOST", "localhost")
 )
-TRINO_PORT = os.environ.get("IBIS_TEST_TRINO_PORT", os.environ.get("TRINO_PORT", 8080))
+TRINO_PORT = int(
+    os.environ.get("IBIS_TEST_TRINO_PORT", os.environ.get("TRINO_PORT", 8080))
+)
 IBIS_TEST_TRINO_DB = os.environ.get(
     "IBIS_TEST_TRINO_DATABASE",
-    os.environ.get("TRINO_DATABASE", "memory"),
+    os.environ.get("TRINO_DATABASE", "hive"),
 )
-
-
-class TrinoPostgresTestConf(PostgresTestConf):
-    service_name = "trino-postgres"
-    deps = "sqlalchemy", "psycopg2"
-
-    @classmethod
-    def name(cls) -> str:
-        return "postgres"
-
-    @property
-    def test_files(self) -> Iterable[Path]:
-        return self.data_dir.joinpath("csv").glob("*.csv")
 
 
 class TestConf(BackendTest, RoundAwayFromZero):
@@ -54,11 +43,53 @@ class TestConf(BackendTest, RoundAwayFromZero):
     supports_structs = True
     supports_map = True
     supports_tpch = True
-    service_name = "trino"
     deps = ("sqlalchemy", "trino.sqlalchemy")
 
     _tpch_data_schema = "tpch.sf1"
     _tpch_query_schema = "hive.ibis_sf1"
+
+    def preload(self):
+        # create a minio host named trino
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "exec",
+                "minio",
+                "mc",
+                "config",
+                "host",
+                "add",
+                "trino",
+                "http://minio:9000",
+                "accesskey",
+                "secretkey",
+            ],
+            check=True,
+        )
+
+        for path in self.test_files:
+            directory = path.with_suffix("").name
+            raw_data_path = f"/opt/data/raw/{path.name}"
+            # copy from local to minio container
+            subprocess.run(
+                ["docker", "compose", "cp", str(path), f"minio:{raw_data_path}"],
+                check=True,
+            )
+            # copy from minio container to trino minio host
+            subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "exec",
+                    "minio",
+                    "mc",
+                    "cp",
+                    raw_data_path,
+                    f"trino/warehouse/{directory}/{path.name}",
+                ],
+                check=True,
+            )
 
     def _transform_tpch_sql(self, parsed):
         def add_catalog_and_schema(node):
@@ -110,10 +141,13 @@ class TestConf(BackendTest, RoundAwayFromZero):
             schema=self._tpch_query_schema,
         )
 
-    @classmethod
-    def load_data(cls, data_dir: Path, tmpdir: Path, worker_id: str, **kw: Any) -> None:
-        TrinoPostgresTestConf.load_data(data_dir, tmpdir, worker_id, port=5433)
-        return super().load_data(data_dir, tmpdir, worker_id, **kw)
+    @property
+    def json_t(self):
+        return self.connection.table("json_t", schema="memory.default")
+
+    @property
+    def test_files(self) -> Iterable[Path]:
+        return self.data_dir.joinpath("parquet").glob("*.parquet")
 
     @staticmethod
     def connect(*, tmpdir, worker_id, **kw):
@@ -136,40 +170,12 @@ class TestConf(BackendTest, RoundAwayFromZero):
         )
 
     @property
-    def ddl_script(self):
-        # keep this in sync with the postgresql backend because we have tests that expect
-        # `functional_alltypes` to be available on the default connection
-        yield "CREATE OR REPLACE VIEW memory.default.functional_alltypes AS SELECT * FROM postgresql.public.functional_alltypes"
-        yield "CREATE OR REPLACE VIEW memory.default.astronauts AS SELECT * FROM postgresql.public.astronauts"
-        yield from super().ddl_script
-
-    @property
     def batting(self) -> ir.Table:
-        return self._remap_column_names("batting", schema="postgresql.public")
+        return self._remap_column_names("batting")
 
     @property
     def awards_players(self) -> ir.Table:
-        return self._remap_column_names("awards_players", schema="postgresql.public")
-
-    @property
-    def diamonds(self) -> ir.Table:
-        return self.connection.table("diamonds", schema="postgresql.public")
-
-    @property
-    def astronauts(self) -> ir.Table:
-        return self.connection.table("astronauts", schema="postgresql.public")
-
-    @property
-    def array_types(self) -> ir.Table | None:
-        return self.connection.table("array_types", schema="postgresql.public")
-
-    @property
-    def json_t(self) -> ir.Table | None:
-        return self.connection.table("json_t", schema="postgresql.public")
-
-    @property
-    def win(self) -> ir.Table | None:
-        return self.connection.table("win", schema="postgresql.public")
+        return self._remap_column_names("awards_players")
 
 
 @pytest.fixture(scope="session")

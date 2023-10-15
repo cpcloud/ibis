@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 import ibis
@@ -56,9 +58,7 @@ def test_hive_table_overwrite(tmp_name):
 
 
 def test_list_catalogs(con):
-    assert {"hive", "postgresql", "memory", "system", "tpch", "tpcds"}.issubset(
-        con.list_databases()
-    )
+    assert {"hive", "memory", "system", "tpch", "tpcds"}.issubset(con.list_databases())
 
 
 def test_list_schemas(con):
@@ -83,7 +83,6 @@ def test_con_source(source, expected):
     ("schema", "table"),
     [
         # tables known to exist
-        ("postgresql.public", "map"),
         ("system.metadata", "table_comments"),
         ("tpcds.sf1", "store"),
         ("tpch.sf1", "nation"),
@@ -110,13 +109,22 @@ def test_builtin_agg_udf(con):
     def geometric_mean(x) -> float:
         """Geometric mean of a series of numbers."""
 
-    t = con.table("diamonds", schema="postgresql.public")
-    expr = geometric_mean(t.price)
-    result = expr.execute()
+    t = con.table("diamonds")
+    expr = t.agg(n=t.count(), geomean=geometric_mean(t.price))
+    result_n, result = expr.execute().squeeze().tolist()
 
     with con.begin() as c:
-        expected = c.exec_driver_sql(
-            "SELECT GEOMETRIC_MEAN(price) FROM postgresql.public.diamonds"
-        ).scalar()
+        expected_n, expected = c.exec_driver_sql(
+            "SELECT COUNT(*), GEOMETRIC_MEAN(price) FROM diamonds"
+        ).one()
 
+    # check the count
+    assert result_n > 0
+    assert expected_n > 0
+    assert result_n == expected_n
+
+    # check the value
+    assert result is not None
+    assert expected is not None
+    assert math.isfinite(result)
     assert result == expected

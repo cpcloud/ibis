@@ -395,11 +395,6 @@ def test_insert_no_overwrite_from_dataframe(
     )
 
 
-@pytest.mark.notyet(
-    ["trino"],
-    reason="Connector doesn't support deletion (required for overwrite=True)",
-    raises=sa.exc.ProgrammingError,
-)
 def test_insert_overwrite_from_dataframe(
     alchemy_con,
     employee_data_1_temp_table,
@@ -462,9 +457,6 @@ def test_insert_overwrite_from_expr(
     )
 
 
-@pytest.mark.notyet(
-    ["trino"], reason="memory connector doesn't allow writing to tables"
-)
 @pytest.mark.notyet(
     "oracle",
     reason="No support for in-place multirow inserts",
