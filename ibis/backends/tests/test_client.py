@@ -1130,6 +1130,11 @@ def test_set_backend_url(url, monkeypatch):
     ],
     reason="backend doesn't support timestamp with scale parameter",
 )
+@pytest.mark.notyet(
+    ["trino"],
+    raises=sa.exc.ProgrammingError,
+    reason="hive connector only supports a single configured timestamp scale",
+)
 @pytest.mark.notimpl(["clickhouse"], reason="create table isn't implemented")
 @pytest.mark.notimpl(
     ["snowflake"], reason="scale not implemented in ibis's snowflake backend"

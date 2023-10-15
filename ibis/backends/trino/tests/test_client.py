@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import math
+import string
 
 import pytest
 
 import ibis
-from ibis import udf
+from ibis import udf, util
 from ibis.backends.trino.tests.conftest import (
     TRINO_HOST,
     TRINO_PASS,
@@ -93,15 +94,14 @@ def test_cross_schema_table_access(con, schema, table):
     assert t.count().execute()
 
 
-def test_builtin_scalar_udf(con):
+def test_builtin_scalar_udf(con, snapshot):
     @udf.scalar.builtin
     def bar(x: float, width: int) -> str:
         """Render a single bar of length `width`, with `x` percent filled."""
 
     expr = bar(0.25, 40)
     result = con.execute(expr)
-    expected = "\x1b[38;5;196m█\x1b[38;5;196m█\x1b[38;5;196m█\x1b[38;5;196m█\x1b[38;5;202m█\x1b[38;5;202m█\x1b[38;5;202m█\x1b[38;5;208m█\x1b[38;5;208m█\x1b[38;5;208m█\x1b[0m                              "
-    assert result == expected
+    snapshot.assert_match(result, "result.txt")
 
 
 def test_builtin_agg_udf(con):
@@ -128,3 +128,20 @@ def test_builtin_agg_udf(con):
     assert expected is not None
     assert math.isfinite(result)
     assert result == expected
+
+
+def test_create_table_timestamp():
+    con = ibis.trino.connect(database="memory", schema="default")
+    schema = ibis.schema(
+        dict(zip(string.ascii_letters, map("timestamp({:d})".format, range(10))))
+    )
+    table = util.gen_name("trino_temp_table")
+    t = con.create_table(table, schema=schema)
+    try:
+        rows = con.raw_sql(f"DESCRIBE {table}").fetchall()
+        result = ibis.schema((name, typ) for name, typ, *_ in rows)
+        assert result == schema
+        assert result == t.schema()
+    finally:
+        con.drop_table(table)
+        assert table not in con.list_tables()
