@@ -58,8 +58,6 @@ services:
   kudu:
     cap_add:
       - SYS_TIME
-    depends_on:
-      - kudu-tserver
     image: apache/kudu:1.17.0
     networks:
       - impala
@@ -76,6 +74,8 @@ services:
     cap_add:
       - SYS_TIME
     image: apache/kudu:1.17.0
+    depends_on:
+      - kudu
     networks:
       - impala
     command: kudu tserver run --fs_wal_dir=/var/lib/kudu/master --fs_data_dirs=/var/lib/kudu/master --tserver_master_addrs=kudu
