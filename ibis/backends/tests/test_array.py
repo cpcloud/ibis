@@ -785,3 +785,20 @@ def test_array_of_struct_unnest(con):
     # `value` can be `None` because the order of results is arbitrary; observed
     # in the wild with the trino backend
     assert value is None or isinstance(value, str)
+
+
+@builtin_array
+def test_select_two_unnests_consistency(backend):
+    expr = (
+        backend.array_types.select(
+            x=lambda t: t.x.unnest(),
+            y=lambda t: t.y.unnest(),
+        )
+        # bigquery drops nulls, so filter them out for consistency with other
+        # backends
+        .dropna(how="all")
+        .count()
+    )
+    result = expr.execute()
+    expected = 11
+    assert result == expected

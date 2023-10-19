@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyarrow as pa
 import sqlalchemy as sa
+import sqlglot as sg
 from packaging.version import parse as vparse
 from sqlalchemy.ext.compiler import compiles
 
@@ -73,7 +74,7 @@ class SnowflakeExprTranslator(AlchemyExprTranslator):
     _dialect_name = "snowflake"
     _quote_column_names = True
     _quote_table_names = True
-    supports_unnest_in_select = False
+    supports_unnest_in_select = True
     type_mapper = SnowflakeType
 
 
@@ -368,10 +369,9 @@ $$""".format(
     ) -> pa.Table:
         self._run_pre_execute_hooks(expr)
 
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
+        sql = self._to_sql(expr, params=params, limit=limit)
         with self.begin() as con:
-            res = con.execute(sql).cursor.fetch_arrow_all()
+            res = con.exec_driver_sql(sql).cursor.fetch_arrow_all()
 
         target_schema = expr.as_table().schema().to_pyarrow()
         if res is None:
@@ -396,8 +396,8 @@ $$""".format(
         **_: Any,
     ) -> Iterator[pd.DataFrame | pd.Series | Any]:
         self._run_pre_execute_hooks(expr)
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
+
+        sql = self._to_sql(expr, params=params, limit=limit)
         target_schema = expr.as_table().schema()
         converter = functools.partial(
             SnowflakePandasData.convert_table, schema=target_schema
@@ -419,8 +419,8 @@ $$""".format(
         **_: Any,
     ) -> pa.ipc.RecordBatchReader:
         self._run_pre_execute_hooks(expr)
-        query_ast = self.compiler.to_ast_ensure_limit(expr, limit, params=params)
-        sql = query_ast.compile()
+
+        sql = self._to_sql(expr, params=params, limit=limit)
         target_schema = expr.as_table().schema().to_pyarrow()
 
         return pa.RecordBatchReader.from_batches(
@@ -882,6 +882,31 @@ $$""".format(
             )
 
         return self.table(table)
+
+    def compile(self, *args, **kwargs):
+        dialect = self.name
+        breakpoint()
+        sql = super().compile(*args, **kwargs)
+        breakpoint()
+        result = ";\n\n".join(
+            query.transform(_anonymous_unnest_to_explode).sql(
+                dialect=dialect, pretty=True
+            )
+            for query in sg.parse(sql, read=dialect)
+        )
+        breakpoint()
+        return result
+
+
+def _anonymous_unnest_to_explode(node: sg.exp.Expression):
+    """Convert `ANONYMOUS` `unnest` function calls to `EXPLODE` calls.
+
+    This allows us to generate DuckDB-like `UNNEST` calls and let sqlglot do
+    the work of transforming those into the correct BigQuery SQL.
+    """
+    if isinstance(node, sg.exp.Anonymous) and node.this.lower() == "unnest":
+        return sg.exp.Explode(this=node.expressions[0])
+    return node
 
 
 @compiles(sa.sql.Join, "snowflake")

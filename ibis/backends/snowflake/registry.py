@@ -188,23 +188,6 @@ def compiles_object_type(element, compiler, **kw):
     return type(element).__name__.upper()
 
 
-def _unnest(t, op):
-    arg = t.translate(op.arg)
-    # HACK: https://community.snowflake.com/s/question/0D50Z000086MVhnSAG/has-anyone-found-a-way-to-unnest-an-array-without-loosing-the-null-values
-    sep = util.guid()
-    col = sa.func.nullif(
-        sa.func.split_to_table(sa.func.array_to_string(arg, sep), sep)
-        .table_valued("value")  # seq, index, value is supported but we only need value
-        .lateral()
-        .c["value"],
-        "",
-    )
-    return sa.cast(
-        sa.func.coalesce(sa.func.try_parse_json(col), sa.func.to_variant(col)),
-        type_=t.get_sqla_type(op.dtype),
-    )
-
-
 def _group_concat(t, op):
     if (where := op.where) is None:
         return sa.func.listagg(t.translate(op.arg), t.translate(op.sep))
@@ -447,7 +430,7 @@ operation_registry.update(
         ops.StructColumn: lambda t, op: sa.func.object_construct_keep_null(
             *itertools.chain.from_iterable(zip(op.names, map(t.translate, op.values)))
         ),
-        ops.Unnest: _unnest,
+        ops.Unnest: unary(sa.func.unnest),
         ops.ArgMin: reduction(sa.func.min_by),
         ops.ArgMax: reduction(sa.func.max_by),
         ops.ToJSONArray: lambda t, op: t.translate(ops.Cast(op.arg, op.dtype)),
