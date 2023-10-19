@@ -159,7 +159,7 @@ class JoinBuilder(Builder):
         )
 
     def select(self, col, *cols):
-        import ibis.expr.analysis as an
+        from ibis.expr.analysis import p
 
         rest, hows, predicates = [], [], []
 
@@ -178,11 +178,17 @@ class JoinBuilder(Builder):
             elif isinstance(expr, Deferred):
                 new_op = _resolve(tables, expr)
             else:
-                new_op = expr.op()
-                for col in an.find_toplevel_columns(new_op):
-                    if col.table not in table_set:
-                        new_base_col = _find_in_tables(col.name, tables)
-                        new_op = an.sub_for(new_op, {col: new_base_col})
+                new_op = expr.op().replace(
+                    p.TableColumn
+                    >> (
+                        lambda _: (
+                            _find_in_tables(_.name, tables)
+                            if _.table not in table_set
+                            else _
+                        )
+                    ),
+                    filter=p.Value,
+                )
 
             newcols.append(new_op.to_expr())
 
