@@ -45,7 +45,7 @@ services:
       POSTGRES_PASSWORD: postgres
     healthcheck:
       interval: 1s
-      retries: 10
+      retries: 30
       test:
         - CMD
         - pg_isready
