@@ -31,9 +31,9 @@ class Node(Concrete, Traversable):
         """Make `Node` backwards compatible with code that uses `Expr.op()`."""
         return self
 
-    @abstractmethod
+    # @abstractmethod
     def to_expr(self):
-        ...
+        raise NotImplementedError
 
     # Avoid custom repr for performance reasons
     __repr__ = object.__repr__
