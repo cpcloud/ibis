@@ -375,8 +375,6 @@ $$""".format(**self._get_udf_source(udf_node))
         if res is None:
             res = target_schema.empty_table()
 
-        res = res.rename_columns(target_schema.names).cast(target_schema)
-
         return expr.__pyarrow_result__(res)
 
     def fetch_from_cursor(self, cursor, schema: sch.Schema) -> pd.DataFrame:
@@ -623,6 +621,7 @@ $$""".format(**self._get_udf_source(udf_node))
         temp: bool = False,
         overwrite: bool = False,
         comment: str | None = None,
+        dynamic: Mapping[str, str] | None = None,
     ) -> ir.Table:
         """Create a table in Snowflake.
 
@@ -646,6 +645,14 @@ $$""".format(**self._get_udf_source(udf_node))
             if the table exists
         comment
             Add a comment to the table
+        dynamic
+            A mapping containing a `"warehouse"` key and a `"target_lag"` key following
+            the Snowflake dynamic table creation syntax.
+
+            See
+            https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+            for details on syntax and allowed values of `warehouse` and
+            `target_lag`.
         """
         if obj is None and schema is None:
             raise ValueError("Either `obj` or `schema` must be specified")
@@ -655,11 +662,31 @@ $$""".format(**self._get_udf_source(udf_node))
         if overwrite:
             create_stmt += " OR REPLACE"
 
+        if temp and dynamic is not None:
+            raise com.UnsupportedOperationError(
+                "`temp` cannot be `True` when `dynamic` is set: dynamic tables cannot "
+                "be temporary"
+            )
+
         if temp:
             create_stmt += " TEMPORARY"
 
+        if dynamic is not None:
+            create_stmt += " DYNAMIC"
+
+        create_stmt += " TABLE"
+
+        if dynamic is not None:
+            create_stmt += f" WAREHOUSE {dynamic['warehouse']}"
+            target_lag = dynamic["target_lag"].lower()
+
+            if target_lag != "downstream":
+                target_lag = sg.exp.convert(target_lag)
+
+            create_stmt += f" TARGET_LAG = {target_lag}"
+
         ident = self._quote(name)
-        create_stmt += f" TABLE {ident}"
+        create_stmt += f" {ident}"
 
         if schema is not None:
             schema_sql = ", ".join(

@@ -192,6 +192,7 @@ def format_column(dtype, values):
 
     nonnull = [v for v in values if not isnull(v)]
     if nonnull:
+        breakpoint()
         formatted = format_values(dtype, nonnull)
         next_f = iter(formatted).__next__
         out = [null_str if isnull(v) else next_f() for v in values]
