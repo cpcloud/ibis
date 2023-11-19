@@ -143,13 +143,13 @@ def filter_(op, parent, predicates):
         out = f"{out}.filter({_try_unwrap(predicates)})"
     return out
 
+
 @translate.register(ops.Sort)
 def sort(op, parent, keys):
     out = f"{parent}"
     if keys:
         out = f"{out}.filter({_try_unwrap(keys)})"
     return out
-
 
 
 @translate.register(ops.Aggregate)
@@ -161,9 +161,11 @@ def aggregation(op, parent, groups, metrics):
         out = f"{out}.group_by({_try_unwrap(metrics)})"
     return out
 
+
 @translate.register(ops.JoinLink)
 def join_link(op, table, predicates, how):
     return f".join_{how}({table}, {_try_unwrap(predicates)})"
+
 
 @translate.register(ops.Join)
 def join(op, first, rest, fields):
@@ -298,7 +300,7 @@ def binary(op, left, right):
 
 class CodeContext:
     always_assign = (ops.ScalarParameter, ops.UnboundTable, ops.Aggregate)
-    always_ignore = (ops.TableColumn, dt.Primitive, dt.Variadic, dt.Temporal)
+    always_ignore = (ops.Field, dt.Primitive, dt.Variadic, dt.Temporal)
     shorthands = {
         ops.Aggregate: "agg",
         ops.Literal: "lit",

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 @public
-class ValueExpr(Expr):
+class Value(Expr):
     """Base class for a data generating expression having a known type."""
 
     def name(self, name):
@@ -1201,7 +1201,7 @@ class ValueExpr(Expr):
 
 
 @public
-class ScalarExpr(ValueExpr):
+class Scalar(Value):
     def __interactive_rich_console__(self, console, options):
         return console.render(repr(self.execute()), options=options)
 
@@ -1265,7 +1265,7 @@ class ScalarExpr(ValueExpr):
 
 
 @public
-class ColumnExpr(ValueExpr, _FixedTextJupyterMixin):
+class Column(Value, _FixedTextJupyterMixin):
     # Higher than numpy & dask objects
     __array_priority__ = 20
 
@@ -1929,32 +1929,32 @@ class ColumnExpr(ValueExpr, _FixedTextJupyterMixin):
 
 
 @public
-class UnknownValueExpr(ValueExpr):
+class UnknownValue(Value):
     pass
 
 
 @public
-class UnknownScalarExpr(ScalarExpr):
+class UnknownScalar(Scalar):
     pass
 
 
 @public
-class UnknownColumnExpr(ColumnExpr):
+class UnknownColumn(Column):
     pass
 
 
 @public
-class NullValueExpr(ValueExpr):
+class NullValue(Value):
     pass
 
 
 @public
-class NullScalarExpr(ScalarExpr, NullValueExpr, Singleton):
+class NullScalar(Scalar, NullValue, Singleton):
     pass
 
 
 @public
-class NullColumnExpr(ColumnExpr, NullValueExpr):
+class NullColumn(Column, NullValue):
     pass
 
 
@@ -2035,11 +2035,10 @@ def literal(value: Any, type: dt.DataType | str | None = None) -> Scalar:
 
 
 public(
-    Value=ValueExpr,
-    Scalar=ScalarExpr,
-    Column=ColumnExpr,
-    AnyValue=ValueExpr,
-    AnyScalar=ScalarExpr,
-    AnyColumn=ColumnExpr,
-    NullScalar=NullScalarExpr,
+    ValueExpr=Value,
+    ScalarExpr=Scalar,
+    ColumnExpr=Column,
+    AnyValue=Value,
+    AnyScalar=Scalar,
+    AnyColumn=Column,
 )
