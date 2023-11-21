@@ -75,11 +75,9 @@ FROM (
         )
       INNER JOIN "nation" AS t4
         ON (
-          (
-            t0.c_nationkey = t3.s_nationkey
-          ) AND (
-            t3.s_nationkey = t4.n_nationkey
-          )
+          t0.c_nationkey = t3.s_nationkey
+        ) AND (
+          t3.s_nationkey = t4.n_nationkey
         )
       INNER JOIN "region" AS t5
         ON (
