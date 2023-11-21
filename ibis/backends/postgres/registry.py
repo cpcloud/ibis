@@ -608,7 +608,7 @@ operation_registry.update(
     {
         ops.Literal: _literal,
         # We override this here to support time zones
-        ops.TableColumn: _table_column,
+        ops.Field: _table_column,
         ops.Argument: lambda t, op: sa.column(op.name, type_=t.get_sqla_type(op.dtype)),
         # types
         ops.TypeOf: _typeof,
