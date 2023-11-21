@@ -85,12 +85,10 @@ FROM (
         ) AS t7
         WHERE
           (
-            (
-              t7.o_orderdate >= MAKE_DATE(1993, 10, 1)
-            )
-            AND (
-              t7.o_orderdate < MAKE_DATE(1994, 1, 1)
-            )
+            t7.o_orderdate >= MAKE_DATE(1993, 10, 1)
+          )
+          AND (
+            t7.o_orderdate < MAKE_DATE(1994, 1, 1)
           )
           AND (
             t7.l_returnflag = 'R'
