@@ -154,11 +154,7 @@ class PyArrowType(TypeMapper):
                 dtype.unit.short if dtype.scale is not None else "us", tz=dtype.timezone
             )
         elif dtype.is_interval():
-            short = dtype.unit.short
-            if short in {"ns", "us", "ms", "s"}:
-                return pa.duration(short)
-            else:
-                return pa.month_day_nano_interval()
+            return pa.month_day_nano_interval()
         elif dtype.is_time():
             return pa.time64("ns")
         elif dtype.is_date():

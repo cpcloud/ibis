@@ -1235,12 +1235,13 @@ def test_range_expression_bounds(backend):
             "ticker": ["GOOG", "MSFT", "MSFT", "MSFT", "GOOG", "AAPL", "GOOG", "MSFT"],
             "bid": [720.50, 51.95, 51.97, 51.99, 720.50, 97.99, 720.50, 52.01],
             "ask": [720.93, 51.96, 51.98, 52.00, 720.93, 98.01, 720.88, 52.03],
+            "seconds": [1, 2, 3, 4, 5, 6, 7, 8],
         }
     )
     expr = t.select(
         "ticker",
         total_bid_amount=lambda t: t.bid.sum().over(
-            range=(-ibis.interval(seconds=10), 0), order_by=t.time
+            range=(-t.seconds.cast("interval"), 0), order_by=t.time
         ),
     )
 
