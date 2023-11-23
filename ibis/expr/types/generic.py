@@ -1247,13 +1247,12 @@ class Scalar(Value):
         True
         """
         parents = self.op().find_topmost(ops.Relation)
-        values = {self.get_name(): self}
 
         if len(parents) == 0:
-            return ops.DummyTable(values).to_expr()
+            return ops.DummyTable({self.get_name(): self}).to_expr()
         elif len(parents) == 1:
             (parent,) = parents
-            return parent.to_expr().aggregate(**values)
+            return parent.to_expr().aggregate(self)
         else:
             raise com.RelationError(
                 f"The scalar expression {self} cannot be converted to a "
