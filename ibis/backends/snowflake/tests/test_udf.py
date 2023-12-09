@@ -98,9 +98,7 @@ def test_xgboost_model(con):
     import ibis
     from ibis import _
 
-    @udf.scalar.pandas(
-        packages=("joblib", "xgboost"), imports=("@MODELS/model.joblib",)
-    )
+    @udf.scalar.pandas(packages=("joblib", "xgboost"), imports=("@~/model.joblib",))
     def predict_price(
         carat_scaled: float, cut_encoded: int, color_encoded: int, clarity_encoded: int
     ) -> int:

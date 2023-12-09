@@ -116,7 +116,6 @@ USE DATABASE ibis_testing;
 CREATE SCHEMA IF NOT EXISTS {dbschema};
 USE SCHEMA {dbschema};
 CREATE TEMP STAGE ibis_testing;
-CREATE TEMP STAGE models;
 {self.script_dir.joinpath("snowflake.sql").read_text()}"""
             )
 
@@ -129,7 +128,7 @@ CREATE TEMP STAGE models;
                 assert os.path.exists(path)
                 assert os.path.getsize(path) > 0
 
-                c.exec_driver_sql(f"PUT {Path(path).as_uri()} @MODELS")
+                c.exec_driver_sql(f"PUT '{Path(path).as_uri()}' @~/ OVERWRITE = true")
 
             # not much we can do to make this faster, but running these in
             # multiple threads seems to save about 2x
