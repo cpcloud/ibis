@@ -772,15 +772,12 @@ $$"""
         )
 
         with self.begin() as con:
-            # create a temporary stage for the file
-            con.exec_driver_sql(f"CREATE TEMP STAGE {stage}")
-
-            # create a temporary file format for CSV schema inference
-            create_infer_fmt = (
-                f"CREATE TEMP FILE FORMAT {file_format} TYPE = CSV PARSE_HEADER = {str(header).upper()}"
-                + options
+            con.exec_driver_sql(
+                f"""
+                CREATE TEMP STAGE {stage};
+                CREATE TEMP FILE FORMAT {file_format} TYPE = CSV PARSE_HEADER = {str(header).upper()}{options}
+                """
             )
-            con.exec_driver_sql(create_infer_fmt)
 
             # copy the local file to the stage
             con.exec_driver_sql(
@@ -812,13 +809,12 @@ $$"""
                 f"{quoted_name} {typ}{' NOT NULL' * (not nullable)}"
                 for quoted_name, typ, nullable in fields
             )
-            # create a temporary table using the stage and format inferred
-            # from the CSV
-            con.exec_driver_sql(f"CREATE TEMP TABLE {qtable} ({columns})")
 
             # load the CSV into the table
             con.exec_driver_sql(
                 f"""
+                CREATE TEMP TABLE {qtable} ({columns});
+
                 COPY INTO {qtable}
                 FROM @{stage}
                 FILE_FORMAT = (TYPE = CSV SKIP_HEADER = {int(header)}{options})
@@ -863,14 +859,14 @@ $$"""
 
         with self.begin() as con:
             con.exec_driver_sql(
-                f"CREATE TEMP FILE FORMAT {file_format} TYPE = JSON" + options
+                f"""
+                CREATE TEMP FILE FORMAT {file_format} TYPE = JSON{options};
+                CREATE TEMP STAGE {stage} FILE_FORMAT = {file_format}
+                """
             )
 
             con.exec_driver_sql(
-                f"CREATE TEMP STAGE {stage} FILE_FORMAT = {file_format}"
-            )
-            con.exec_driver_sql(
-                f"PUT 'file://{Path(path).absolute()}' @{stage} PARALLEL = {threads:d}"
+                f"PUT '{Path(path).as_uri()}' @{stage} PARALLEL = {threads:d}"
             )
 
             con.exec_driver_sql(
@@ -885,13 +881,8 @@ $$"""
                             FILE_FORMAT => '{file_format}'
                         )
                     )
-                )
-                """
-            )
+                );
 
-            # load the JSON file into the table
-            con.exec_driver_sql(
-                f"""
                 COPY INTO {qtable}
                 FROM @{stage}
                 MATCH_BY_COLUMN_NAME = {str(match_by_column_name).upper()}
@@ -962,11 +953,13 @@ $$"""
                 f"CREATE TEMP STAGE {stage} FILE_FORMAT = (TYPE = PARQUET{options})"
             )
             con.exec_driver_sql(
-                f"PUT 'file://{abspath}' @{stage} PARALLEL = {threads:d}"
+                f"PUT '{abspath.as_uri()}' @{stage} PARALLEL = {threads:d}"
             )
-            con.exec_driver_sql(f"CREATE TEMP TABLE {qtable} ({snowflake_schema})")
             con.exec_driver_sql(
-                f"COPY INTO {qtable} FROM (SELECT {cols} FROM @{stage})"
+                f"""
+                CREATE TEMP TABLE {qtable} ({snowflake_schema});
+                COPY INTO {qtable} FROM (SELECT {cols} FROM @{stage})
+                """
             )
 
         return self.table(table)
