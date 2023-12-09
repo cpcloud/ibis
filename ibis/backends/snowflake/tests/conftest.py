@@ -116,23 +116,21 @@ USE DATABASE ibis_testing;
 CREATE SCHEMA IF NOT EXISTS {dbschema};
 USE SCHEMA {dbschema};
 CREATE TEMP STAGE ibis_testing;
-CREATE STAGE IF NOT EXISTS models;
+CREATE TEMP STAGE models;
 {self.script_dir.joinpath("snowflake.sql").read_text()}"""
             )
 
-        with tempfile.TemporaryDirectory() as d:
-            path, _ = urlretrieve(
-                "https://storage.googleapis.com/ibis-testing-data/model.joblib",
-                os.path.join(d, "model.joblib"),
-            )
+            with tempfile.TemporaryDirectory() as d:
+                path, _ = urlretrieve(
+                    "https://storage.googleapis.com/ibis-testing-data/model.joblib",
+                    os.path.join(d, "model.joblib"),
+                )
 
-            assert os.path.exists(path)
-            assert os.path.getsize(path) > 0
+                assert os.path.exists(path)
+                assert os.path.getsize(path) > 0
 
-            with con.begin() as c:
                 c.exec_driver_sql(f"PUT {Path(path).as_uri()} @MODELS")
 
-        with con.begin() as c:
             # not much we can do to make this faster, but running these in
             # multiple threads seems to save about 2x
             with concurrent.futures.ThreadPoolExecutor() as exe:
