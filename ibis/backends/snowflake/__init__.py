@@ -866,7 +866,7 @@ $$"""
             )
 
             con.exec_driver_sql(
-                f"PUT '{Path(path).as_uri()}' @{stage} PARALLEL = {threads:d}"
+                f"PUT 'file://{Path(path).absolute()}' @{stage} PARALLEL = {threads:d}"
             )
 
             con.exec_driver_sql(
@@ -953,7 +953,7 @@ $$"""
                 f"CREATE TEMP STAGE {stage} FILE_FORMAT = (TYPE = PARQUET{options})"
             )
             con.exec_driver_sql(
-                f"PUT '{abspath.as_uri()}' @{stage} PARALLEL = {threads:d}"
+                f"PUT 'file://{abspath}' @{stage} PARALLEL = {threads:d}"
             )
             con.exec_driver_sql(
                 f"""
