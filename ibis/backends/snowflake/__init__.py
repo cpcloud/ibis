@@ -750,12 +750,12 @@ $$"""
         Table
             The table that was read from the CSV file
         """
-        stage = ibis.util.gen_name("stage")
-        file_format = ibis.util.gen_name("format")
+        stage = util.gen_name("stage")
+        file_format = util.gen_name("format")
         # 99 is the maximum allowed number of threads by Snowflake:
         # https://docs.snowflake.com/en/sql-reference/sql/put#optional-parameters
         threads = min((os.cpu_count() or 2) // 2, 99)
-        table = table_name or ibis.util.gen_name("read_csv_snowflake")
+        table = table_name or util.gen_name("read_csv_snowflake")
         qtable = self._quote(table)
 
         parse_header = header = kwargs.pop("parse_header", True)
