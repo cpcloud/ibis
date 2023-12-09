@@ -964,6 +964,10 @@ $$"""
 
         return self.table(table)
 
+    def _quote(self, name: str) -> str:
+        """Quote a Snowflake identifier using sqlglot."""
+        return sg.to_identifier(name, quoted=True).sql(self.name)
+
 
 @compiles(sa.sql.Join, "snowflake")
 def compile_join(element, compiler, **kw):
