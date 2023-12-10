@@ -99,6 +99,8 @@ repos:
           - json
           - markdown
           - yaml
+          - css
+          - scss
       - id: taplo
         name: taplo
         language: system
