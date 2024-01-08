@@ -224,7 +224,6 @@ def test_connect_url_with_empty_host():
     con = ibis.connect("postgres:///ibis_testing")
     assert con.con.url.host is None
 
-
 def test_timezone_from_column(con):
     with con.begin() as c:
         c.exec_driver_sql("SET TIMEZONE TO 'America/New_York'")
@@ -237,26 +236,37 @@ def test_timezone_from_column(con):
             );
 
             INSERT INTO cs_case (when_started, visit_id) VALUES
-                ('2018-01-01 00:00:00+00', 1);
+                ('2018-01-01 00:00:00+00', 1),
+                ('2018-01-01 01:00:00+00', 1),
+                ('2018-01-01 02:00:00+00', 1);
 
             CREATE TEMPORARY TABLE vis (
                 id SERIAL PRIMARY KEY,
                 submitted_by_id INTEGER
             );
 
-            INSERT INTO vis (submitted_by_id) VALUES (1);
+            INSERT INTO vis (submitted_by_id) VALUES (1), (1), (2);
             """
         )
 
-    case = con.table("cs_case").select("visit_id", case_started="when_started")
+    case = con.table("cs_case")
+    case = case.filter(case.id.isin([1, 2, 3]))
+    case = case.select("id", "when_started", "visit_id")
+    case = case.rename(case_id="id", case_started="when_started")
 
     # Generate an expression for a table with information I want joined
-    visit = con.table("vis").rename(visit_id="id")
+    visit = con.table("vis")
+    visit = visit[["id", "submitted_by_id"]]
+    visit = visit.rename(visit_id="id")
 
-    joined = case.left_join(visit, "visit_id")
+    # WEIRD THINGS HAPPEND HERE.  If I comment out this join, the "when_started" field
+    # is returned with the expected timezone information.  Running this join mysteriously
+    # keeps the timezones the same but shifts the underlying time values  by 5 hours.
+    # This is the expected offset between UTC and America/New_York timezone.
+    # THIS BEHAVIOR DOES NOT HAPPEN IN ibis-frame<7.0.0
+    case = case.left_join(visit, "visit_id")
 
-    sql = str(ibis.to_sql(joined))
-    result = joined.execute()
+    sql = str(ibis.to_sql(case))
+    result = case.execute()
     print(result)
     assert "AT TIME ZONE 'UTC' AS TIMESTAMPTZ" not in sql
-    print(sql)
