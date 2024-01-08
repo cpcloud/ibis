@@ -184,6 +184,12 @@ def _cast(t, op):
     if typ.is_json() and not t.native_json_type:
         return sa_arg
 
+    # if types are equivalent up to but not including nullability, no need to
+    # cast since casting to not nullable isn't meaningful for any of our
+    # sqlalchemy backends
+    if arg_dtype.copy(nullable=typ.nullable).equals(typ):
+        return sa_arg
+
     return sa.cast(sa_arg, t.get_sqla_type(typ))
 
 

@@ -223,3 +223,40 @@ def test_insert_with_cte(con):
 def test_connect_url_with_empty_host():
     con = ibis.connect("postgres:///ibis_testing")
     assert con.con.url.host is None
+
+
+def test_timezone_from_column(con):
+    with con.begin() as c:
+        c.exec_driver_sql("SET TIMEZONE TO 'America/New_York'")
+        c.exec_driver_sql(
+            """
+            CREATE TEMPORARY TABLE cs_case (
+                id SERIAL PRIMARY KEY,
+                when_started TIMESTAMP WITH TIME ZONE NOT NULL,
+                visit_id INTEGER
+            );
+
+            INSERT INTO cs_case (when_started, visit_id) VALUES
+                ('2018-01-01 00:00:00+00', 1);
+
+            CREATE TEMPORARY TABLE vis (
+                id SERIAL PRIMARY KEY,
+                submitted_by_id INTEGER
+            );
+
+            INSERT INTO vis (submitted_by_id) VALUES (1);
+            """
+        )
+
+    case = con.table("cs_case").select("visit_id", case_started="when_started")
+
+    # Generate an expression for a table with information I want joined
+    visit = con.table("vis").rename(visit_id="id")
+
+    joined = case.left_join(visit, "visit_id")
+
+    sql = str(ibis.to_sql(joined))
+    result = joined.execute()
+    print(result)
+    assert "AT TIME ZONE 'UTC' AS TIMESTAMPTZ" not in sql
+    print(sql)
