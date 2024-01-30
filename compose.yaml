@@ -538,6 +538,20 @@ services:
     networks:
       - impala
 
+  localstack:
+    image: localstack/localstack:3.1
+    ports:
+      - 4566:4566
+      - 4510-4559:4510-4559
+    healthcheck:
+      interval: 3s
+      retries: 20
+      test:
+        - CMD-SHELL
+        - curl 'https://localhost.localstack.cloud:4566'
+    networks:
+      - localstack
+
 networks:
   impala:
     # docker defaults to naming networks "$PROJECT_$NETWORK" but the Java Hive
@@ -554,6 +568,7 @@ networks:
   oracle:
   exasol:
   flink:
+  localstack:
 
 volumes:
   broker_var:
