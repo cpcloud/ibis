@@ -539,16 +539,12 @@ services:
       - impala
 
   localstack:
-    image: localstack/localstack:3.1
+    image: localstack/localstack-pro:3.1
     ports:
       - 4566:4566
       - 4510-4559:4510-4559
-    healthcheck:
-      interval: 3s
-      retries: 20
-      test:
-        - CMD-SHELL
-        - curl 'https://localhost.localstack.cloud:4566'
+    environment:
+      EXTENSION_AUTO_INSTALL: localstack-extension-snowflake
     networks:
       - localstack
 
