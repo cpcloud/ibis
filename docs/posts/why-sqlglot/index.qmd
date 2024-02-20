@@ -1,0 +1,63 @@
+---
+title: "Why SQLGlot?"
+author: "Phillip Cloud"
+date: "2024-02-21"
+categories:
+  - blog
+  - sqlglot
+  - community
+---
+
+::: {.callout-note title="TL; DR"}
+We moved to sqlglot to reduce the number dependencies and greatly simplify the
+architecture of Ibis, setting us up for a more sustainable future.
+:::
+
+This blog post is about our recent move to
+[sqlglot](https://github.com/tobymao/sqlglot) and why we moved away from
+SQLAlchemy.
+
+### Ibis's architecture in a nutshell
+
+Up to now Ibis had four flavors of backends:
+
+1. Backends that produced strings containing SQL code (BigQuery, Flink, Impala)
+1. Backends that produced SQLAlchemy [expressions](link to sqlalchemy expression system docs) (most SQL backends)
+1. Backends that produced lazy DataFrame expressions from other APIs (dask and polars)
+1. Backends that directly executed expressions (pandas)
+
+### SQAlchemy
+
+## Problems
+
+1. The federated dialects problem
+1. The layers of abstraction in SQLAlchemy
+1. The complexity of SQLAlchemy's expression system
+1. SQLAlchemy has many components that we don't need
+1. 1.x versus 2.x for dialects
+
+## Solutions
+
+sqlglot solves all of these problems.
+
+### Dialects are contained in a single place.
+
+This isn't without downsides.
+
+### sqlglot has fewer layers of abstraction than sqlalchemy
+
+This will change over time, but for now the architecture is much simpler than
+SQLAlchemy. For example, Ibis doesn't need a Row proxy object to wrap tuples.
+We have schema information already, so we don't need the convenience that
+sqlalchemy provides here. When we want to get direct arrow or pandas results,
+more often than not we had to actively work to dig around for the DBAPI to get
+its special methods. Since we're now only using DBAPIs and clients directly we
+can easily access these methods to give the best performance possible.
+
+### sqlglot's expression system is easier to work with and understand
+
+### sqlglot has a lot fewer features than sqlalchemy
+
+We don't use any of the connection pooling; DDL has too many gaps per dialect
+
+## Where are we going?
