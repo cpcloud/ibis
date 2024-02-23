@@ -29,13 +29,14 @@ if TYPE_CHECKING:
 class Backend(clickhouse.Backend):
     name = "chdb"
 
-    def do_connect(self, path: str | Path | None = None, database: str = "default"):
+    def do_connect(self, path: str | Path | None = None, database: str | None = None):
         from chdb.session import Session
 
-        self.con = Session(path=str(path))
+        self.con = Session(path=path)
 
-        self.con.query(f"CREATE DATABASE IF NOT EXISTS {database}")
-        self.con.query(f"USE {database}")
+        if database is not None:
+            self.con.query(f"CREATE DATABASE IF NOT EXISTS {database}")
+            self.con.query(f"USE {database}")
 
     @property
     def version(self) -> str:
@@ -44,15 +45,15 @@ class Backend(clickhouse.Backend):
         return chdb.__version__
 
     @contextlib.contextmanager
-    def _safe_raw_sql(self, *args, **kwargs):
-        yield self.raw_sql(*args, **kwargs)
+    def _safe_raw_sql(self, *args, fmt: str = "Arrow", **kwargs):
+        yield self.raw_sql(*args, fmt=fmt, **kwargs)
 
     @property
     def current_database(self) -> str:
         import chdb
 
         with self._safe_raw_sql(
-            sg.select(self.compiler.f.currentDatabase().as_("db")), fmt="Arrow"
+            sg.select(self.compiler.f.currentDatabase().as_("db"))
         ) as result:
             table = chdb.to_arrowTable(result)
         (db,) = table["db"].to_pylist()
@@ -83,7 +84,7 @@ class Backend(clickhouse.Backend):
 
         query = query.where(C.database.eq(database).or_(C.is_temporary))
 
-        with self._safe_raw_sql(query, fmt="Arrow") as result:
+        with self._safe_raw_sql(query) as result:
             table = chdb.to_arrowTable(result)
 
         names = table["name"].to_pylist()
@@ -300,7 +301,7 @@ class Backend(clickhouse.Backend):
                 "`schema` namespaces are not supported by clickhouse"
             )
         query = sge.Describe(this=sg.table(table_name, db=database))
-        with self._safe_raw_sql(query, fmt="Arrow") as results:
+        with self._safe_raw_sql(query) as results:
             table = chdb.to_arrowTable(results)
 
         names = table["name"].to_pylist()
