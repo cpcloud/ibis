@@ -51,6 +51,7 @@ sqlglot = ">=19.3.0,<=20.11"
 toolz = ">=0.11,<1"
 typing-extensions = ">=4.3.0,<5"
 black = { version = ">=22.1.0,<25", optional = true }
+chdb = { version = ">=1.2.1,<2", optional = true }
 clickhouse-connect = { version = ">=0.5.23,<1", optional = true, extras = [
   "arrow",
   "numpy",
@@ -176,6 +177,7 @@ bigquery = [
   "pydata-google-auth",
 ]
 clickhouse = ["clickhouse-connect"]
+chdb = ["chdb"]
 dask = ["dask", "regex"]
 datafusion = ["datafusion"]
 druid = ["pydruid"]
@@ -203,6 +205,7 @@ examples = ["pins"]
 
 [tool.poetry.plugins."ibis.backends"]
 bigquery = "ibis.backends.bigquery"
+chdb = "ibis.backends.chdb"
 clickhouse = "ibis.backends.clickhouse"
 dask = "ibis.backends.dask"
 datafusion = "ibis.backends.datafusion"
@@ -357,6 +360,7 @@ markers = [
   "sqlite: SQLite tests",
   "trino: Trino tests",
   "tpch: TPC-H tests",
+  "chdb: ChDB tests",
 ]
 
 [tool.pydeps]
