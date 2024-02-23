@@ -716,3 +716,15 @@ class BigQueryCompiler(SQLGlotCompiler):
         if where is not None:
             arg = self.if_(where, arg, NULL)
         return self.f.count(sge.Distinct(expressions=[arg]))
+
+    def visit_TableUnnest(self, op, *, column, offset):
+        alias = sge.TableAlias(columns=[sg.to_identifier(column.name)])
+        if offset is not None:
+            offset = sge.TableAlias(columns=[sg.to_identifier(offset, quoted=True)])
+        res = sge.Unnest(
+            expressions=[column],
+            alias=alias,
+            offset=sg.to_identifier(offset, quoted=True),
+        )
+        return res
+        # return self._unnest(column, as_=column.name, offset=offset)

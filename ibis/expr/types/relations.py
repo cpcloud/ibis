@@ -2807,6 +2807,17 @@ class Table(Expr, _FixedTextJupyterMixin):
                 result_columns.append(column)
         return self[result_columns]
 
+    def unnest(self, column: str, offset: str | None = None) -> ir.Table:
+        """Unnest `column`.
+
+        Examples
+        --------
+        >>> t = ibis.range(10).name("x").unnest().as_table().select(y=ibis.array([1, 2, 3]))
+        >>> t.unnest("y")
+        >>> t.unnest("y", offset="idx")
+        """
+        return ops.TableUnnest(column=self[column], offset=offset).to_expr()
+
     def info(self) -> Table:
         """Return summary information about a table.
 

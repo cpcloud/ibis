@@ -9,6 +9,7 @@ from public import public
 
 import ibis.expr.datashape as ds
 import ibis.expr.datatypes as dt
+import ibis.expr.schema as sch
 from ibis.common.annotations import attribute
 from ibis.common.collections import FrozenDict
 from ibis.common.exceptions import IbisTypeError, IntegrityError, RelationError
@@ -407,3 +408,26 @@ class Distinct(Simple):
 
 
 # TODO(kszucs): support t.select(*t) syntax by implementing Table.__iter__()
+
+
+@public
+class TableUnnest(Relation):
+    column: Value[dt.Array]
+    offset: str | None
+
+    @attribute
+    def values(self):
+        column = self.column
+        return FrozenDict({column.name: column})
+
+    @attribute
+    def schema(self):
+        column = self.column
+
+        mapping = {column.name: column.dtype.value_type}
+
+        offset = self.offset
+        if offset is not None:
+            mapping |= {offset: dt.int64}
+
+        return sch.Schema(mapping)

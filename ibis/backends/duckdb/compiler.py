@@ -417,5 +417,7 @@ class DuckDBCompiler(SQLGlotCompiler):
             ]
         )
         func = sge.Lambda(this=body, expressions=[i])
-        applied = self.f.list_apply(self.f.range(1, self.f.len(arg) + 1), func)
+        applied = self.f.list_apply(
+            self.f.range(1, sg.select(self.f.sum(self.f.len(arg))).subquery() + 1), func
+        )
         return sge.Explode(this=applied)
