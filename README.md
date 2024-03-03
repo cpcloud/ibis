@@ -8,6 +8,17 @@
 [![Build status](https://github.com/ibis-project/ibis/actions/workflows/ibis-backends.yml/badge.svg)](https://github.com/ibis-project/ibis/actions/workflows/ibis-backends.yml?query=branch%3Amain)
 [![Codecov branch](https://img.shields.io/codecov/c/github/ibis-project/ibis/main.svg)](https://codecov.io/gh/ibis-project/ibis)
 
+## Diagram
+
+```mermaid
+sankey-beta
+
+%% source,target,value
+Electricity grid,Over generation / exports,104.453
+Electricity grid,Heating and cooling - homes,113.726
+Electricity grid,H2 conversion,27.14
+```
+
 ## What is Ibis?
 
 Ibis is a Python library that provides a lightweight, universal interface for data wrangling. It helps Python users explore and transform data of any size, stored anywhere.
