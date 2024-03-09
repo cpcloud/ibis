@@ -22,7 +22,6 @@ permissions:
 
 env:
   FORCE_COLOR: "1"
-  SQLALCHEMY_WARN_20: "1"
   HYPOTHESIS_PROFILE: "ci"
 
 jobs:
