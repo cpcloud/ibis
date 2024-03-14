@@ -55,20 +55,32 @@ class _Settings:
         self.con = con
 
     def __getitem__(self, key: str) -> Any:
-        maybe_value = self.con.execute(
-            f"select value from duckdb_settings() where name = '{key}'"
-        ).fetchone()
+        query = (
+            sg.select(C.value)
+            .from_(F.duckdb_settings())
+            .where(C.name.eq(sge.convert(key)))
+        )
+        maybe_value = self.con.sql(query.sql("duckdb")).fetchone()
         if maybe_value is not None:
             return maybe_value[0]
         raise KeyError(key)
 
     def __setitem__(self, key, value):
-        self.con.execute(f"SET {key} = '{value}'")
+        self.con.execute(
+            sge.Set(
+                expressions=[
+                    sge.SetItem(
+                        this=sg.to_identifier(key, quoted=False).eq(sge.convert(value))
+                    )
+                ]
+            ).sql("duckdb")
+        )
 
     def __repr__(self):
-        ((kv,),) = self.con.execute(
-            "select map(array_agg(name), array_agg(value)) from duckdb_settings()"
-        ).fetch()
+        query = sg.select(F.map(F.array_agg(C.name), F.array_agg(C.value))).from_(
+            F.duckdb_settings()
+        )
+        ((kv,),) = self.con.execute(query.sql("duckdb")).fetch()
 
         return repr(dict(zip(kv["key"], kv["value"])))
 
@@ -86,13 +98,13 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
 
     @property
     def current_database(self) -> str:
-        with self._safe_raw_sql(sg.select(self.compiler.f.current_database())) as cur:
+        with self._safe_raw_sql(sg.select(F.current_database())) as cur:
             [(db,)] = cur.fetchall()
         return db
 
     @property
     def current_schema(self) -> str:
-        with self._safe_raw_sql(sg.select(self.compiler.f.current_schema())) as cur:
+        with self._safe_raw_sql(sg.select(F.current_schema())) as cur:
             [(schema,)] = cur.fetchall()
         return schema
 
@@ -115,11 +127,13 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
         if not geocols:
             return sql
 
+        compiler = self.compiler
+        quoted = compiler.quoted
         return sg.select(
             *(
-                self.compiler.f.st_aswkb(
-                    sg.column(col, quoted=self.compiler.quoted)
-                ).as_(col)
+                compiler.f.st_aswkb(sg.column(col, quoted=quoted)).as_(
+                    col, quoted=quoted
+                )
                 if col in geocols
                 else col
                 for col in table_expr.columns
@@ -305,27 +319,27 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
             Ibis schema
 
         """
-        conditions = [sg.column("table_name").eq(sge.convert(table_name))]
+        conditions = [C.table_name.eq(sge.convert(table_name))]
 
         if database is not None:
-            conditions.append(sg.column("table_catalog").eq(sge.convert(database)))
+            conditions.append(C.table_catalog.eq(sge.convert(database)))
 
         if schema is not None:
-            conditions.append(sg.column("table_schema").eq(sge.convert(schema)))
+            conditions.append(C.table_schema.eq(sge.convert(schema)))
 
         query = (
             sg.select(
                 "column_name",
                 "data_type",
-                sg.column("is_nullable").eq(sge.convert("YES")).as_("nullable"),
+                C.is_nullable.eq(sge.convert("YES")).as_("nullable"),
             )
             .from_(sg.table("columns", db="information_schema"))
             .where(sg.and_(*conditions))
             .order_by("ordinal_position")
         )
 
-        with self._safe_raw_sql(query) as cur:
-            meta = cur.fetch_arrow_table()
+        rel = self.con.sql(query.sql(self.name))
+        meta = rel.fetch_arrow_table()
 
         if not meta:
             raise exc.IbisError(f"Table not found: {table_name!r}")
@@ -334,9 +348,10 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
         types = meta["data_type"].to_pylist()
         nullables = meta["nullable"].to_pylist()
 
+        type_mapper = self.compiler.type_mapper
         return sch.Schema(
             {
-                name: self.compiler.type_mapper.from_string(typ, nullable=nullable)
+                name: type_mapper.from_string(typ, nullable=nullable)
                 for name, typ, nullable in zip(names, types, nullables)
             }
         )
@@ -345,13 +360,51 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
     def _safe_raw_sql(self, *args, **kwargs):
         yield self.raw_sql(*args, **kwargs)
 
+    def execute(
+        self,
+        expr: ir.Expr,
+        params: Mapping | None = None,
+        limit: str | None = "default",
+        **kwargs: Any,
+    ) -> Any:
+        """Execute an expression."""
+        import pandas as pd
+        import pyarrow.types as pat
+
+        self._run_pre_execute_hooks(expr)
+
+        table = expr.as_table()
+        sql = self.compile(table, params=params, limit=limit, **kwargs)
+
+        rel = self.con.sql(sql)
+        result = rel.fetch_arrow_table()
+
+        df = pd.DataFrame(
+            {
+                name: (
+                    col.to_pylist()
+                    if (
+                        pat.is_nested(col.type)
+                        or
+                        # pyarrow / duckdb type null literals columns as int32?
+                        # but calling `to_pylist()` will render it as None
+                        col.null_count
+                    )
+                    else col.to_pandas(timestamp_as_object=True)
+                )
+                for name, col in zip(result.column_names, result.columns)
+            }
+        )
+        result = DuckDBPandasData.convert_table(df, schema=table.schema())
+        return expr.__pandas_result__(result)
+
     def list_databases(self, like: str | None = None) -> list[str]:
         col = "catalog_name"
-        query = sg.select(sge.Distinct(expressions=[sg.column(col)])).from_(
+        query = sg.select(sge.Distinct(expressions=[C[col]])).from_(
             sg.table("schemata", db="information_schema")
         )
-        with self._safe_raw_sql(query) as cur:
-            result = cur.fetch_arrow_table()
+        rel = self.con.sql(query.sql(self.name))
+        result = rel.fetch_arrow_table()
         dbs = result[col]
         return self._filter_with_like(dbs.to_pylist(), like)
 
@@ -359,15 +412,15 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
         self, like: str | None = None, database: str | None = None
     ) -> list[str]:
         col = "schema_name"
-        query = sg.select(sge.Distinct(expressions=[sg.column(col)])).from_(
+        query = sg.select(sge.Distinct(expressions=[C[col]])).from_(
             sg.table("schemata", db="information_schema")
         )
 
         if database is not None:
-            query = query.where(sg.column("catalog_name").eq(sge.convert(database)))
+            query = query.where(C.catalog_name.eq(sge.convert(database)))
 
-        with self._safe_raw_sql(query) as cur:
-            out = cur.fetch_arrow_table()
+        rel = self.con.sql(query.sql(self.name))
+        out = rel.fetch_arrow_table()
         return self._filter_with_like(out[col].to_pylist(), like=like)
 
     @staticmethod
@@ -946,10 +999,10 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
                 ),
                 C.table_schema.eq(schema),
             )
-            .sql(self.name, pretty=True)
         )
 
-        out = self.con.execute(sql).fetch_arrow_table()
+        rel = self.con.sql(sql.sql(self.name))
+        out = rel.fetch_arrow_table()
 
         return self._filter_with_like(out[col].to_pylist(), like)
 
@@ -1239,13 +1292,13 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
         **_: Any,
     ) -> pa.Table:
         self._run_pre_execute_hooks(expr)
-        table = expr.as_table()
-        sql = self.compile(table, limit=limit, params=params)
 
-        with self._safe_raw_sql(sql) as cur:
-            table = cur.fetch_arrow_table()
+        sql = self.compile(expr.as_table(), limit=limit, params=params)
 
-        return expr.__pyarrow_result__(table)
+        rel = self.con.sql(sql)
+        arrow_table = rel.fetch_arrow_table()
+
+        return expr.__pyarrow_result__(arrow_table)
 
     @util.experimental
     def to_torch(
@@ -1377,35 +1430,10 @@ class Backend(SQLBackend, CanCreateSchema, UrlFromPath):
         with self._safe_raw_sql(copy_cmd):
             pass
 
-    def _fetch_from_cursor(
-        self, cursor: duckdb.DuckDBPyConnection, schema: sch.Schema
-    ) -> pd.DataFrame:
-        import pandas as pd
-        import pyarrow.types as pat
-
-        table = cursor.fetch_arrow_table()
-
-        df = pd.DataFrame(
-            {
-                name: (
-                    col.to_pylist()
-                    if (
-                        pat.is_nested(col.type)
-                        or
-                        # pyarrow / duckdb type null literals columns as int32?
-                        # but calling `to_pylist()` will render it as None
-                        col.null_count
-                    )
-                    else col.to_pandas(timestamp_as_object=True)
-                )
-                for name, col in zip(table.column_names, table.columns)
-            }
-        )
-        return DuckDBPandasData.convert_table(df, schema)
-
     def _get_schema_using_query(self, query: str) -> sch.Schema:
-        with self._safe_raw_sql(f"DESCRIBE {query}") as cur:
-            rows = cur.fetch_arrow_table()
+        sql = sge.Describe(this=query)
+        rel = self.con.sql(sql.sql(self.name))
+        rows = rel.fetch_arrow_table()
 
         rows = rows.to_pydict()
 
