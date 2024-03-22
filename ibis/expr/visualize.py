@@ -1,17 +1,129 @@
 from __future__ import annotations
 
 import contextlib
-import sys
-import tempfile
+from abc import ABC, abstractmethod
 from html import escape
-from typing import Callable, Optional
-
-import graphviz as gv
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import ibis
 import ibis.common.exceptions as com
 import ibis.expr.operations as ops
 from ibis.common.graph import Graph
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+class Formatter(ABC):
+    @abstractmethod
+    def add_node(self, node: str, label: str | None = None, **attrs) -> None: ...
+
+    @abstractmethod
+    def add_edge(
+        self, node1: str, node2: str, label: str | None = None, **attrs
+    ) -> None: ...
+
+    @abstractmethod
+    def fmt(self, op: ops.Node, label_edges: bool = False, **attrs: Any) -> str:
+        """Return the specific format string for this format."""
+
+        graph = Graph.from_bfs(op, filter=ops.Node)
+
+        seen = set()
+        edges = set()
+
+        for v, us in graph.items():
+            if v not in seen:
+                self.add_node(v, label=get_label(v), **attrs)
+                seen.add(v)
+
+            for u in us:
+                if u not in seen:
+                    self.add_node(u, label=get_label(u), **attrs)
+                    seen.add(u)
+                if (edge := (u, v)) not in edges:
+                    if not label_edges:
+                        label = None
+                    else:
+                        for name, arg in zip(v.argnames, v.args):
+                            if isinstance(arg, tuple) and u in arg:
+                                index = arg.index(u)
+                                name = f"{name}[{index}]"
+                                break
+                            elif arg == u:
+                                break
+                        else:
+                            name = None
+                        label = f"<.{name}>"
+
+                    self.add_edge(u, v, label=label, **attrs)
+                    edges.add(edge)
+
+
+class DotFormatter(Formatter):
+    __slots__ = ("graph",)
+
+    def __init__(
+        self,
+        node_attr: Mapping[str, str] | None = None,
+        edge_attr: Mapping[str, str] | None = None,
+        rankdir: str = "BT",
+    ) -> None:
+        import graphviz as gv
+
+        self.graph = gv.Digraph(
+            node_attr=DEFAULT_NODE_ATTRS | (node_attr or {}),
+            edge_attr=DEFAULT_EDGE_ATTRS | (edge_attr or {}),
+        )
+        self.graph.attr(rankdir=rankdir)
+
+    def fmt(self) -> str:
+        return self.graph.source
+
+    def add_node(
+        self,
+        node: ops.Node,
+        label: str | None = None,
+        node_attr_getter: NodeAttributeGetter | None = None,
+        **_: Any,
+    ) -> None:
+        node_hash = str(hash(node))
+        self.graph.node(
+            node_hash,
+            label=label,
+            _attributes=node_attr_getter(node) if node_attr_getter else {},
+        )
+
+    def add_edge(
+        self,
+        node1: ops.Node,
+        node2: ops.Node,
+        label: str | None = None,
+        edge_attr_getter: EdgeAttributeGetter | None = None,
+        **_: Any,
+    ) -> None:
+        node1_hash = str(hash(node1))
+        node2_hash = str(hash(node2))
+        self.graph.edge(
+            node1_hash,
+            node2_hash,
+            label=label,
+            _attributes=edge_attr_getter(node1, node2) if edge_attr_getter else {},
+        )
+
+
+class MermaidFormatter(Formatter):
+    __slots__ = ("lines",)
+
+    def __init__(self):
+        self.lines: list[str] = []
+
+
+class ReprFormatter(Formatter):
+    __slots__ = ("lines",)
+
+    def __init__(self):
+        self.lines: list[str] = []
 
 
 def get_type(node):
@@ -165,24 +277,6 @@ def to_graph(
                 )
                 edges.add(edge)
     return g
-
-
-def draw(graph, path=None, format="png", verbose: bool = False):
-    if verbose:
-        print(graph.source, file=sys.stderr)  # noqa: T201
-
-    piped_source = graph.pipe(format=format)
-
-    if path is None:
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=f".{format}", mode="wb"
-        ) as f:
-            f.write(piped_source)
-        return f.name
-    else:
-        with open(path, mode="wb") as f:
-            f.write(piped_source)
-        return path
 
 
 if __name__ == "__main__":
