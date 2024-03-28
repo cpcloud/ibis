@@ -16,9 +16,7 @@ pytestmark = [
     pytest.mark.never(
         ["sqlite", "mysql", "mssql"], reason="Unlikely to ever add map support"
     ),
-    pytest.mark.notyet(
-        ["bigquery", "impala"], reason="Backend doesn't yet implement map types"
-    ),
+    pytest.mark.notyet(["impala"], reason="Backend doesn't yet implement map types"),
     pytest.mark.notimpl(
         ["datafusion", "exasol", "polars", "druid", "oracle"],
         reason="Not yet implemented in ibis",
@@ -32,6 +30,9 @@ mark_notyet_postgres = pytest.mark.notyet(
 mark_notyet_snowflake = pytest.mark.notyet(
     "snowflake", reason="map keys must be strings"
 )
+
+mark_notyet_bigquery = pytest.mark.notyet("bigquery", reason="map keys must be strings")
+
 
 mark_notimpl_risingwave_hstore = pytest.mark.notimpl(
     ["risingwave"],
@@ -182,12 +183,12 @@ keys = pytest.mark.parametrize(
         pytest.param(["a", "b"], id="string"),
         pytest.param(
             [1, 2],
-            marks=[mark_notyet_postgres, mark_notyet_snowflake],
+            marks=[mark_notyet_postgres, mark_notyet_snowflake, mark_notyet_bigquery],
             id="int",
         ),
         pytest.param(
             [True, False],
-            marks=[mark_notyet_postgres, mark_notyet_snowflake],
+            marks=[mark_notyet_postgres, mark_notyet_snowflake, mark_notyet_bigquery],
             id="bool",
         ),
         pytest.param(
@@ -198,12 +199,13 @@ keys = pytest.mark.parametrize(
                 ),
                 mark_notyet_postgres,
                 mark_notyet_snowflake,
+                mark_notyet_bigquery,
             ],
             id="float",
         ),
         pytest.param(
             [ibis.timestamp("2021-01-01"), ibis.timestamp("2021-01-02")],
-            marks=[mark_notyet_postgres, mark_notyet_snowflake],
+            marks=[mark_notyet_postgres, mark_notyet_snowflake, mark_notyet_bigquery],
             id="timestamp",
         ),
         pytest.param(
@@ -217,6 +219,7 @@ keys = pytest.mark.parametrize(
                 ),
                 mark_notyet_postgres,
                 mark_notyet_snowflake,
+                mark_notyet_bigquery,
             ],
             id="date",
         ),
@@ -229,6 +232,7 @@ keys = pytest.mark.parametrize(
                 pytest.mark.notyet(["pandas", "dask"]),
                 mark_notyet_postgres,
                 mark_notyet_snowflake,
+                mark_notyet_bigquery,
             ],
             id="array",
         ),
@@ -246,6 +250,7 @@ keys = pytest.mark.parametrize(
                     reason="does not support selecting struct key from map",
                 ),
                 mark_notyet_snowflake,
+                mark_notyet_bigquery,
             ],
             id="struct",
         ),
@@ -300,6 +305,7 @@ values = pytest.mark.parametrize(
             marks=[
                 pytest.mark.notyet("clickhouse", reason="nested types can't be null"),
                 mark_notyet_postgres,
+                mark_notyet_bigquery,
             ],
             id="array",
         ),
@@ -308,6 +314,7 @@ values = pytest.mark.parametrize(
             marks=[
                 pytest.mark.notyet("clickhouse", reason="nested types can't be null"),
                 mark_notyet_postgres,
+                mark_notyet_bigquery,
             ],
             id="struct",
         ),
@@ -449,6 +456,7 @@ def test_map_get_with_null_on_null_type_with_non_null(con):
     reason="`tbl_properties` is required when creating table with schema",
 )
 @mark_notimpl_risingwave_hstore
+@mark_notyet_bigquery
 def test_map_create_table(con, temp_table):
     t = con.create_table(
         temp_table,

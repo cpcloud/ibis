@@ -168,3 +168,10 @@ INSERT INTO {dataset}.struct_table VALUES
     ([(12345, 'abcdefg'), (NULL, 'hijklmnop')],
      STRUCT(STRUCT('2017-10-20 16:37:50.000000')),
      STRUCT('a'));
+
+
+CREATE OR REPLACE TABLE {dataset}.map (idx INT64, kv JSON);
+
+INSERT INTO {dataset}.map
+    SELECT 1, JSON '{{"a": 1, "b": 2, "c": 3}}' UNION ALL
+    SELECT 2, JSON '{{"d": 4, "e": 5, "f": 6}}';

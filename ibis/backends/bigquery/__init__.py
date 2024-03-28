@@ -686,6 +686,45 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             if sql := compile_func(udf_node):
                 udf_sources.append(sql.sql(self.name, pretty=True))
 
+        udf_sources.append(
+            '''
+            CREATE TEMP FUNCTION ibis_map_keys(input STRING) RETURNS ARRAY<STRING> LANGUAGE js AS """
+              let js = JSON.parse(input);
+              if (js === undefined || js === null || Array.isArray(js)) {
+                return null;
+              }
+              return Object.keys(js);
+            """
+            '''
+        )
+        udf_sources.append(
+            '''
+            CREATE TEMP FUNCTION ibis_map_values(input STRING) RETURNS JSON LANGUAGE js AS """
+              let js = JSON.parse(input);
+
+              if (js === undefined || js === null || Array.isArray(js)) {
+                return null;
+              }
+
+              return Object.values(js);
+            """
+            '''
+        )
+        udf_sources.append(
+            '''
+            CREATE TEMP FUNCTION ibis_map_get(arg STRING, key STRING, default_value STRING)
+            RETURNS STRING LANGUAGE js AS """
+              let js = JSON.parse(arg);
+
+              if (js === undefined || js === null || Array.isArray(js)) {
+                return null;
+              }
+
+              return key in js ? js[key] : JSON.parse(default_value);
+            """
+            '''
+        )
+
         sql = ";\n".join([*udf_sources, query.sql(dialect=self.name, pretty=True)])
         self._log(sql)
         return sql

@@ -20,10 +20,29 @@ from ibis.backends.sql.rewrites import (
     exclude_unsupported_window_frame_from_row_number,
     rewrite_sample_as_filter,
 )
+from ibis.common.patterns import replace
 from ibis.common.temporal import DateUnit, IntervalUnit, TimestampUnit, TimeUnit
 from ibis.expr.rewrites import rewrite_stringslice
 
 _NAME_REGEX = re.compile(r'[^!"$()*,./;?@[\\\]^`{}~\n]+')
+
+
+@replace(ops.MapMerge)
+def map_merge_to_construct(_):
+    # The `right` argument comes first here because of
+    # https://cloud.google.com/bigquery/docs/reference/standard-sql/json_functions#json_object
+    # which preserves the FIRST key when there are duplicates, and we want
+    # backends to behave consistently and in the style of Python when there's
+    # disagreement
+    return ops.Map(
+        ops.ArrayConcat((ops.MapKeys(_.right), ops.MapKeys(_.left))),
+        ops.ArrayConcat((ops.MapValues(_.right), ops.MapValues(_.left))),
+    )
+
+
+@replace(ops.MapLength)
+def map_length_to_array_length(_):
+    return ops.ArrayLength(ops.MapKeys(_.arg))
 
 
 class BigQueryCompiler(SQLGlotCompiler):
@@ -36,6 +55,8 @@ class BigQueryCompiler(SQLGlotCompiler):
         exclude_unsupported_window_frame_from_row_number,
         exclude_unsupported_window_frame_from_rank,
         rewrite_stringslice,
+        map_merge_to_construct,
+        map_length_to_array_length,
         *SQLGlotCompiler.rewrites,
     )
 
@@ -315,6 +336,10 @@ class BigQueryCompiler(SQLGlotCompiler):
                 )
         elif dtype.is_uuid():
             return sge.convert(str(value))
+        elif dtype.is_map():
+            return self.f.json_object(
+                self.f.array(*value.keys()), self.f.array(*value.values())
+            )
         return None
 
     def visit_IntervalFromInteger(self, op, *, arg, unit):
@@ -695,3 +720,52 @@ class BigQueryCompiler(SQLGlotCompiler):
         if where is not None:
             arg = self.if_(where, arg, NULL)
         return self.f.count(sge.Distinct(expressions=[arg]))
+
+    def visit_ToJSONMap(self, op, *, arg):
+        return arg
+
+    def visit_ToJSONArray(self, op, *, arg):
+        return self.f.json_query_array(arg)
+
+    def visit_MapKeys(self, op, *, arg):
+        return self.f.ibis_map_keys(self.f.to_json_string(arg))
+
+    def visit_MapValues(self, op, *, arg):
+        value_type = op.dtype.value_type
+        vals = self.f.ibis_map_values(self.f.to_json_string(arg))
+        if value_type.is_json():
+            return self.f.json_query_array(vals)
+        elif value_type.is_string():
+            return self.f.json_extract_string_array(vals)
+        else:
+            # things start to get weird here
+            name = sg.to_identifier(util.gen_name("bq_map_values"))
+            return self.f.array(
+                sg.select(self.cast(name, value_type)).from_(
+                    self._unnest(self.f.json_extract_string_array(vals), as_=name)
+                )
+            )
+
+    def visit_MapGet(self, op, *, arg, key, default):
+        result = self.f.ibis_map_get(
+            self.f.to_json_string(arg), key, self.f.to_json_string(default)
+        )
+
+        if op.dtype.is_null():
+            return result
+
+        return self.cast(result, op.dtype)
+
+    def visit_Map(self, op, *, keys, values):
+        return self.f.json_object(keys, values)
+
+    def visit_MapContains(self, op, *, arg, key):
+        name = sg.to_identifier(util.gen_name("bq_map_contains"))
+        arr_contains = sge.Exists(
+            this=sg.select(sge.convert(1))
+            .from_(
+                self._unnest(self.f.ibis_map_keys(self.f.to_json_string(arg)), as_=name)
+            )
+            .where(name.eq(key))
+        )
+        return arr_contains

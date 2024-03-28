@@ -763,11 +763,13 @@ class BigQueryType(SqlglotType):
 
     @classmethod
     def _from_sqlglot_MAP(cls) -> NoReturn:
-        raise com.UnsupportedBackendType("Maps are not supported in BigQuery")
+        return dt.Map(
+            key_type=dt.string, value_type=dt.json, nullable=cls.default_nullable
+        )
 
     @classmethod
-    def _from_ibis_Map(cls, dtype: dt.Map) -> NoReturn:
-        raise com.UnsupportedBackendType("Maps are not supported in BigQuery")
+    def _from_ibis_Map(cls, dtype: dt.Map) -> sge.DataType:
+        return sge.DataType(this=sge.DataType.Type.JSON)
 
     @classmethod
     def _from_ibis_Timestamp(cls, dtype: dt.Timestamp) -> sge.DataType:
