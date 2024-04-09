@@ -9,7 +9,7 @@ import urllib
 import warnings
 from operator import itemgetter
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import duckdb
 import pyarrow as pa
@@ -135,7 +135,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ):
         """Create a table in DuckDB.
 
@@ -154,10 +154,9 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
             passed, the current database is used.
         temp
             Create a temporary table
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
-
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         """
         if obj is None and schema is None:
             raise ValueError("Either `obj` or `schema` must be specified")
@@ -192,7 +191,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
             for colname, typ in (schema or table.schema()).items()
         ]
 
-        if overwrite:
+        if overwrite := (if_exists == "replace"):
             temp_name = util.gen_name("duckdb_table")
         else:
             temp_name = name
@@ -205,6 +204,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
         create_stmt = sge.Create(
             kind="TABLE",
             this=target,
+            exists=if_exists == "skip",
             properties=sge.Properties(expressions=properties),
         )
 
@@ -247,12 +247,6 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
                     )
 
         return self.table(name, database=database)
-
-    def _load_into_cache(self, name, expr):
-        self.create_table(name, expr, schema=expr.schema(), temp=True)
-
-    def _clean_up_cached_table(self, op):
-        self.drop_table(op.name)
 
     def table(
         self, name: str, schema: str | None = None, database: str | None = None

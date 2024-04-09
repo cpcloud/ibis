@@ -8,7 +8,7 @@ import re
 import warnings
 from functools import cached_property
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import oracledb
 import sqlglot as sg
@@ -340,7 +340,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ):
         """Create a table in Oracle.
 
@@ -359,10 +359,9 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
             passed, the current database is used.
         temp
             Create a temporary table
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
-
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         """
         if obj is None and schema is None:
             raise ValueError("Either `obj` or `schema` must be specified")
@@ -397,7 +396,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
             for colname, typ in (schema or table.schema()).items()
         ]
 
-        if overwrite:
+        if overwrite := if_exists == "replace":
             temp_name = util.gen_name(f"{self.name}_table")
         else:
             temp_name = name
@@ -408,6 +407,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
         create_stmt = sge.Create(
             kind="TABLE",
             this=target,
+            exists=if_exists == "skip",
             properties=sge.Properties(expressions=properties),
         )
 

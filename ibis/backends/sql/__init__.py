@@ -276,7 +276,7 @@ class SQLBackend(BaseBackend, _DatabaseSchemaHandler):
             pass
 
     def _load_into_cache(self, name, expr):
-        self.create_table(name, expr, schema=expr.schema(), temp=True)
+        self.create_table(name, expr, schema=expr.schema(), temp=True, if_exists="skip")
 
     def _clean_up_cached_table(self, op):
         self.drop_table(op.name)

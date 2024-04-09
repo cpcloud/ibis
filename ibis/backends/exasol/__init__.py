@@ -4,7 +4,7 @@ import atexit
 import contextlib
 import datetime
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import parse_qs, urlparse
 
 import pyexasol
@@ -285,7 +285,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         *,
         schema: sch.Schema | None = None,
         database: str | None = None,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
         temp: bool = False,
     ) -> ir.Table:
         """Create a table in Snowflake.
@@ -302,9 +302,9 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             `obj` or `schema` must be specified
         database
             The database in which to create the table; optional
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         temp
             Create a temporary table (not supported)
 
@@ -352,7 +352,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             for colname, typ in (schema or table.schema()).items()
         ]
 
-        if overwrite:
+        if overwrite := (if_exists == "replace"):
             temp_name = util.gen_name(f"{self.name}_table")
         else:
             temp_name = name
@@ -360,7 +360,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         table = sg.table(temp_name, catalog=database, quoted=quoted)
         target = sge.Schema(this=table, expressions=column_defs)
 
-        create_stmt = sge.Create(kind="TABLE", this=target)
+        create_stmt = sge.Create(kind="TABLE", this=target, exists=if_exists == "skip")
 
         this = sg.table(name, catalog=database, quoted=quoted)
         with self._safe_raw_sql(create_stmt):

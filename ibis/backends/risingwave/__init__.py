@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import partial
 from itertools import repeat
 from operator import itemgetter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import psycopg2
 import sqlglot as sg
@@ -109,7 +109,7 @@ class Backend(PostgresBackend):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ):
         """Create a table in Risingwave.
 
@@ -128,10 +128,14 @@ class Backend(PostgresBackend):
             passed, the current database is used.
         temp
             Create a temporary table
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
 
+        Returns
+        -------
+        Table
+            The table that was created.
         """
         if obj is None and schema is None:
             raise ValueError("Either `obj` or `schema` must be specified")
@@ -173,7 +177,7 @@ class Backend(PostgresBackend):
             for colname, typ in (schema or table.schema()).items()
         ]
 
-        if overwrite:
+        if overwrite := if_exists == "replace":
             temp_name = util.gen_name(f"{self.name}_table")
         else:
             temp_name = name
@@ -184,6 +188,7 @@ class Backend(PostgresBackend):
         create_stmt = sge.Create(
             kind="TABLE",
             this=target,
+            exists=if_exists == "skip",
             properties=sge.Properties(expressions=properties),
         )
 

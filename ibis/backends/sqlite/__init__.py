@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import sqlite3
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import sqlglot as sg
 import sqlglot.expressions as sge
@@ -283,7 +283,9 @@ class Backend(SQLBackend, UrlFromPath):
         )
         return table.to_reader(max_chunksize=chunk_size)
 
-    def _generate_create_table(self, table: sge.Table, schema: sch.Schema):
+    def _generate_create_table(
+        self, table: sge.Table, schema: sch.Schema, exists: bool = False
+    ):
         column_defs = [
             sge.ColumnDef(
                 this=sg.to_identifier(colname, quoted=self.compiler.quoted),
@@ -299,7 +301,7 @@ class Backend(SQLBackend, UrlFromPath):
 
         target = sge.Schema(this=table, expressions=column_defs)
 
-        return sge.Create(kind="TABLE", this=target)
+        return sge.Create(kind="TABLE", this=target, exists=exists)
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:
         # only register if we haven't already done so
@@ -391,7 +393,7 @@ class Backend(SQLBackend, UrlFromPath):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ):
         """Create a table in SQLite.
 
@@ -410,10 +412,14 @@ class Backend(SQLBackend, UrlFromPath):
             passed, the current database is used.
         temp
             Create a temporary table
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
 
+        Returns
+        -------
+        Table
+            The table that was created.
         """
         if schema is None and obj is None:
             raise ValueError("Either `obj` or `schema` must be specified")
@@ -439,7 +445,7 @@ class Backend(SQLBackend, UrlFromPath):
             else:
                 database = "temp"
 
-        if overwrite:
+        if overwrite := if_exists == "replace":
             created_table = sg.table(
                 util.gen_name(f"{self.name}_table"),
                 catalog=database,
@@ -452,7 +458,7 @@ class Backend(SQLBackend, UrlFromPath):
             )
 
         create_stmt = self._generate_create_table(
-            created_table, schema=(schema or obj.schema())
+            created_table, schema=schema or obj.schema(), exists=if_exists == "skip"
         ).sql(self.name)
 
         with self.begin() as cur:

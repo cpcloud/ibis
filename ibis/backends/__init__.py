@@ -9,7 +9,7 @@ import re
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, ClassVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Literal
 from urllib.parse import parse_qs, urlparse
 
 import ibis
@@ -1078,7 +1078,7 @@ class BaseBackend(abc.ABC, _FileIOHandler):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ) -> ir.Table:
         """Create a new table.
 
@@ -1098,14 +1098,14 @@ class BaseBackend(abc.ABC, _FileIOHandler):
             default.
         temp
             Whether a table is temporary or not
-        overwrite
-            Whether to clobber existing data
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
 
         Returns
         -------
         Table
             The table that was created.
-
         """
 
     @abc.abstractmethod

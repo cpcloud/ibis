@@ -452,7 +452,7 @@ class Backend(SQLBackend):
         schema=None,
         database=None,
         temp: bool | None = None,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
         external: bool = False,
         format="parquet",
         location=None,
@@ -474,8 +474,9 @@ class Backend(SQLBackend):
             Database name
         temp
             Whether a table is temporary
-        overwrite
-            Do not create table if table with indicated name already exists
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         external
             Create an external table; Impala will not delete the underlying
             data when the table is dropped
@@ -501,6 +502,9 @@ class Backend(SQLBackend):
         if like_parquet is not None:
             raise NotImplementedError
 
+        overwrite = if_exists == "replace"
+        exists = if_exists == "skip"
+
         if obj is not None:
             if not isinstance(obj, ir.Table):
                 obj = ibis.memtable(obj)
@@ -521,6 +525,7 @@ class Backend(SQLBackend):
                     external=True if location is not None else external,
                     partition=partition,
                     path=location,
+                    can_exist=exists,
                 )
             )
         else:  # schema is not None
@@ -535,6 +540,7 @@ class Backend(SQLBackend):
                     external=external,
                     path=location,
                     partition=partition,
+                    can_exist=exists,
                 )
             )
         return self.table(name, database=database or self.current_database)

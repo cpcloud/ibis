@@ -5,7 +5,7 @@ import inspect
 import typing
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import datafusion as df
 import pyarrow as pa
@@ -555,7 +555,7 @@ class Backend(SQLBackend, CanCreateCatalog, CanCreateDatabase, CanCreateSchema, 
         schema: sch.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ):
         """Create a table in Datafusion.
 
@@ -574,10 +574,9 @@ class Backend(SQLBackend, CanCreateCatalog, CanCreateDatabase, CanCreateSchema, 
             passed, the current database is used.
         temp
             Create a temporary table
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
-
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         """
         if obj is None and schema is None:
             raise ValueError("Either `obj` or `schema` must be specified")
@@ -638,7 +637,8 @@ class Backend(SQLBackend, CanCreateCatalog, CanCreateDatabase, CanCreateSchema, 
             this=target,
             properties=sge.Properties(expressions=properties),
             expression=query,
-            replace=overwrite,
+            exists=if_exists == "skip",
+            replace=if_exists == "replace",
         )
 
         with self._safe_raw_sql(create_stmt):

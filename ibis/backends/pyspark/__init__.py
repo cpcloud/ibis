@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import pyspark
 import sqlglot as sg
@@ -360,7 +360,7 @@ class Backend(SQLBackend, CanCreateDatabase):
         schema: sch.Schema | None = None,
         database: str | None = None,
         temp: bool | None = None,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
         format: str = "parquet",
     ) -> ir.Table:
         """Create a new table in Spark.
@@ -377,8 +377,9 @@ class Backend(SQLBackend, CanCreateDatabase):
             Database name
         temp
             Whether the new table is temporary
-        overwrite
-            If `True`, overwrite existing data
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         format
             Format of the table on disk
 
@@ -400,7 +401,13 @@ class Backend(SQLBackend, CanCreateDatabase):
         if obj is not None:
             table = obj if isinstance(obj, ir.Expr) else ibis.memtable(obj)
             query = self.compile(table)
-            mode = "overwrite" if overwrite else "error"
+            mode = (
+                "overwrite"
+                if if_exists == "replace"
+                else "error"
+                if if_exists == "fail"
+                else "ignore"
+            )
             with self._active_database(database):
                 self._run_pre_execute_hooks(table)
                 df = self._session.sql(query)

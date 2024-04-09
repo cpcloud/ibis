@@ -171,7 +171,7 @@ def pgurl():  # pragma: no cover
 
     df = pd.DataFrame({"x": [1.0, 2.0, 3.0, 1.0], "y": ["a", "b", "c", "a"]})
 
-    pgcon.create_table("duckdb_test", df, overwrite=True)
+    pgcon.create_table("duckdb_test", df, if_exists="replace")
     yield pgcon.con.info
 
     pgcon.drop_table("duckdb_test", force=True)
@@ -198,7 +198,7 @@ def mysqlurl():  # pragma: no cover
     df = pd.DataFrame({"x": [1.0, 2.0, 3.0, 1.0], "y": ["a", "b", "c", "a"]})
     s = ibis.schema(dict(x="float64", y="str"))
 
-    mysqlcon.create_table("duckdb_test", df, schema=s, overwrite=True)
+    mysqlcon.create_table("duckdb_test", df, schema=s, if_exists="replace")
     yield mysqlcon.con
     mysqlcon.drop_table("duckdb_test", force=True)
 

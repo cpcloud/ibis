@@ -15,7 +15,7 @@ import textwrap
 import warnings
 from operator import itemgetter
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlretrieve
 
@@ -676,7 +676,7 @@ $$"""
         schema: sch.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
         comment: str | None = None,
     ) -> ir.Table:
         """Create a table in Snowflake.
@@ -696,9 +696,9 @@ $$"""
             passed, the current database is used.
         temp
             Create a temporary table
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail
-            if the table exists
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         comment
             Add a comment to the table
 
@@ -756,7 +756,8 @@ $$"""
         create_stmt = sge.Create(
             kind="TABLE",
             this=target,
-            replace=overwrite,
+            replace=if_exists == "replace",
+            exists=if_exists == "skip",
             properties=sge.Properties(expressions=properties),
             expression=query,
         )

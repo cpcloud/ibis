@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import sqlglot as sg
 import sqlglot.expressions as sge
@@ -367,7 +367,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl):
         watermark: Watermark | None = None,
         primary_key: str | list[str] | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
     ) -> ir.Table:
         """Create a new table in Flink.
 
@@ -410,8 +410,9 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl):
             the columns indicated as primary key will be designated as non-nullable.
         temp
             Whether a table is temporary or not.
-        overwrite
-            Whether to clobber existing data.
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
 
         Returns
         -------
@@ -433,7 +434,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl):
                 "Currently can create only TEMPORARY VIEW for in-memory data."
             )
 
-        if overwrite:
+        if overwrite := (if_exists == "replace"):
             if self.list_tables(like=name, temp=temp):
                 self.drop_table(
                     name=name,

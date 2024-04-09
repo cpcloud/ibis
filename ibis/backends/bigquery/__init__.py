@@ -7,7 +7,7 @@ import contextlib
 import glob
 import os
 import re
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import parse_qs, urlparse
 
 import google.auth.credentials
@@ -926,7 +926,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "truncate", "skip"] = "fail",
         default_collate: str | None = None,
         partition_by: str | None = None,
         cluster_by: Iterable[str] | None = None,
@@ -948,9 +948,9 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             The BigQuery *dataset* in which to create the table; optional
         temp
             Whether the table is temporary
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail if
-            the table exists
+        if_exists
+            What to do if the table already exists. Options are 'fail',
+            'replace', 'skip'.
         default_collate
             Default collation for string columns. See BigQuery's documentation
             for more details: https://cloud.google.com/bigquery/docs/reference/standard-sql/collation-concepts
@@ -1052,7 +1052,8 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         stmt = sge.Create(
             kind="TABLE",
             this=sge.Schema(this=table, expressions=column_defs or None),
-            replace=overwrite,
+            exists=if_exists == "skip",
+            replace=if_exists == "replace",
             properties=sge.Properties(expressions=properties),
             expression=None if obj is None else self.compile(obj),
         )
@@ -1130,9 +1131,6 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             exists=force,
         )
         self.raw_sql(stmt.sql(self.name))
-
-    def _load_into_cache(self, name, expr):
-        self.create_table(name, expr, schema=expr.schema(), temp=True)
 
     def _clean_up_cached_table(self, op):
         self.drop_table(

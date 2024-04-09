@@ -589,7 +589,7 @@ class Backend(SQLBackend, CanCreateDatabase):
         schema: ibis.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
         # backend specific arguments
         engine: str = "MergeTree",
         order_by: Iterable[str] | None = None,
@@ -612,8 +612,9 @@ class Backend(SQLBackend, CanCreateDatabase):
         temp
             Create a temporary table. This is not yet supported, and exists for
             API compatibility.
-        overwrite
-            Whether to overwrite the table
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         engine
             The table engine to use. See [ClickHouse's `CREATE TABLE` documentation](https://clickhouse.com/docs/en/sql-reference/statements/create/table)
             for specifics. Defaults to [`MergeTree`](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree)
@@ -634,9 +635,9 @@ class Backend(SQLBackend, CanCreateDatabase):
             The new table
 
         """
-        if temp and overwrite:
+        if temp and if_exists == "replace":
             raise com.IbisInputError(
-                "Cannot specify both `temp=True` and `overwrite=True` for ClickHouse"
+                'Cannot specify both `temp=True` and `if_exists="overwrite"` for ClickHouse'
             )
 
         if obj is None and schema is None:
@@ -723,7 +724,8 @@ class Backend(SQLBackend, CanCreateDatabase):
         code = sge.Create(
             this=this,
             kind="TABLE",
-            replace=overwrite,
+            exists=if_exists == "skip",
+            replace=if_exists == "replace",
             expression=expression,
             properties=sge.Properties(expressions=properties),
         )

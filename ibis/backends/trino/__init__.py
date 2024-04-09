@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 from functools import cached_property
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import sqlglot as sg
 import sqlglot.expressions as sge
@@ -348,7 +348,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema, No
         schema: sch.Schema | None = None,
         database: str | None = None,
         temp: bool = False,
-        overwrite: bool = False,
+        if_exists: Literal["fail", "replace", "skip"] = "fail",
         comment: str | None = None,
         properties: Mapping[str, Any] | None = None,
     ) -> ir.Table:
@@ -369,9 +369,9 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema, No
         temp
             This parameter is not yet supported in the Trino backend, because
             Trino doesn't implement temporary tables
-        overwrite
-            If `True`, replace the table if it already exists, otherwise fail if
-            the table exists
+        if_exists
+            What to do if the table already exists. Options are `"fail"`,
+            `"replace"`, and `"skip"`.
         comment
             Add a comment to the table
         properties
@@ -389,7 +389,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema, No
         quoted = self.compiler.quoted
         orig_table_ref = sg.to_identifier(name, quoted=quoted)
 
-        if overwrite:
+        if overwrite := if_exists == "replace":
             name = util.gen_name(f"{self.name}_overwrite")
 
         table_ref = sg.table(name, catalog=database, quoted=quoted)
@@ -450,6 +450,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema, No
             kind="TABLE",
             this=target,
             expression=select,
+            exists=if_exists == "skip",
             properties=(
                 sge.Properties(expressions=property_list) if property_list else None
             ),

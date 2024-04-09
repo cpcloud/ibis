@@ -392,7 +392,7 @@ def test_create_table_with_options(con):
     t = con.create_table(
         name,
         schema=schema,
-        overwrite=True,
+        if_exists="replace",
         default_collate="und:ci",
         partition_by="d",
         cluster_by=["a", "b"],
