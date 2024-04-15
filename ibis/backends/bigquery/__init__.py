@@ -449,6 +449,41 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             )
 
         self.partition_column = partition_column
+        self.udf_dataset = self.current_database
+
+        udf_sources = [
+            f'''\
+CREATE OR REPLACE FUNCTION {self.udf_dataset}.ibis_map_keys(input STRING) RETURNS ARRAY<STRING> LANGUAGE js AS """
+  let js = JSON.parse(input);
+  if (js === undefined || js === null || Array.isArray(js)) {{
+    return null;
+  }}
+  return Object.keys(js);
+"""''',
+            f'''\
+CREATE OR REPLACE FUNCTION {self.udf_dataset}.ibis_map_values(input STRING) RETURNS JSON LANGUAGE js AS """
+  let js = JSON.parse(input);
+
+  if (js === undefined || js === null || Array.isArray(js)) {{
+    return null;
+  }}
+
+  return Object.values(js);
+"""''',
+            f'''\
+CREATE OR REPLACE FUNCTION {self.udf_dataset}.ibis_map_get(arg STRING, key STRING, default_value STRING)
+RETURNS STRING LANGUAGE js AS """
+  let js = JSON.parse(arg);
+
+  if (js === undefined || js === null || Array.isArray(js)) {{
+    return null;
+  }}
+
+  return key in js ? js[key] : JSON.parse(default_value);
+"""''',
+        ]
+
+        self.raw_sql(";\n".join(udf_sources))
 
     def disconnect(self) -> None:
         self.client.close()
@@ -661,6 +696,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             )
             for param, value in (params or {}).items()
         ]
+
         with contextlib.suppress(AttributeError):
             query = query.sql(self.dialect)
         return self._execute(query, query_parameters=query_parameters)
@@ -685,45 +721,6 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             )
             if sql := compile_func(udf_node):
                 udf_sources.append(sql.sql(self.name, pretty=True))
-
-        udf_sources.append(
-            '''
-            CREATE TEMP FUNCTION ibis_map_keys(input STRING) RETURNS ARRAY<STRING> LANGUAGE js AS """
-              let js = JSON.parse(input);
-              if (js === undefined || js === null || Array.isArray(js)) {
-                return null;
-              }
-              return Object.keys(js);
-            """
-            '''
-        )
-        udf_sources.append(
-            '''
-            CREATE TEMP FUNCTION ibis_map_values(input STRING) RETURNS JSON LANGUAGE js AS """
-              let js = JSON.parse(input);
-
-              if (js === undefined || js === null || Array.isArray(js)) {
-                return null;
-              }
-
-              return Object.values(js);
-            """
-            '''
-        )
-        udf_sources.append(
-            '''
-            CREATE TEMP FUNCTION ibis_map_get(arg STRING, key STRING, default_value STRING)
-            RETURNS STRING LANGUAGE js AS """
-              let js = JSON.parse(arg);
-
-              if (js === undefined || js === null || Array.isArray(js)) {
-                return null;
-              }
-
-              return key in js ? js[key] : JSON.parse(default_value);
-            """
-            '''
-        )
 
         sql = ";\n".join([*udf_sources, query.sql(dialect=self.name, pretty=True)])
         self._log(sql)
