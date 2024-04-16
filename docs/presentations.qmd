@@ -1,6 +1,6 @@
 ---
 title: Presentations
 listing:
-  contents: presentations/*.qmd
+  contents: presentations
   type: default
 ---
