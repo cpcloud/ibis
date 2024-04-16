@@ -3,4 +3,4 @@ title: "Presentations"
 sidebar: presentations
 ---
 
-Ibis presentations are linked here.
+- [@LinkedIn 2024-04-24](./linkedin-2024-04-24.qmd)

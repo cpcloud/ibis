@@ -1,0 +1,549 @@
+---
+title: "Ibis"
+subtitle: "Portable Python DataFrames"
+author:
+  - Chloe He
+  - Cody Peterson
+  - Phillip Cloud
+format:
+  revealjs:
+    smaller: true
+    footer: <https://ibis-project.org>
+    preview-links: true
+    # https://quarto.org/docs/presentations/revealjs/themes.html#using-themes
+    theme: dark
+---
+
+# Who
+
+:::: {.columns}
+
+::: {.column width="50%"}
+Phillip Cloud
+
+- Principal engineer at Voltron Data
+- Python analytics for 10+ years
+- Open source
+- Tech lead for Ibis
+:::
+
+::: {.column width="50%"}
+Chloe He
+
+- …
+- …
+- …
+:::
+
+::::
+
+# What
+
+## Ibis is a Python frontend for:
+
+- Exploratory data analysis
+- General analytics
+- Data engineering
+- Machine learning
+- `$A_BUNCH_OF_OTHER_STUFF`
+
+# Examples
+
+## Examples
+
+<https://ibis-project.org/tutorials/getting_started>
+
+::: {.panel-tabset}
+
+## Raw data
+
+```{python}
+#| echo: true
+from ibis.interactive import *
+
+pengs = ex.penguins.fetch()
+pengs
+```
+
+## Aggregate penguins
+
+```{python}
+#| echo: true
+(
+  pengs.group_by("species", "island")
+  .agg(
+    n=_.count(),
+    avg_bill_length=_.bill_length_mm.mean(),
+    avg_flipper_length=_.flipper_length_mm.median()
+  )
+)
+```
+
+## Normalize numerics
+
+```{python}
+#| echo: true
+expr = (
+  pengs.group_by("species")
+  .mutate(s.across(s.numeric() & ~s.c("year"), (_ - _.mean()) / _.std()))
+  .head(5)
+)
+expr
+```
+
+:::
+
+# Interlude
+
+## SQL
+
+:::: {.r-stack}
+::: {.fragment}
+
+```{python}
+#| echo: true
+expr = (
+  pengs.group_by("species")
+  .mutate(s.across(s.numeric() & ~s.c("year"), (_ - _.mean()) / _.std()))
+  .head(5)
+)
+```
+
+::: {.fragment .fade-in-then-semi-out}
+```{python}
+#| echo: true
+ibis.to_sql(expr)
+```
+:::
+:::
+
+::: {.fragment}
+![](./sure.gif)
+:::
+
+::::
+
+# Back to examples…
+
+## `ibis-analytics`
+
+Analyzing 10M+ rows from a bunch of sources. Vanity metrics for Ibis.
+
+<https://ibis-analytics.streamlit.app>
+
+```{=html}
+<iframe class="streamlit-app-inner" width="100%" height="75%" src="https://ibis-analytics.streamlit.app/?embedded=true"></iframe>
+```
+
+# Why
+
+## DataFrame lore
+
+::: {.fragment .highlight-current-blue}
+- DataFrames first appeared in the `S` programming language, then evolved into the `R` ~~calculator~~ programming language.
+:::
+
+::: {.fragment .highlight-current-blue}
+- Then `pandas` perfected the DataFrame in Python...or did it?
+:::
+
+::: {.fragment .highlight-current-blue}
+- Since, dozens of Python DataFrames libraries have come and gone...
+:::
+
+::: {.fragment .highlight-current-blue}
+- Pandas remains the de facto standard for DataFrames in Python (alongside PySpark), but it doesn't scale.
+:::
+
+::: {.fragment .highlight-current-blue}
+- This leads to data scientists frequently "throwing their work over the wall" to engineers.
+:::
+
+::: {.fragment .highlight-current-blue}
+- But what if there were a new [standard](https://xkcd.com/927/)?
+:::
+
+
+## Ibis origins {transition="fade"}
+
+from [Apache Arrow and the "10 Things I Hate About pandas"](https://wesmckinney.com/blog/apache-arrow-pandas-internals/) by Wes McKinney
+
+> ...in 2015, I started the Ibis project...to create a pandas-friendly deferred expression system for static analysis and compilation [of] these types of [query planned, multicore execution] operations. Since an efficient multithreaded in-memory engine for pandas was not available when I started Ibis, I instead focused on building compilers for SQL engines (Impala, PostgreSQL, SQLite), similar to the R dplyr package. Phillip Cloud from the pandas core team has been actively working on Ibis with me for quite a long time.
+
+## DataFrame history
+
+- **pandas** (2008): dataframes in Python
+- **Spark** (2009): distributed dataframes with PySpark
+- **Dask** (2014): distributed dataframes with Python
+- **dplyr** (2014): dataframes in R with SQL-like syntax
+- **Ibis** (2015): dataframes in Python with SQL-like syntax
+- **cuDF** (2017): pandas on GPUs
+- **Modin** (2018): pandas on Ray/Dask
+- **Koalas** (2019): pandas on Spark
+- **Polars** (2020): multicore dataframes in Python
+
+## Two world problem {auto-animate="true"}
+
+::: {.nonincremental}
+:::: {.columns}
+
+::: {.column}
+SQL:
+:::
+
+::: {.column}
+Python:
+:::
+
+::::
+:::
+
+## Two world problem {auto-animate="true"}
+
+::: {.nonincremental}
+:::: {.columns}
+
+::: {.column}
+SQL:
+
+- databases & tables
+:::
+
+::: {.column}
+Python:
+
+- files & dataframes
+:::
+
+::::
+:::
+
+## Two world problem {auto-animate="true"}
+
+::: {.nonincremental}
+:::: {.columns}
+
+::: {.column}
+SQL:
+
+- databases & tables
+- analytics
+:::
+
+::: {.column}
+Python:
+
+- files & dataframes
+- data science
+:::
+
+::::
+:::
+
+## Two world problem {auto-animate="true"}
+
+::: {.nonincremental}
+:::: {.columns}
+
+::: {.column}
+SQL:
+
+- databases & tables
+- analytics
+- metrics
+:::
+
+::: {.column}
+Python:
+
+- files & dataframes
+- data science
+- statistics
+:::
+
+::::
+:::
+
+## Two world problem {auto-animate="true"}
+
+::: {.nonincremental}
+:::: {.columns}
+
+::: {.column}
+SQL:
+
+- databases & tables
+- analytics
+- metrics
+- dashboards
+:::
+
+::: {.column}
+Python:
+
+- files & dataframes
+- data science
+- statistics
+- notebooks
+:::
+
+::::
+:::
+
+## Two world problem {auto-animate="true"}
+
+::: {.nonincremental}
+:::: {.columns}
+
+::: {.column}
+SQL:
+
+- databases & tables
+- analytics
+- metrics
+- dashboards
+:::
+
+::: {.column}
+Python:
+
+- files & dataframes
+- data science
+- statistics
+- notebooks
+:::
+
+::::
+:::
+
+::: {.r-fit-text}
+***Ibis bridges the gap.***
+:::
+
+## Bridging the gap
+
+::: {.panel-tabset}
+## DuckDB
+
+```python
+import ibis
+
+con = ibis.duckdb.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+An embeddable, zero-dependency, C++ SQL database engine.
+
+## DataFusion {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.datafusion.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A Rust SQL query engine.
+
+## ClickHouse {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.clickhouse.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A C++ column-oriented database management system.
+
+## Polars {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.polars.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A Rust DataFrame library.
+
+## BigQuery {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.bigquery.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A serverless, highly scalable, and cost-effective cloud data warehouse.
+
+## Snowflake {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.snowflake.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A cloud data platform.
+
+## Oracle {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.oracle.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A relational database management system.
+
+## Spark {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.pyspark.connect(session)
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A unified analytics engine for large-scale data processing.
+
+## Trino {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.trino.connect()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A distributed SQL query engine.
+
+## Flink {auto-animate="true"}
+
+```python
+import ibis
+
+con = ibis.flink()
+penguins = con.table("penguins")
+penguins.group_by("species", "island").agg(count=ibis._.count())
+```
+
+A distributed streaming and batch SQL analytics engine.
+:::
+
+# How does Ibis work?
+
+This is going to be very fast 🏃💨. I will happily answer questions about it 😂.
+
+## Components
+
+- Expression system
+- Compiler
+- Driver
+
+## Expressions
+
+- Expr vs op
+- Type system
+- Pattern matching
+- Traversal
+
+## Expressions cont.
+
+```{python}
+#| echo: true
+expr = (
+  pengs.group_by("species")
+  .mutate(s.across(s.numeric() & ~s.c("year"), (_ - _.mean()) / _.std()))
+  .head(5)
+)
+```
+
+Graph representation
+
+```{python}
+from ibis.expr.visualize import to_graph
+
+to_graph(expr)
+```
+
+## Compilers
+
+- Big refactor in 9.0
+- Broadly speaking, toposort the expression graph
+- Compile a node -> store the output -> pass that to the next node as input -> repeat until the list of nodes is exhausted
+- Show a code example
+
+# Streaming
+
+## Slide 1
+## Slide 2
+## Slide 3
+## Slide …
+## Slide N
+
+## Try it out now
+
+Install:
+
+```bash
+pip install 'ibis-framework[duckdb]'
+```
+
+Then run:
+
+```{python}
+#| echo: true
+import ibis
+
+ibis.options.interactive = True
+
+t = ibis.examples.penguins.fetch()
+
+t
+```
+
+## Questions?
+
+### Where to find us
+
+:::: {.columns}
+::: {.column width="50%"}
+Phillip
+
+- [LinkedIn (phillip-cloud)](https://www.linkedin.com/in/phillip-cloud/)
+- [GitHub (@cpcloud)](https://github.com/cpcloud)
+- [X (@cpcloudy)](https://twitter.com/cpcloudy)
+
+:::
+::: {.column width="50%"}
+Chloe
+
+- A
+- B
+- C
+
+:::
+::::
+
+### Links
+
+- GitHub: <https://github.com/ibis-project/ibis>
+- Site: <https://ibis-project.org>
+- Installation: <https://ibis-project.org/install>
+- Tutorial: <https://ibis-project.org/tutorials/getting_started>
+
+# The end
