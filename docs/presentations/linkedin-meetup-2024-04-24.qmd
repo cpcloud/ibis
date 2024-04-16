@@ -3,7 +3,6 @@ title: "Ibis"
 subtitle: "Portable Python DataFrames"
 author:
   - Chloe He
-  - Cody Peterson
   - Phillip Cloud
 format:
   revealjs:
