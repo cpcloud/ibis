@@ -412,7 +412,7 @@ A relational database management system.
 ```python
 import ibis
 
-con = ibis.pyspark.connect(session)
+con = ibis.pyspark.connect()
 penguins = con.table("penguins")
 penguins.group_by("species", "island").agg(count=ibis._.count())
 ```
@@ -436,7 +436,7 @@ A distributed SQL query engine.
 ```python
 import ibis
 
-con = ibis.flink()
+con = ibis.flink.connect()
 penguins = con.table("penguins")
 penguins.group_by("species", "island").agg(count=ibis._.count())
 ```
