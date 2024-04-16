@@ -495,7 +495,7 @@ to_graph(expr)
 ## Slide …
 ## Slide N
 
-## Try it out now
+## Try it out now!
 
 Install:
 
@@ -545,5 +545,6 @@ Chloe
 - Site: <https://ibis-project.org>
 - Installation: <https://ibis-project.org/install>
 - Tutorial: <https://ibis-project.org/tutorials/getting_started>
+- This talk: <https://ibis-project.org/presentations/linkedin-meetup-2024-04-24>
 
 # The end
