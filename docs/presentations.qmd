@@ -3,4 +3,4 @@ title: "Presentations"
 sidebar: presentations
 ---
 
-- [@LinkedIn 2024-04-24](./linkedin-2024-04-24.qmd)
+- [@LinkedIn 2024-04-24](./presentations/linkedin-meetup-2024-04-24.qmd)
