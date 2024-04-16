@@ -474,6 +474,7 @@ expr = (
 Graph representation
 
 ```{python}
+#| echo: true
 from ibis.expr.visualize import to_graph
 
 to_graph(expr)
