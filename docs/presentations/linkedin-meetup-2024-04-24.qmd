@@ -375,7 +375,7 @@ This is going to be very fast 🏃💨. I will happily answer questions about it
 
 - The API
 - E.g., `StringValue`, `IntegerColumn`, `Table`
-- Methods like `sum()`, `split()`, `join`
+- Methods like `sum`, `split`, `join`
 - No knowledge of specific operation
 :::
 
@@ -390,24 +390,20 @@ This is going to be very fast 🏃💨. I will happily answer questions about it
 ::::
 
 ::: {.fragment}
-::: {.r-fit-text}
-**Goal**: Separate API from implementation.
-:::
-:::
-
-::: {.fragment}
-::: {.callout-warning}
-## Operations are not part of the public API
-:::
-:::
-
-## Components: expressions
 
 ### Other goodies
 
 - Type system
 - Pattern matching
 - Graph manipulation/traversal
+
+:::
+
+::: {.fragment}
+::: {.r-fit-text}
+**Goal**: Separate API from implementation.
+:::
+:::
 
 ## Components: expressions
 
@@ -458,7 +454,7 @@ graph BT
 
 ::: {.fragment}
 
-![* Rewrites <br/>* bottom up traversal storing intermediate outputs <br/>* handoff the output to sqlglot.](./magic.gif)
+![* Rewrite operations<br/>* Bottom up compile storing intermediate outputs <br/>* Handoff output to sqlglot](./magic.gif)
 
 :::
 
@@ -481,7 +477,7 @@ ibis.to_sql(expr)
 ### Drivers
 
 - We have SQL at this point
-- Send to DB via DBAPI
+- Send to DB via DBAPI, `cursor.execute(ibis_generated_sql)`
 - (Heavily) massage the output (pandas 👀👀)
 
 # Streaming
