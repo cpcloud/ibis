@@ -2,7 +2,7 @@
 title: Presentations
 listing:
   contents: presentations
-  type: default
+  type: table
   sort:
     - "date desc"
 ---

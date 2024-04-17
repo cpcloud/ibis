@@ -10,7 +10,7 @@ format:
     footer: <https://ibis-project.org>
     preview-links: true
     # https://quarto.org/docs/presentations/revealjs/themes.html#using-themes
-    theme: dark
+    theme: night
 ---
 
 # Who
@@ -43,8 +43,8 @@ Chloe He
 - Exploratory data analysis
 - General analytics
 - Data engineering
-- Machine learning
-- `$A_BUNCH_OF_OTHER_STUFF`
+- ML preprocessing
+- `$OTHER_THINGS`
 
 # Examples
 
@@ -126,7 +126,7 @@ ibis.to_sql(expr)
 
 ## `ibis-analytics`
 
-Analyzing 10M+ rows from a bunch of sources. Vanity metrics for Ibis.
+End-to-end analytics application built with Ibis.
 
 <https://ibis-analytics.streamlit.app>
 
@@ -134,136 +134,68 @@ Analyzing 10M+ rows from a bunch of sources. Vanity metrics for Ibis.
 <iframe class="streamlit-app-inner" width="100%" height="75%" src="https://ibis-analytics.streamlit.app/?embedded=true"></iframe>
 ```
 
-# Why
+# Why?
 
 ## DataFrame lore
 
 ::: {.fragment .highlight-current-blue}
-- DataFrames first appeared in the `S` programming language, then evolved into the `R` ~~calculator~~ programming language.
+- DataFrames appear in the `S` programming language, which evolves into the `R` ~~calculator~~ programming language.
 :::
 
 ::: {.fragment .highlight-current-blue}
-- Then `pandas` perfected the DataFrame in Python...or did it?
+- `pandas` perfects the DataFrame in Python...or did it?
 :::
 
 ::: {.fragment .highlight-current-blue}
-- Since, dozens of Python DataFrames libraries have come and gone...
+- Dozens of Python DataFrames libraries appear and disappear...
 :::
 
 ::: {.fragment .highlight-current-blue}
-- Pandas remains the de facto standard for DataFrames in Python (alongside PySpark), but it doesn't scale.
+- Pandas is the de facto standard for Python DataFrames. It still doesn't scale.
 :::
 
 ::: {.fragment .highlight-current-blue}
-- This leads to data scientists frequently "throwing their work over the wall" to engineers.
+- Leads to data scientists throwing code over the wall to engineers.
 :::
 
 ::: {.fragment .highlight-current-blue}
-- But what if there were a new [standard](https://xkcd.com/927/)?
+- What if there were a new [standard](https://xkcd.com/927/)?
 :::
+
+
+## The legal dept requires this slide
+
+![](./standards.png)
 
 
 ## Ibis origins {transition="fade"}
 
 from [Apache Arrow and the "10 Things I Hate About pandas"](https://wesmckinney.com/blog/apache-arrow-pandas-internals/) by Wes McKinney
 
-> ...in 2015, I started the Ibis project...to create a pandas-friendly deferred expression system for static analysis and compilation [of] these types of [query planned, multicore execution] operations. Since an efficient multithreaded in-memory engine for pandas was not available when I started Ibis, I instead focused on building compilers for SQL engines (Impala, PostgreSQL, SQLite), similar to the R dplyr package. Phillip Cloud from the pandas core team has been actively working on Ibis with me for quite a long time.
+> ...in 2015, I started the Ibis project...to create a pandas-friendly deferred
+> expression system for static analysis and compilation [of] these types of
+> [query planned, multicore execution] operations. Since an efficient
+> multithreaded in-memory engine for pandas was not available when I started
+> Ibis, I instead focused on building compilers for SQL engines (Impala,
+> PostgreSQL, SQLite), similar to the R dplyr package. Phillip Cloud from the
+> pandas core team has been actively working on Ibis with me for quite a long
+> time.
 
 ## DataFrame history
 
-- **pandas** (2008): dataframes in Python
-- **Spark** (2009): distributed dataframes with PySpark
-- **Dask** (2014): distributed dataframes with Python
-- **dplyr** (2014): dataframes in R with SQL-like syntax
-- **Ibis** (2015): dataframes in Python with SQL-like syntax
+- **pandas** (2008): DataFrames in Python
+- **Spark** (2009): distributed DataFrames with PySpark
+- **Dask** (2014): distributed DataFrames with Python
+- **dplyr** (2014): DataFrames in R with SQL-like syntax
+- **Ibis** (2015): DataFrames in Python with SQL-like syntax
 - **cuDF** (2017): pandas on GPUs
 - **Modin** (2018): pandas on Ray/Dask
 - **Koalas** (2019): pandas on Spark
-- **Polars** (2020): multicore dataframes in Python
+- **Polars** (2020): multicore DataFrames in Python
 
-## Two world problem {auto-animate="true"}
+## Two world problem
 
-::: {.nonincremental}
-:::: {.columns}
-
-::: {.column}
-SQL:
-:::
-
-::: {.column}
-Python:
-:::
-
-::::
-:::
-
-## Two world problem {auto-animate="true"}
-
-::: {.nonincremental}
-:::: {.columns}
-
-::: {.column}
-SQL:
-
-- databases & tables
-:::
-
-::: {.column}
-Python:
-
-- files & dataframes
-:::
-
-::::
-:::
-
-## Two world problem {auto-animate="true"}
-
-::: {.nonincremental}
-:::: {.columns}
-
-::: {.column}
-SQL:
-
-- databases & tables
-- analytics
-:::
-
-::: {.column}
-Python:
-
-- files & dataframes
-- data science
-:::
-
-::::
-:::
-
-## Two world problem {auto-animate="true"}
-
-::: {.nonincremental}
-:::: {.columns}
-
-::: {.column}
-SQL:
-
-- databases & tables
-- analytics
-- metrics
-:::
-
-::: {.column}
-Python:
-
-- files & dataframes
-- data science
-- statistics
-:::
-
-::::
-:::
-
-## Two world problem {auto-animate="true"}
+### What does Ibis solve?
 
 ::: {.nonincremental}
 :::: {.columns}
@@ -280,7 +212,7 @@ SQL:
 ::: {.column}
 Python:
 
-- files & dataframes
+- files & DataFrames
 - data science
 - statistics
 - notebooks
@@ -289,31 +221,9 @@ Python:
 ::::
 :::
 
-## Two world problem {auto-animate="true"}
+##
 
-::: {.nonincremental}
-:::: {.columns}
-
-::: {.column}
-SQL:
-
-- databases & tables
-- analytics
-- metrics
-- dashboards
-:::
-
-::: {.column}
-Python:
-
-- files & dataframes
-- data science
-- statistics
-- notebooks
-:::
-
-::::
-:::
+![](../logo.svg){fig-align="center"}
 
 ::: {.r-fit-text}
 ***Ibis bridges the gap.***
@@ -447,45 +357,132 @@ A distributed streaming and batch SQL analytics engine.
 
 This is going to be very fast 🏃💨. I will happily answer questions about it 😂.
 
-## Components
+## Components: themes
 
-- Expression system
-- Compiler
-- Driver
+- Immutability
+- Type checking
+- Separation of concerns
+- Extensibility
+- Focus on end-user experience
+- Avoid "common denominator" trap
 
-## Expressions
+## Components: expressions
 
-- Expr vs op
+:::: {.columns}
+
+::: {.column width="50%"}
+**Expressions**: *interface*
+
+- The API
+- E.g., `StringValue`, `IntegerColumn`, `Table`
+- Methods like `sum()`, `split()`, `join`
+- No knowledge of specific operation
+:::
+
+::: {.column width="50%"}
+**Operations**: *implementation*
+
+- Specific action: e.g., `StringSplit`
+- Inputs + output dtype, shape
+- Used for compiler dispatch
+:::
+
+::::
+
+::: {.fragment}
+::: {.r-fit-text}
+**Goal**: Separate API from implementation.
+:::
+:::
+
+::: {.fragment}
+::: {.callout-warning}
+## Operations are not part of the public API
+:::
+:::
+
+## Components: expressions
+
+### Other goodies
+
 - Type system
 - Pattern matching
-- Traversal
+- Graph manipulation/traversal
 
-## Expressions cont.
-
-```{python}
-#| echo: true
-expr = (
-  penguins.group_by("species")
-  .mutate(s.across(s.numeric() & ~s.c("year"), (_ - _.mean()) / _.std()))
-  .head(5)
-)
-```
-
-Graph representation
+## Components: expressions
 
 ```{python}
 #| echo: true
+#| fig-align: center
 from ibis.expr.visualize import to_graph
+
+expr = (
+    penguins
+    .group_by("species")
+    .agg(avg_bill_length_mm=_.bill_length_mm.mean())
+)
 
 to_graph(expr)
 ```
 
-## Compilers
+## Components: compiler
 
-- Big refactor in 9.0
-- Broadly speaking, toposort the expression graph
-- Compile a node -> store the output -> pass that to the next node as input -> repeat until the list of nodes is exhausted
-- Show a code example
+:::: {.r-hstack}
+
+::: {.fragment}
+
+```{mermaid}
+graph BT
+  DatabaseTable --> species
+  DatabaseTable --> bill_length_mm
+  bill_length_mm --> Mean
+  species --> Aggregate
+  Mean --> Aggregate
+```
+
+:::
+
+::: {.fragment}
+
+```{mermaid}
+graph BT
+  DatabaseTable2[DatabaseTable] --> species2[species]
+  species2 --> bill_length_mm2[bill_length_mm]
+  bill_length_mm2 --> Mean2[Mean]
+  Mean2 --> Aggregate2[Aggregate]
+```
+
+:::
+
+:::: {.r-vstack}
+
+::: {.fragment}
+
+![* Rewrites <br/>* bottom up traversal storing intermediate outputs <br/>* handoff the output to sqlglot.](./magic.gif)
+
+:::
+
+::: {.fragment}
+
+```{python}
+ibis.to_sql(expr)
+```
+
+:::
+
+::::
+
+::::
+
+## Components: drivers
+
+![](./handoff.png){fig-align="center"}
+
+### Drivers
+
+- We have SQL at this point
+- Send to DB via DBAPI
+- (Heavily) massage the output (pandas 👀👀)
 
 # Streaming
 
