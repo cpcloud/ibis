@@ -501,10 +501,18 @@ ibis.to_sql(expr)
 - Send to DB via DBAPI: `cursor.execute(ibis_generated_sql)`
 - (Heavily) massage the output
 
-# Streaming
+# Ibis + Streaming
 
-## Slide 1
-## Slide 2
+## Growth of streaming
+
+- Over 70% of Fortune 500 companies have adopted Kafka
+- 54% of Databricks’ customers are using Spark Structured Streaming
+- The stream processing market is expected to grow at a compound annual growth rate (CAGR) of 21.5% from 2022 to 2028 (IDC)
+
+## Batch and streaming
+
+Why does it have to be batch versus streaming?
+
 ## Slide 3
 ## Slide …
 ## Slide N
