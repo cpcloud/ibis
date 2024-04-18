@@ -7,7 +7,8 @@ author:
 format:
   revealjs:
     smaller: true
-    footer: <https://ibis-project.org>
+    footer: <https://ibis-project.org/presentations/linkedin-meetup-2024-04-24>
+    logo: ../logo.svg
     preview-links: true
     # https://quarto.org/docs/presentations/revealjs/themes.html#using-themes
     theme: night
@@ -72,8 +73,8 @@ penguins
   penguins.group_by("species", "island")
   .agg(
     n=_.count(),
-    avg_bill_length=_.bill_length_mm.mean(),
-    avg_flipper_length=_.flipper_length_mm.median()
+    avg_bill_mm=_.bill_length_mm.mean(),
+    med_flipper_mm=_.flipper_length_mm.median()
   )
 )
 ```
@@ -357,7 +358,7 @@ A distributed streaming and batch SQL analytics engine.
 
 This is going to be very fast 🏃💨. I will happily answer questions about it 😂.
 
-## Components: themes
+## Themes
 
 - Immutability
 - Type checking
@@ -365,6 +366,7 @@ This is going to be very fast 🏃💨. I will happily answer questions about it
 - Extensibility
 - Focus on end-user experience
 - Avoid "common denominator" trap
+- Scale up **and** down
 
 ## Components: expressions
 
@@ -373,9 +375,8 @@ This is going to be very fast 🏃💨. I will happily answer questions about it
 ::: {.column width="50%"}
 **Expressions**: *interface*
 
-- The API
-- E.g., `StringValue`, `IntegerColumn`, `Table`
-- Methods like `sum`, `split`, `join`
+- `StringScalar`, `IntegerColumn`, `Table`
+- `.sum()`, `.split()`, `.join()`
 - No knowledge of specific operation
 :::
 
@@ -399,10 +400,8 @@ This is going to be very fast 🏃💨. I will happily answer questions about it
 
 :::
 
-::: {.fragment}
-::: {.r-fit-text}
-**Goal**: Separate API from implementation.
-:::
+::: {.fragment .r-fit-text}
+**Goal**: separate API from implementation.
 :::
 
 ## Components: expressions
@@ -415,7 +414,7 @@ from ibis.expr.visualize import to_graph
 expr = (
     penguins
     .group_by("species")
-    .agg(avg_bill_length_mm=_.bill_length_mm.mean())
+    .agg(avg_bill_mm=_.bill_length_mm.mean())
 )
 
 to_graph(expr)
@@ -454,20 +453,30 @@ graph BT
 
 ::: {.fragment}
 
-![* Rewrite operations<br/>* Bottom up compile storing intermediate outputs <br/>* Handoff output to sqlglot](./magic.gif)
-
-:::
-
-::: {.fragment}
-
-```{python}
-ibis.to_sql(expr)
-```
+![](./compile.png){width="70%" height="70%" fig-align="center"}
 
 :::
 
 ::::
 
+::::
+
+## Components: compiler
+
+:::: {.columns}
+::: {.column width="50%"}
+![](./compile.png){fig-align="center"}
+:::
+
+::: {.column width="50%"}
+- Rewrite operations
+- Bottom up compile storing intermediate outputs
+- Handoff output to sqlglot
+
+```{python}
+ibis.to_sql(expr)
+```
+:::
 ::::
 
 ## Components: drivers
@@ -477,8 +486,8 @@ ibis.to_sql(expr)
 ### Drivers
 
 - We have SQL at this point
-- Send to DB via DBAPI, `cursor.execute(ibis_generated_sql)`
-- (Heavily) massage the output (pandas 👀👀)
+- Send to DB via DBAPI: `cursor.execute(ibis_generated_sql)`
+- (Heavily) massage the output
 
 # Streaming
 
