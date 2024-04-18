@@ -422,7 +422,15 @@ to_graph(expr)
 
 ## Components: compiler
 
-:::: {.r-hstack}
+```python
+expr = (
+    penguins
+    .group_by("species")
+    .agg(avg_bill_mm=_.bill_length_mm.mean())
+)
+```
+
+:::: {.r-hstack .semi-fade-out}
 
 ::: {.fragment}
 
@@ -449,12 +457,16 @@ graph BT
 
 :::
 
-:::: {.r-vstack}
+:::: {.r-stack}
 
 ::: {.fragment}
 
 ![](./compile.png){width="70%" height="70%" fig-align="center"}
 
+:::
+
+::: {.fragment}
+![](./magic.gif){fig-align="center"}
 :::
 
 ::::
