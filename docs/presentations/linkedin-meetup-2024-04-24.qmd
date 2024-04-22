@@ -668,6 +668,11 @@ agged = clicks.select(
 
 ## Try it out now!
 
+::: {.callout-warning}
+## **HIGHLY EXPERIMENTAL**: Ibis in the browser
+Try Ibis in a live REPL at <https://ibis-project.org/repl>!
+:::
+
 Install:
 
 ```bash
