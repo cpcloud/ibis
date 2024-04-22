@@ -30,9 +30,9 @@ Phillip Cloud
 ::: {.column width="50%"}
 Chloe He
 
-- …
-- …
-- …
+- Founding engineer at Claypot -> Senior engineer at Voltron Data
+- Infrastructure for real-time ML
+- Ibis streaming
 :::
 
 ::::
@@ -536,7 +536,7 @@ graph TB
 
 [Insert image here]
 
-## Local experimentation to production
+## In the machine learning world...
 
 ```{mermaid}
 graph TB
@@ -595,13 +595,71 @@ SELECT user,
 
 ## The solution...
 
-Stream-batch unified API?
+Stream-batch unified API
 
-(Should we talk about existing solutions and how Ibis compares?)
+- Flink SQL
+- Spark DataFrame API
+- …
 
-## Stream-batch unification
+## Stream-batch unification {.nostretch}
+
+:::: {.columns}
+
+::: {.column width="50%"}
+pandas
+```python
+return (
+    clicks_df
+    .groupby(["user"])
+    .rolling("1h")
+    .size()
+)
+```
+:::
+
+::: {.column width="50%"}
+Flink SQL
+```sql
+SELECT user,
+       COUNT(url) OVER (
+         PARTITION BY user
+         ORDER BY click_time
+         RANGE BETWEEN
+           INTERVAL '1' HOUR PRECEDING
+           AND CURRENT ROW
+       ) AS one_hour_user_click_cnt
+  FROM clicks
+```
+:::
+::::
+
+![](./arrow.png){fig-align="center" width=5%}
+
+Ibis
+```python
+agged = clicks.select(
+    _.user,
+    one_hour_user_click_cnt=_.url.count().over(
+        range=(-ibis.interval(hour=1), 0),
+        group_by=_.user,
+        order_by=_.click_time,
+    ),
+)
+```
 
 ## Challenges of creating a unified API
+
+- Streaming is different
+  - Time semantics
+  - Long-running queries
+  - Sources and sinks
+  - …
+- Less established standards in streaming syntax
+
+## Ibis streaming today
+
+- Flink backend and RisingWave backend launched in Ibis 8.0
+- Introduction of watermarks, windowed aggregations, etc in Ibis
 
 ## What's next?
 
@@ -646,9 +704,8 @@ Phillip
 ::: {.column width="50%"}
 Chloe
 
-- A
-- B
-- C
+- [LinkedIn (chloe-he)](https://www.linkedin.com/in/chloe-he)
+- [GitHub (@chloeh13q)](https://github.com/chloeh13q)
 
 :::
 ::::
