@@ -571,16 +571,16 @@ return (
 
 ::: {.column width="50%"}
 Flink SQL
+
 ```sql
-SELECT user,
-       COUNT(url) OVER (
-         PARTITION BY user
-         ORDER BY click_time
-         RANGE BETWEEN
-           INTERVAL '1' HOUR PRECEDING
-           AND CURRENT ROW
-       ) AS one_hour_user_click_cnt
-  FROM clicks
+SELECT
+  user,
+  COUNT(url) OVER (
+    PARTITION BY user
+    ORDER BY click_time
+    RANGE BETWEEN INTERVAL '1' HOUR PRECEDING AND CURRENT ROW
+  ) AS one_hour_user_click_cnt
+FROM clicks
 ```
 :::
 
@@ -620,15 +620,14 @@ return (
 ::: {.column width="50%"}
 Flink SQL
 ```sql
-SELECT user,
-       COUNT(url) OVER (
-         PARTITION BY user
-         ORDER BY click_time
-         RANGE BETWEEN
-           INTERVAL '1' HOUR PRECEDING
-           AND CURRENT ROW
-       ) AS one_hour_user_click_cnt
-  FROM clicks
+SELECT
+  user,
+  COUNT(url) OVER (
+    PARTITION BY user
+    ORDER BY click_time
+    RANGE BETWEEN INTERVAL '1' HOUR PRECEDING AND CURRENT ROW
+  ) AS one_hour_user_click_cnt
+FROM clicks
 ```
 :::
 ::::
