@@ -36,26 +36,26 @@ class BigQueryCursor:
     :file:`ibis/client.py`.
     """
 
-    def __init__(self, query):
+    def __init__(self, row_iter):
         """Construct a BigQueryCursor with query `query`."""
-        self.query = query
+        self.row_iter = row_iter
 
     def fetchall(self):
         """Fetch all rows."""
-        result = self.query.result()
-        return [row.values() for row in result]
+        row_iter = self.row_iter
+        return [row.values() for row in row_iter]
 
     @property
     def columns(self):
         """Return the columns of the result set."""
-        result = self.query.result()
-        return [field.name for field in result.schema]
+        row_iter = self.row_iter
+        return [field.name for field in row_iter.schema]
 
     @property
     def description(self):
         """Get the fields of the result set's schema."""
-        result = self.query.result()
-        return list(result.schema)
+        row_iter = self.row_iter
+        return list(row_iter.schema)
 
     def __enter__(self):
         """No-op for compatibility."""

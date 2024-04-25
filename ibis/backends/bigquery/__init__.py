@@ -599,13 +599,15 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         )
         return BigQuerySchema.to_ibis(job.schema)
 
-    def _execute(self, stmt, query_parameters=None):
+    def _execute(self, stmt, query_parameters=None, page_size: int | None = None, **_):
         job_config = bq.job.QueryJobConfig(query_parameters=query_parameters or [])
-        query = self.client.query(
-            stmt, job_config=job_config, project=self.billing_project
+        iterable = self.client.query_and_wait(
+            stmt,
+            job_config=job_config,
+            project=self.billing_project,
+            page_size=page_size,
         )
-        query.result()  # blocks until finished
-        return BigQueryCursor(query)
+        return BigQueryCursor(iterable)
 
     def _to_sqlglot(
         self,
@@ -645,7 +647,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         ).transform(_remove_null_ordering_from_unsupported_window)
         return query
 
-    def raw_sql(self, query: str, params=None):
+    def raw_sql(self, query: str, params=None, **kwargs):
         query_parameters = [
             bigquery_param(
                 param.type(),
@@ -660,7 +662,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         ]
         with contextlib.suppress(AttributeError):
             query = query.sql(self.dialect)
-        return self._execute(query, query_parameters=query_parameters)
+        return self._execute(query, query_parameters=query_parameters, **kwargs)
 
     @property
     def current_catalog(self) -> str:
@@ -772,23 +774,13 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         *,
         method: Callable[[RowIterator], pa.Table | Iterable[pa.RecordBatch]]
         | None = None,
-        chunk_size: int | None = None,
     ):
+        iterable = cursor.row_iter
         if method is None:
             method = lambda result: result.to_arrow(
-                progress_bar_type=None,
-                bqstorage_client=self.storage_client,
+                progress_bar_type=None, bqstorage_client=self.storage_client
             )
-        query = cursor.query
-        query_result = query.result(page_size=chunk_size)
-        # workaround potentially not having the ability to create read sessions
-        # in the dataset project
-        orig_project = query_result._project
-        query_result._project = self.billing_project
-        try:
-            arrow_obj = method(query_result)
-        finally:
-            query_result._project = orig_project
+        arrow_obj = method(iterable)
         return arrow_obj
 
     def to_pyarrow(
@@ -823,13 +815,12 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
         self._register_in_memory_tables(expr)
         sql = self.compile(expr, limit=limit, params=params, **kwargs)
         self._log(sql)
-        cursor = self.raw_sql(sql, params=params, **kwargs)
+        cursor = self.raw_sql(sql, params=params, page_size=chunk_size, **kwargs)
         batch_iter = self._cursor_to_arrow(
             cursor,
             method=lambda result: result.to_arrow_iterable(
                 bqstorage_client=self.storage_client
             ),
-            chunk_size=chunk_size,
         )
         return pa.ipc.RecordBatchReader.from_batches(schema.to_pyarrow(), batch_iter)
 
