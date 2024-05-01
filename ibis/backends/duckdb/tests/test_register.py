@@ -508,3 +508,25 @@ def test_memtable_null_column_parquet_dtype_roundtrip(con, tmp_path):
     after = con.read_parquet(tmp_path / "tmp.parquet")
 
     assert before.a.type() == after.a.type()
+
+
+def test_csv_read_with_timestamp_format(tmp_path):
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("""
+id,cat,from_,to_
+A0216-0001,A,01/01/2015 00:00,31/12/2030 00:00
+A0216-0002,A,01/01/2015 00:00,31/12/2030 00:00
+B0216-0003,B,01/01/2015 00:00,31/12/2030 00:00
+B0216-0004,B,01/01/2015 00:00,31/12/2030 00:00
+""")
+
+    con = ibis.duckdb.connect()
+    map_csv = con.read_csv(
+        data_path, columns=dict.fromkeys("id cat from_ to_".split(), "STRING")
+    ).mutate(
+        from_ts=lambda t: t.from_.to_timestamp("%d/%m/%Y %H:%M"),
+        to_ts=lambda t: t.to_.to_timestamp("%d/%m/%Y %H:%M"),
+    )
+
+    t = con.create_table("map", map_csv, overwrite=True)
+    assert t.count().execute() == 4
