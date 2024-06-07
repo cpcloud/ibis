@@ -48,9 +48,9 @@ class TestConf(ServiceBackendTest):
     supports_structs = False
     rounding_method = "half_to_even"
     service_name = "postgres"
-    deps = ("psycopg2",)
+    deps = ("adbc_driver_postgresql",)
 
-    driver_supports_multiple_statements = True
+    driver_supports_multiple_statements = False
 
     @property
     def test_files(self) -> Iterable[Path]:

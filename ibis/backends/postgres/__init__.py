@@ -110,8 +110,6 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema):
         return self.connect(**kwargs)
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:
-        from psycopg2.extras import execute_batch
-
         schema = op.schema
         if null_columns := [col for col, dtype in schema.items() if dtype.is_null()]:
             raise exc.IbisTypeError(
@@ -121,57 +119,9 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema):
 
         # only register if we haven't already done so
         if (name := op.name) not in self.list_tables():
-            quoted = self.compiler.quoted
-            column_defs = [
-                sg.exp.ColumnDef(
-                    this=sg.to_identifier(colname, quoted=quoted),
-                    kind=self.compiler.type_mapper.from_ibis(typ),
-                    constraints=(
-                        None
-                        if typ.nullable
-                        else [
-                            sg.exp.ColumnConstraint(
-                                kind=sg.exp.NotNullColumnConstraint()
-                            )
-                        ]
-                    ),
-                )
-                for colname, typ in schema.items()
-            ]
-
-            create_stmt = sg.exp.Create(
-                kind="TABLE",
-                this=sg.exp.Schema(
-                    this=sg.to_identifier(name, quoted=quoted), expressions=column_defs
-                ),
-                properties=sg.exp.Properties(expressions=[sge.TemporaryProperty()]),
-            )
-            create_stmt_sql = create_stmt.sql(self.dialect)
-
-            columns = schema.keys()
-            df = op.data.to_frame()
-            # nan gets compiled into 'NaN'::float which throws errors in non-float columns
-            # In order to hold NaN values, pandas automatically converts integer columns
-            # to float columns if there are NaN values in them. Therefore, we need to convert
-            # them to their original dtypes (that support pd.NA) to figure out which columns
-            # are actually non-float, then fill the NaN values in those columns with None.
-            convert_df = df.convert_dtypes()
-            for col in convert_df.columns:
-                if not is_float_dtype(convert_df[col]):
-                    df[col] = df[col].replace(np.nan, None)
-
-            data = df.itertuples(index=False)
-            cols = ", ".join(
-                ident.sql(self.dialect)
-                for ident in map(partial(sg.to_identifier, quoted=quoted), columns)
-            )
-            specs = ", ".join(repeat("%s", len(columns)))
-            table = sg.table(name, quoted=quoted)
-            sql = f"INSERT INTO {table.sql(self.dialect)} ({cols}) VALUES ({specs})"
-
+            arrow_table = op.data.to_pyarrow(schema)
             with self.begin() as cur:
-                cur.execute(create_stmt_sql)
-                execute_batch(cur, sql, data, 128)
+                cur.adbc_ingest(name, arrow_table, mode="create")
 
     @contextlib.contextmanager
     def begin(self):
@@ -188,27 +138,18 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema):
             cursor.close()
 
     def _fetch_from_cursor(self, cursor, schema: sch.Schema) -> pd.DataFrame:
-        import pandas as pd
-
         from ibis.backends.postgres.converter import PostgresPandasData
 
-        try:
-            df = pd.DataFrame.from_records(
-                cursor, columns=schema.names, coerce_float=True
-            )
-        except Exception:
-            # clean up the cursor if we fail to create the DataFrame
-            #
-            # in the sqlite case failing to close the cursor results in
-            # artificially locked tables
-            cursor.close()
-            raise
+        arrow_table = cursor.fetchallarrow()
+        df = arrow_table.to_pandas()
         df = PostgresPandasData.convert_table(df, schema)
         return df
 
     @property
     def version(self):
-        version = f"{self.con.server_version:0>6}"
+        info = self.con.adbc_get_info()
+        vendor_version = info["vendor_version"]
+        version = f"{vendor_version:0>6}"
         major = int(version[:2])
         minor = int(version[2:4])
         patch = int(version[4:])
@@ -279,22 +220,18 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema):
             month : int32
 
         """
-        import psycopg2
-        import psycopg2.extras
+        import adbc_driver_postgresql.dbapi
 
-        psycopg2.extras.register_default_json(loads=lambda x: x)
+        uri = f"postgresql://{user}:{password}@{host}:{port}"
 
-        self.con = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database=database,
-            options=(f"-csearch_path={schema}" * (schema is not None)) or None,
-            **kwargs,
-        )
+        if database is not None:
+            uri += f"/{database}"
+
+        self.con = adbc_driver_postgresql.dbapi.connect(uri)
 
         with self.begin() as cur:
+            if schema is not None:
+                cur.execute(f"SET search_path TO {schema}")
             cur.execute("SET TIMEZONE = UTC")
 
     def list_tables(
@@ -409,25 +346,23 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, CanCreateSchema):
     def list_databases(
         self, *, like: str | None = None, catalog: str | None = None
     ) -> list[str]:
-        dbs = sg.select(C.schema_name).from_(
-            sg.table("schemata", db="information_schema")
+        (raw_data,) = (
+            self.con.adbc_get_objects(
+                depth="db_schemas", catalog_filter=self.current_catalog
+            )
+            .read_all()
+            .to_pylist()
         )
-        with self._safe_raw_sql(dbs) as cur:
-            databases = list(map(itemgetter(0), cur))
-
+        databases = [obj["db_schema_name"] for obj in raw_data["catalog_db_schemas"]]
         return self._filter_with_like(databases, like)
 
     @property
     def current_catalog(self) -> str:
-        with self._safe_raw_sql(sg.select(F.current_database())) as cur:
-            (db,) = cur.fetchone()
-        return db
+        return self.con.adbc_current_catalog
 
     @property
     def current_database(self) -> str:
-        with self._safe_raw_sql(sg.select(F.current_schema())) as cur:
-            (schema,) = cur.fetchone()
-        return schema
+        return self.con.adbc_current_db_schema
 
     def function(self, name: str, *, database: str | None = None) -> Callable:
         n = ColGen(table="n")
@@ -787,26 +722,11 @@ $$""".format(**self._get_udf_source(udf_node))
             yield result
 
     def raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
-        import psycopg2
-        import psycopg2.extras
-
         with contextlib.suppress(AttributeError):
             query = query.sql(dialect=self.dialect)
 
         con = self.con
         cursor = con.cursor()
-
-        try:
-            # try to load hstore, uuid and ipaddress extensions
-            with contextlib.suppress(psycopg2.ProgrammingError):
-                psycopg2.extras.register_hstore(cursor)
-            with contextlib.suppress(psycopg2.ProgrammingError):
-                psycopg2.extras.register_uuid(conn_or_curs=cursor)
-            with contextlib.suppress(psycopg2.ProgrammingError):
-                psycopg2.extras.register_ipaddress(cursor)
-        except Exception:
-            cursor.close()
-            raise
 
         try:
             cursor.execute(query, **kwargs)
@@ -815,7 +735,6 @@ $$""".format(**self._get_udf_source(udf_node))
             cursor.close()
             raise
         else:
-            con.commit()
             return cursor
 
     def _to_sqlglot(

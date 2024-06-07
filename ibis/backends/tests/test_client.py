@@ -661,7 +661,7 @@ def test_list_database_contents(con):
         "mssql": {"INFORMATION_SCHEMA", "dbo", "guest"},
         "mysql": {"ibis_testing", "information_schema"},
         "oracle": {"SYS", "IBIS"},
-        "postgres": {"public", "information_schema"},
+        "postgres": {"public"},
         "pyspark": set(),
         "risingwave": {"public", "rw_catalog", "information_schema"},
         "snowflake": {"IBIS_TESTING"},
