@@ -50,6 +50,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - macos-14
           - windows-latest
         python-version:
           - "3.10"
@@ -93,6 +94,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - macos-14
           - windows-latest
         python-version:
           - "3.10"
@@ -272,161 +274,78 @@ jobs:
           - os: windows-latest
             backend:
               name: mysql
-              title: MySQL
-              extras:
-                - mysql
-                - geospatial
-                - polars
-              services:
-                - mysql
-              sys-deps:
-                - libgeos-dev
+          - os: macos-14
+            backend:
+              name: mysql
           - os: windows-latest
             backend:
               name: clickhouse
-              title: ClickHouse
-              extras:
-                - clickhouse
-                - examples
-              services:
-                - clickhouse
+          - os: macos-14
+            backend:
+              name: clickhouse
           - os: windows-latest
             backend:
               name: postgres
-              title: PostgreSQL
-              extras:
-                - postgres
-                - geospatial
-              services:
-                - postgres
-              sys-deps:
-                - libgeos-dev
+          - os: macos-14
+            backend:
+              name: postgres
           - os: windows-latest
             backend:
               name: risingwave
-              title: Risingwave
-              serial: true
-              services:
-                - risingwave
-              extras:
-                - risingwave
-          - os: windows-latest
+          - os: macos-14
             backend:
-              name: postgres
-              title: PostgreSQL + Torch
-              extras:
-                - postgres
-                - geospatial
-                - polars
-              additional_deps:
-                - torch
-              services:
-                - postgres
-              sys-deps:
-                - libgeos-dev
+              name: risingwave
           # TODO(deepyaman): Test whether this works upon releasing https://github.com/cloudera/impyla/commit/bf1f94c3c4106ded6267d2485c1e939775a6a87f
           - os: ubuntu-latest
             python-version: "3.12"
             backend:
               name: impala
-              title: Impala
-              serial: true
-              extras:
-                - impala
-              services:
-                - impala
-                - kudu
-              sys-deps:
-                - cmake
-                - ninja-build
           - os: windows-latest
             backend:
               name: impala
-              title: Impala
-              serial: true
-              extras:
-                - impala
-              services:
-                - impala
-                - kudu
-              sys-deps:
-                - cmake
-                - ninja-build
+          - os: macos-14
+            backend:
+              name: impala
           - os: windows-latest
             backend:
               name: mssql
-              title: MS SQL Server
-              extras:
-                - mssql
-                - polars
-              services:
-                - mssql
-              sys-deps:
-                - freetds-dev
-                - unixodbc-dev
-                - tdsodbc
+          - os: macos-14
+            backend:
+              name: mssql
           - os: windows-latest
             backend:
               name: trino
-              title: Trino
-              services:
-                - trino
-              extras:
-                - trino
+          - os: macos-14
+            backend:
+              name: trino
           - os: windows-latest
             backend:
               name: druid
-              title: Druid
-              extras:
-                - druid
-              services:
-                - druid
+          - os: macos-14
+            backend:
+              name: druid
           - os: windows-latest
             backend:
               name: oracle
-              title: Oracle
-              serial: true
-              extras:
-                - oracle
-                - polars
-              services:
-                - oracle
+          - os: macos-14
+            backend:
+              name: oracle
           - os: ubuntu-latest
             python-version: "3.12"
             backend:
               name: flink
-              title: Flink
-              serial: true
-              extras:
-                - flink
-              additional_deps:
-                - "'apache-flink < 1.20.0'"
-                - "'pandas < 2.2'"
-                - setuptools
-              services:
-                - flink
           - os: windows-latest
             backend:
               name: flink
-              title: Flink
-              serial: true
-              extras:
-                - flink
-              additional_deps:
-                - "'apache-flink < 1.20.0'"
-                - "'pandas < 2.2'"
-                - setuptools
-              services:
-                - flink
+          - os: macos-14
+            backend:
+              name: flink
           - os: windows-latest
             backend:
               name: exasol
-              title: Exasol
-              serial: true
-              extras:
-                - exasol
-              services:
-                - exasol
+          - os: macos-14
+            backend:
+              name: exasol
     steps:
       - name: update and install system dependencies
         if: matrix.os == 'ubuntu-latest' && matrix.backend.sys-deps != null
