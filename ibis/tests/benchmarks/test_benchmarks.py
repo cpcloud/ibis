@@ -884,3 +884,7 @@ def test_memtable_register(lots_of_tables, benchmark):
     t = ibis.memtable({"x": [1, 2, 3]})
     result = benchmark(lots_of_tables.execute, t)
     assert len(result) == 3
+
+
+def test_large_listing(lots_of_tables, benchmark):
+    assert not benchmark(lots_of_tables.list_tables, like="foo")

@@ -1002,20 +1002,27 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
             catalog = table_loc.catalog or catalog
             database = table_loc.db or database
 
+        conditions = [
+            C.table_catalog.isin(sge.convert(catalog), sge.convert("temp")),
+            C.table_schema.eq(sge.convert(database)),
+        ]
+
         col = "table_name"
+
+        if like is not None:
+            conditions.append(
+                self.compiler.f.regexp_matches(C[col], sge.convert(like)),
+            )
+
         sql = (
-            sg.select(col)
+            sg.select(C[col])
             .from_(sg.table("tables", db="information_schema"))
             .distinct()
-            .where(
-                C.table_catalog.isin(sge.convert(catalog), sge.convert("temp")),
-                C.table_schema.eq(sge.convert(database)),
-            )
+            .where(*conditions)
             .sql(self.dialect)
         )
-        out = self.con.execute(sql).fetch_arrow_table()
-
-        return self._filter_with_like(out[col].to_pylist(), like)
+        out = self.con.sql(sql).arrow()
+        return out[col].to_pylist()
 
     def read_postgres(
         self, uri: str, *, table_name: str | None = None, database: str = "public"
