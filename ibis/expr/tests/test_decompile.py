@@ -86,3 +86,28 @@ def test_view():
 def test_distinct():
     expr = ibis.table({"x": "int"}, name="t").distinct()
     assert "t.distinct()" in decompile(expr)
+
+
+def test_column_order():
+    import sqlglot
+
+    import ibis
+    from ibis.expr.sql import parse_sql
+
+    # Connect to DuckDB
+    con = ibis.connect("duckdb://")
+    penguins = ibis.examples.penguins.fetch(backend=con, table_name="penguins")
+
+    raw_sql = """
+    SELECT
+      AVG(bill_length_mm) AS avg_bill_length,
+      AVG(bill_depth_mm) AS avg_bill_depth
+    FROM penguins
+    """
+
+    pretty_sql = sqlglot.parse_one(raw_sql, read="duckdb").sql("duckdb", pretty=True)
+
+    catalog = {"penguins": penguins.schema()}
+    expr = parse_sql(pretty_sql, catalog=catalog)
+
+    assert expr.columns == ["avg_bill_length", "avg_bill_depth"]
