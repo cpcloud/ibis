@@ -7,10 +7,6 @@ on:
       - "*.x.x"
   merge_group:
 
-# since we're writing to cloud storage, we don't want to have multiple
-# instances of this job running at one time
-concurrency: benchmarks-${{ github.repository }}
-
 permissions:
   # increase the rate limit for github operations, but limit token permissions
   # to read-only
@@ -41,44 +37,15 @@ jobs:
       - name: make benchmark output dir
         run: mkdir .benchmarks
 
-      - name: benchmark
-        run: poetry run pytest --benchmark-enable --benchmark-json .benchmarks/output.json ibis/tests/benchmarks
-
-      - uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: show gcloud info
-        run: gcloud info
-
-      - name: download the latest duckdb release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: bencherdev/bencher@v0.4.17
+      - name: run bencher
         run: |
-          set -euo pipefail
-
-          gh release download -R duckdb/duckdb --pattern 'duckdb_cli-linux-amd64.zip'
-          unzip duckdb_cli-linux-amd64.zip
-
-      - name: convert json data to parquet
-        run: |
-          set -euo pipefail
-
-          # sort json keys
-          jq --sort-keys -rcM < "$PWD/.benchmarks/output.json" > output.json
-
-          # connect to a file to allow spilling to disk
-          ./duckdb json2parquet.ddb <<EOF
-            COPY (
-              SELECT * FROM read_ndjson_auto('output.json', maximum_object_size=2**27)
-            ) TO 'output.parquet' (FORMAT PARQUET, COMPRESSION ZSTD)
-          EOF
-
-      - name: copy data to gcs
-        run: |
-          set -euo pipefail
-
-          timestamp="$(date --iso-8601=ns --utc | tr ','  '.')"
-          gsutil cp output.parquet "gs://ibis-benchmark-data/ci/${timestamp}.parquet"
+          bencher run \
+          --project ibis-project \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --branch main \
+          --testbed ubuntu-latest \
+          --err \
+          --adapter python_pytest \
+          --file ".benchmarks/results.json" \
+          "poetry run pytest --benchmark-enable --benchmark-json .benchmarks/output.json ibis/tests/benchmarks"
