@@ -1578,7 +1578,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
             self.con.table(name)
         except (duckdb.CatalogException, duckdb.InvalidInputException):
             # only register if we haven't already done so
-            self.con.register(name, op.data.to_pyarrow(op.schema))
+            self.con.register(name, op.data.to_native())
 
     def _register_udfs(self, expr: ir.Expr) -> None:
         con = self.con

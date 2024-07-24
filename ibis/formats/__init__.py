@@ -254,6 +254,14 @@ class TableProxy(PseudoHashable[T]):
     def to_polars(self, schema: Schema) -> pl.DataFrame:  # pragma: no cover
         """Convert this input to a Polars DataFrame."""
 
+    def to_native(self) -> T:
+        """Convert to underlying native format.
+
+        Useful when the backend can handle the in-memory data structure
+        directly.
+        """
+        return self.obj
+
     def to_pyarrow_bytes(self, schema: Schema) -> bytes:
         import pyarrow as pa
         import pyarrow_hotfix  # noqa: F401
