@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
+import string
 import subprocess
 import sys
+import tempfile
 
 import duckdb
+import hypothesis as h
+import hypothesis.strategies as st
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -395,3 +399,43 @@ lat,lon,geom
     path.write_bytes(data)
     t = con.read_csv(path, all_varchar=all_varchar, **input)
     assert t.schema()["geom"].is_geospatial()
+
+
+def csv_header(exclude_characters=""):
+    return st.lists(
+        st.text(
+            alphabet=st.characters(
+                codec="utf-8",
+                # whitespace, double quote, and \xa0 (non-breaking space) are
+                # not supported in headers
+                exclude_characters=f'{string.whitespace}"\xa0{exclude_characters}',
+            ),
+            min_size=1,
+        ),
+        min_size=1,
+        unique=True,
+    )
+
+
+@h.given(header=csv_header())
+def test_read_csv_column_header_quoted(header, con):
+    line = ",".join(map('"{}"'.format, header))
+    with tempfile.NamedTemporaryFile(mode="r+", delete=False) as f:
+        f.write(f"{line}\n")
+        f.seek(0)
+        t = con.read_csv(f.name, all_varchar=True)
+        schema = t.schema()
+
+    assert list(schema.names) == header
+
+
+@h.given(header=csv_header(";,"))
+def test_read_csv_unquoted_column_header(header, con):
+    line = ",".join(header)
+    with tempfile.NamedTemporaryFile(mode="r+", delete=False) as f:
+        f.write(f"{line}\n")
+        f.seek(0)
+        t = con.read_csv(f.name, all_varchar=True)
+        schema = t.schema()
+
+    assert list(schema.names) == header
