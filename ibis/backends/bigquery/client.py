@@ -75,24 +75,12 @@ def bq_param_timestamp(_: dt.Timestamp, value, name):
     return bq.ScalarQueryParameter(name, "TIMESTAMP", value.isoformat())
 
 
-@bigquery_param.register
-def bq_param_string(_: dt.String, value, name):
-    return bq.ScalarQueryParameter(name, "STRING", value)
-
-
-@bigquery_param.register
-def bq_param_integer(_: dt.Integer, value, name):
-    return bq.ScalarQueryParameter(name, "INT64", value)
-
-
-@bigquery_param.register
-def bq_param_double(_: dt.Floating, value, name):
-    return bq.ScalarQueryParameter(name, "FLOAT64", value)
-
-
-@bigquery_param.register
-def bq_param_boolean(_: dt.Boolean, value, name):
-    return bq.ScalarQueryParameter(name, "BOOL", value)
+@bigquery_param.register(dt.String)
+@bigquery_param.register(dt.Integer)
+@bigquery_param.register(dt.Floating)
+@bigquery_param.register(dt.Boolean)
+def bq_param_primitive(dtype, value, name):
+    return bq.ScalarQueryParameter(name, BigQueryType.to_string(dtype), value)
 
 
 @bigquery_param.register
