@@ -69,10 +69,14 @@ def bq_param_array(dtype: dt.Array, value, name):
 
 
 @bigquery_param.register
-def bq_param_timestamp(_: dt.Timestamp, value, name):
+def bq_param_timestamp(dtype: dt.Timestamp, value, name):
     with contextlib.suppress(TypeError):
         value = dateutil.parser.parse(value)
-    return bq.ScalarQueryParameter(name, "TIMESTAMP", value.isoformat())
+    return bq.ScalarQueryParameter(
+        name,
+        "TIMESTAMP" if dtype.timezone is not None else "DATETIME",
+        value.isoformat(),
+    )
 
 
 @bigquery_param.register(dt.String)
