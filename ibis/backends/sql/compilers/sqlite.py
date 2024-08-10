@@ -12,7 +12,7 @@ import ibis.expr.operations as ops
 from ibis.backends.sql.compilers.base import NULL, AggGen, SQLGlotCompiler
 from ibis.backends.sql.datatypes import SQLiteType
 from ibis.backends.sql.dialects import SQLite
-from ibis.common.temporal import DateUnit, IntervalUnit
+from ibis.common.temporal import IntervalUnit
 
 
 class SQLiteCompiler(SQLGlotCompiler):
@@ -293,7 +293,9 @@ class SQLiteCompiler(SQLGlotCompiler):
         return self.f.anon.mod(left, right)
 
     def _temporal_truncate(self, func, arg, unit):
-        if unit.short == "Q":
+        short = unit.short
+        # special case for quarter truncation
+        if short == "Q":
             return sge.Case(
                 ifs=[
                     self.if_(
@@ -308,26 +310,38 @@ class SQLiteCompiler(SQLGlotCompiler):
                 ],
             )
         modifiers = {
-            DateUnit.DAY: ("start of day",),
-            DateUnit.WEEK: ("weekday 0", "-6 days"),
-            DateUnit.MONTH: ("start of month",),
-            DateUnit.YEAR: ("start of year",),
-            IntervalUnit.DAY: ("start of day",),
-            IntervalUnit.WEEK: ("weekday 0", "-6 days", "start of day"),
-            IntervalUnit.MONTH: ("start of month",),
-            IntervalUnit.YEAR: ("start of year",),
+            "Y": ("start of year",),
+            "M": ("start of month",),
+            "W": ("weekday 0", "-6 days", "start of day"),
+            "D": ("start of day",),
         }
 
-        params = modifiers.get(unit)
+        params = modifiers.get(short)
         if params is None:
             raise com.UnsupportedOperationError(f"Unsupported truncate unit {unit}")
-        return func(arg, *params)
+        return func(arg, *params, dialect=self.dialect)
 
     def visit_DateTruncate(self, op, *, arg, unit):
         return self._temporal_truncate(self.f.date, arg, unit)
 
     def visit_TimestampTruncate(self, op, *, arg, unit):
-        return self._temporal_truncate(self.f.anon.datetime, arg, unit)
+        short = unit.short
+        formats = {
+            "h": "%Y-%m-%dT%H:00:00",
+            "m": "%Y-%m-%dT%H:%M:00",
+            "s": "%Y-%m-%dT%H:%M:%S",
+        }
+        if short == "ms":
+            if not self.supports_subsec:
+                raise com.UnsupportedOperationError(
+                    "SQLite does not support subsecond resolution until version 3.42; "
+                    f"found version {sqlite3.sqlite_version}"
+                )
+            return self.f.datetime(arg, "subsec")
+        elif (fmt := formats.get(short)) is not None:
+            return self.f.datetime(self.f.strftime(fmt, arg))
+        else:
+            return self._temporal_truncate(self.f.datetime, arg, unit)
 
     def visit_DateArithmetic(self, op, *, left, right):
         right = right.this

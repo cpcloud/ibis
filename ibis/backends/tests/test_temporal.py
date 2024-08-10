@@ -331,36 +331,19 @@ def test_timestamp_extract_week_of_year(backend, alltypes, df):
                 ),
             ],
         ),
-        param(
-            "h",
-            "h",
-            marks=[
-                pytest.mark.notimpl(["sqlite"], raises=com.UnsupportedOperationError),
-            ],
-        ),
-        param(
-            "m",
-            "min",
-            marks=[
-                pytest.mark.notimpl(["sqlite"], raises=com.UnsupportedOperationError),
-            ],
-        ),
-        param(
-            "s",
-            "s",
-            marks=[
-                pytest.mark.notimpl(["sqlite"], raises=com.UnsupportedOperationError),
-            ],
-        ),
+        param("h", "h"),
+        param("m", "min"),
+        param("s", "s"),
         param(
             "ms",
             "ms",
             marks=[
                 pytest.mark.notimpl(
-                    ["mysql", "sqlite", "datafusion", "exasol"],
+                    ["mysql", "datafusion", "exasol"],
                     raises=com.UnsupportedOperationError,
                 ),
                 pytest.mark.notimpl(["druid"], raises=PyDruidProgrammingError),
+                sqlite_without_hms_intervals,
             ],
         ),
         param(
