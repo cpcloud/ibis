@@ -8,7 +8,7 @@ import re
 import warnings
 from functools import cached_property
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote_plus
 
 import oracledb
@@ -335,7 +335,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
                 C.data_type,
                 C.data_precision,
                 C.data_scale,
-                C.nullable.eq(sge.convert("Y")).as_("nullable"),
+                C.nullable,
             )
             .from_(sg.table("all_tab_columns"))
             .where(
@@ -357,7 +357,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
                 type_string=type_string,
                 precision=precision,
                 scale=scale,
-                nullable=nullable,
+                nullable=self._is_nullable(nullable),
             )
             for name, type_string, precision, scale, nullable in results
         }
@@ -582,7 +582,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
                 C.data_type,
                 C.data_precision,
                 C.data_scale,
-                C.nullable.eq(sge.convert("Y")),
+                C.nullable,
             )
             .from_("all_tab_columns")
             .where(C.table_name.eq(sge.convert(name)))
@@ -608,7 +608,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
                 type_string=type_string,
                 precision=precision,
                 scale=scale,
-                nullable=nullable,
+                nullable=self._is_nullable(nullable),
             )
             schema[name] = typ
 
@@ -650,3 +650,6 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
 
     def _clean_up_cached_table(self, name):
         self._clean_up_tmp_table(name)
+
+    def _is_nullable(self, nullable: Literal["Y", "N"]) -> bool:
+        return nullable == "Y"
