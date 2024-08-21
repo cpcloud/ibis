@@ -296,7 +296,7 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
                 C.data_precision,
                 C.data_scale,
                 c.if_(
-                    C.nullable.eq(sge.convert("Y"), sge.convert(1), sge.convert(0))
+                    C.nullable.eq(sge.convert("Y")), sge.convert(1), sge.convert(0)
                 ).as_("nullable"),
             )
             .from_(sg.table("all_tab_columns"))
@@ -460,8 +460,21 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
             # because it's already been deleted
             with contextlib.suppress(oracledb.DatabaseError):
                 bind.execute(f"TRUNCATE TABLE {table.sql(self.name)}")
+        if not force:
+            super().drop_table(name, database=(catalog, db), force=force)
+        else:
+            drop_stmt = """
+            DECLARE
+              counter number := 0;
+            BEGIN
+              SELECT count(*) INTO counter FROM user_tables WHERE table_name = :name;
+              IF counter > 0 THEN
+                  EXECUTE IMMEDIATE 'DROP TABLE "' || :name || '"';
+              END IF;
+            END;"""
 
-        super().drop_table(name, database=(catalog, db), force=force)
+            with self.begin() as cur:
+                cur.execute(drop_stmt, name=name)
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:
         schema = op.schema
