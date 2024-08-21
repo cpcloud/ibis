@@ -11,6 +11,7 @@ import oracledb
 import pytest
 
 import ibis
+from ibis.backends.conftest import TEST_TABLES
 from ibis.backends.tests.base import ServiceBackendTest
 
 if TYPE_CHECKING:
@@ -159,6 +160,25 @@ def init_oracle_database(
 
     if schema:
         with con.cursor() as cursor:
+            cursor.execute("""
+CREATE OR REPLACE PROCEDURE DROP_TABLE_IF_EXISTS(name VARCHAR2)
+IS
+  counter number := 0;
+BEGIN
+  SELECT count(*) INTO counter FROM user_tables WHERE table_name = name;
+  IF counter > 0 THEN
+     EXECUTE IMMEDIATE 'DROP TABLE "' || name || '"';
+  END IF;
+END;""")
+            for table in TEST_TABLES.keys() | {"win", "topk"}:
+                cursor.execute(
+                    f"""
+                    BEGIN
+                        DROP_TABLE_IF_EXISTS('{table}');
+                    END;
+                    """
+                )
+
             for stmt in schema:
                 # XXX: maybe should just remove the comments in the sql file
                 # so we don't end up writing an entire parser here.

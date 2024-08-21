@@ -3,8 +3,6 @@
 -- says that NUMBER(9) -> NUMBER(9)
 -- says that BIGINT -> NUMBER(18);
 
-DROP TABLE IF EXISTS "diamonds";
-
 CREATE TABLE "diamonds" (
     "carat" BINARY_FLOAT,
     "cut" VARCHAR2(255),
@@ -17,8 +15,6 @@ CREATE TABLE "diamonds" (
     "y" BINARY_FLOAT,
     "z" BINARY_FLOAT
 );
-
-DROP TABLE IF EXISTS "astronauts";
 
 CREATE TABLE "astronauts" (
     "id" NUMBER(18),
@@ -47,8 +43,6 @@ CREATE TABLE "astronauts" (
     "total_eva_hrs" BINARY_FLOAT
 );
 
-DROP TABLE IF EXISTS "batting";
-
 CREATE TABLE "batting" (
     "playerID" VARCHAR2(255),
     "yearID" NUMBER(18),
@@ -74,8 +68,6 @@ CREATE TABLE "batting" (
     "GIDP" NUMBER(18)
 );
 
-DROP TABLE IF EXISTS "awards_players";
-
 CREATE TABLE "awards_players" (
     "playerID" VARCHAR2(255),
     "awardID" VARCHAR2(255),
@@ -84,8 +76,6 @@ CREATE TABLE "awards_players" (
     "tie" VARCHAR2(7),
     "notes" VARCHAR2(255)
 ) ;
-
-DROP TABLE IF EXISTS "functional_alltypes";
 
 CREATE TABLE "functional_alltypes" (
     "id" NUMBER(9),
@@ -106,19 +96,16 @@ CREATE TABLE "functional_alltypes" (
     "month" NUMBER(9)
 );
 
-DROP TABLE IF EXISTS "win";
-
 CREATE TABLE "win" ("g" VARCHAR2(8), "x" NUMBER(18) NOT NULL, "y" NUMBER(18));
-INSERT INTO "win" VALUES
-    ('a', 0, 3),
-    ('a', 1, 2),
-    ('a', 2, 0),
-    ('a', 3, 1),
-    ('a', 4, 1);
-
-DROP TABLE IF EXISTS "topk";
+INSERT INTO "win" VALUES ('a', 0, 3);
+INSERT INTO "win" VALUES ('a', 1, 2);
+INSERT INTO "win" VALUES ('a', 2, 0);
+INSERT INTO "win" VALUES ('a', 3, 1);
+INSERT INTO "win" VALUES ('a', 4, 1);
 
 CREATE TABLE "topk" ("x" NUMBER(18));
-INSERT INTO "topk" VALUES (1), (1), (NULL);
+INSERT INTO "topk" VALUES (1);
+INSERT INTO "topk" VALUES (1);
+INSERT INTO "topk" VALUES (NULL);
 
 COMMIT;
