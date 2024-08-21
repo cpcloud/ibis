@@ -466,5 +466,8 @@ class OracleCompiler(SQLGlotCompiler):
     def visit_IntervalFromInteger(self, op, *, arg, unit):
         return self._value_to_interval(arg, unit)
 
+    def visit_DummyTable(self, op, *, values):
+        return sg.select(*self._cleanup_names(values), copy=False).from_("DUAL")
+
 
 compiler = OracleCompiler()
