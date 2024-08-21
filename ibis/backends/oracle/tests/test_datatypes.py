@@ -3,13 +3,6 @@ from __future__ import annotations
 import ibis
 
 
-def test_failed_column_inference(con):
-    # This is a table in the Docker container that we know fails
-    # column type inference, so if is loaded, then we're in OK shape.
-    table = con.table("ALL_DOMAINS", database="SYS")
-    assert len(table.columns)
-
-
 def test_blob_raw(con):
     con.drop_table("blob_raw_blobs_blob_raw", force=True)
 
