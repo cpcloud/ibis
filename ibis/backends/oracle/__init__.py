@@ -8,7 +8,7 @@ import re
 import warnings
 from functools import cached_property
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote_plus
 
 import oracledb
@@ -18,7 +18,6 @@ import sqlglot.expressions as sge
 import ibis
 import ibis.backends.sql.compilers as sc
 import ibis.common.exceptions as exc
-import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
@@ -33,47 +32,6 @@ if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
     import pyarrow as pa
-
-
-def metadata_row_to_type(
-    *, type_mapper, type_string, precision, scale, nullable
-) -> dt.DataType:
-    """Convert a row from an Oracle metadata table to an Ibis type."""
-    # See
-    # https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Data-Types.html#GUID-0BC16006-32F1-42B1-B45E-F27A494963FF
-    # for details
-    #
-    # NUMBER(null, null) --> NUMBER(38) -> NUMBER(38, 0)
-    # (null, null) --> from_string()
-    if type_string == "NUMBER" and precision is None and not scale:
-        typ = dt.Int64(nullable=nullable)
-
-    # (null, 0) --> INT
-    # (null, 3), (null, 6), (null, 9) --> from_string() - TIMESTAMP(3)/(6)/(9)
-    elif precision is None and (scale is not None and scale == 0):
-        typ = dt.Int64(nullable=nullable)
-
-    # NUMBER(*, 0) --> INT
-    # (*, 0) --> from_string() - INTERVAL DAY(3) TO SECOND(0)
-    elif (
-        type_string == "NUMBER"
-        and precision is not None
-        and (scale is not None and scale == 0)
-    ):
-        typ = dt.Int64(nullable=nullable)
-
-    # NUMBER(*, > 0) --> DECIMAL
-    # (*, > 0) --> from_string() - INTERVAL DAY(3) TO SECOND(2)
-    elif (
-        type_string == "NUMBER"
-        and precision is not None
-        and (scale is not None and scale > 0)
-    ):
-        typ = dt.Decimal(precision=precision, scale=scale, nullable=nullable)
-
-    else:
-        typ = type_mapper.from_string(type_string, nullable=nullable)
-    return typ
 
 
 class Backend(SQLBackend, CanListDatabase, CanListSchema):
@@ -329,13 +287,17 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
     ) -> sch.Schema:
         if database is None:
             database = self.con.username.upper()
+
+        c = self.compiler
         stmt = (
             sg.select(
                 C.column_name,
                 C.data_type,
                 C.data_precision,
                 C.data_scale,
-                C.nullable,
+                c.if_(
+                    C.nullable.eq(sge.convert("Y"), sge.convert(1), sge.convert(0))
+                ).as_("nullable"),
             )
             .from_(sg.table("all_tab_columns"))
             .where(
@@ -350,19 +312,18 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
         if not results:
             raise exc.IbisError(f"Table not found: {name!r}")
 
-        type_mapper = self.compiler.type_mapper
-        fields = {
-            name: metadata_row_to_type(
-                type_mapper=type_mapper,
-                type_string=type_string,
-                precision=precision,
-                scale=scale,
-                nullable=self._is_nullable(nullable),
-            )
-            for name, type_string, precision, scale, nullable in results
-        }
-
-        return sch.Schema(fields)
+        type_mapper = c.type_mapper
+        return sch.Schema(
+            {
+                name: type_mapper.from_driver_parts(
+                    type_string=type_string,
+                    precision=precision,
+                    scale=scale,
+                    nullable=bool(nullable),
+                )
+                for name, type_string, precision, scale, nullable in results
+            }
+        )
 
     def create_table(
         self,
@@ -576,13 +537,16 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
         )
         drop_view = sg.exp.Drop(kind="VIEW", this=this).sql(dialect)
 
+        c = self.compiler
         metadata_query = (
             sg.select(
                 C.column_name,
                 C.data_type,
                 C.data_precision,
                 C.data_scale,
-                C.nullable,
+                c.if_(
+                    C.nullable.eq(sge.convert("Y")), sge.convert(1), sge.convert(0)
+                ).as_("nullable"),
             )
             .from_("all_tab_columns")
             .where(C.table_name.eq(sge.convert(name)))
@@ -598,21 +562,18 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
                 # drop the view no matter what
                 con.execute(drop_view)
 
-        schema = {}
-
-        # TODO: hand all this off to the type mapper
-        type_mapper = self.compiler.type_mapper
-        for name, type_string, precision, scale, nullable in results:
-            typ = metadata_row_to_type(
-                type_mapper=type_mapper,
-                type_string=type_string,
-                precision=precision,
-                scale=scale,
-                nullable=self._is_nullable(nullable),
-            )
-            schema[name] = typ
-
-        return sch.Schema(schema)
+        type_mapper = c.type_mapper
+        return sch.Schema(
+            {
+                name: type_mapper.from_driver_parts(
+                    type_string=type_string,
+                    precision=precision,
+                    scale=scale,
+                    nullable=bool(nullable),
+                )
+                for name, type_string, precision, scale, nullable in results
+            }
+        )
 
     def _fetch_from_cursor(self, cursor, schema: sch.Schema) -> pd.DataFrame:
         # TODO(gforsyth): this can probably be generalized a bit and put into
@@ -650,6 +611,3 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
 
     def _clean_up_cached_table(self, name):
         self._clean_up_tmp_table(name)
-
-    def _is_nullable(self, nullable: Literal["Y", "N"]) -> bool:
-        return nullable == "Y"

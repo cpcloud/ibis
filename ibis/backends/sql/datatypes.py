@@ -694,6 +694,47 @@ class OracleType(SqlglotType):
         nullable = " NOT NULL" if not dtype.nullable else ""
         return "VARCHAR2(4000)" + nullable
 
+    @classmethod
+    def from_driver_parts(
+        cls, type_string: str, precision: int | None, scale: int | None, nullable: bool
+    ) -> dt.DataType:
+        """Convert a row from an Oracle metadata table to an Ibis type."""
+        # See
+        # https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Data-Types.html#GUID-0BC16006-32F1-42B1-B45E-F27A494963FF
+        # for details
+        #
+        # NUMBER(null, null) --> NUMBER(38) -> NUMBER(38, 0)
+        # (null, null) --> from_string()
+        if type_string == "NUMBER" and precision is None and not scale:
+            typ = dt.Int64(nullable=nullable)
+
+        # (null, 0) --> INT
+        # (null, 3), (null, 6), (null, 9) --> from_string() - TIMESTAMP(3)/(6)/(9)
+        elif precision is None and (scale is not None and scale == 0):
+            typ = dt.Int64(nullable=nullable)
+
+        # NUMBER(*, 0) --> INT
+        # (*, 0) --> from_string() - INTERVAL DAY(3) TO SECOND(0)
+        elif (
+            type_string == "NUMBER"
+            and precision is not None
+            and (scale is not None and scale == 0)
+        ):
+            typ = dt.Int64(nullable=nullable)
+
+        # NUMBER(*, > 0) --> DECIMAL
+        # (*, > 0) --> from_string() - INTERVAL DAY(3) TO SECOND(2)
+        elif (
+            type_string == "NUMBER"
+            and precision is not None
+            and (scale is not None and scale > 0)
+        ):
+            typ = dt.Decimal(precision=precision, scale=scale, nullable=nullable)
+
+        else:
+            typ = cls.from_string(type_string, nullable=nullable)
+        return typ
+
 
 class SnowflakeType(SqlglotType):
     dialect = "snowflake"
