@@ -37,9 +37,7 @@ class TestConf(ServiceBackendTest):
     check_dtype = False
     returned_timestamp_unit = "s"
     supports_arrays = False
-    # Automatic mutate so that logical type in ibis returns as bool
-    # but the backend will still do whatever it's going to do
-    native_bool = False
+    native_bool = True
     supports_structs = False
     supports_json = False
     rounding_method = "half_to_even"
