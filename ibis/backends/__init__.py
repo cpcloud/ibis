@@ -7,6 +7,7 @@ import importlib.metadata
 import keyword
 import re
 import urllib.parse
+import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -16,7 +17,7 @@ import ibis.config
 import ibis.expr.operations as ops
 import ibis.expr.types as ir
 from ibis import util
-from ibis.common.caching import RefCountedCache
+from ibis.common.caching import QueryCache
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping, MutableMapping
@@ -805,12 +806,7 @@ class BaseBackend(abc.ABC, _FileIOHandler):
         self._con_args: tuple[Any] = args
         self._con_kwargs: dict[str, Any] = kwargs
         self._can_reconnect: bool = True
-        # expression cache
-        self._query_cache = RefCountedCache(
-            populate=self._load_into_cache,
-            lookup=lambda name: self.table(name).op(),
-            finalize=self._clean_up_cached_table,
-        )
+        self._query_cache = QueryCache(weakref.proxy(self))
 
     @property
     @abc.abstractmethod
