@@ -35,6 +35,12 @@ __all__ = ("BaseBackend", "connect")
 class TablesAccessor(collections.abc.Mapping):
     """A mapping-like object for accessing tables off a backend.
 
+    ::: {.callout-note}
+    ## The `tables` accessor is tied to the lifetime of the backend.
+
+    If the backend goes out of scope, the `tables` accessor is no longer valid.
+    :::
+
     Tables may be accessed by name using either index or attribute access:
 
     Examples
@@ -45,7 +51,7 @@ class TablesAccessor(collections.abc.Mapping):
 
     """
 
-    def __init__(self, backend: BaseBackend):
+    def __init__(self, backend: weakref.proxy):
         self._backend = backend
 
     def __getitem__(self, name) -> ir.Table:
@@ -1014,7 +1020,7 @@ class BaseBackend(abc.ABC, _FileIOHandler):
         >>> people = con.tables.people  # access via attribute
 
         """
-        return TablesAccessor(self)
+        return TablesAccessor(weakref.proxy(self))
 
     @property
     @abc.abstractmethod
