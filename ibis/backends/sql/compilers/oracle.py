@@ -5,6 +5,7 @@ import sqlglot.expressions as sge
 import toolz
 
 import ibis.common.exceptions as com
+import ibis.expr.datatypes as dt
 import ibis.expr.operations as ops
 from ibis.backends.sql.compilers.base import NULL, STAR, AggGen, SQLGlotCompiler
 from ibis.backends.sql.datatypes import OracleType
@@ -281,6 +282,11 @@ class OracleCompiler(SQLGlotCompiler):
     ## Aggregate stuff
 
     def visit_Correlation(self, op, *, left, right, where, how):
+        if op.left.dtype.is_boolean():
+            left = self.cast(left, dt.int32)
+        if op.right.dtype.is_boolean():
+            right = self.cast(right, dt.int32)
+
         if how == "sample":
             raise ValueError(
                 "Oracle only implements population correlation coefficient"
@@ -288,6 +294,11 @@ class OracleCompiler(SQLGlotCompiler):
         return self.agg.corr(left, right, where=where)
 
     def visit_Covariance(self, op, *, left, right, where, how):
+        if op.left.dtype.is_boolean():
+            left = self.cast(left, dt.int32)
+        if op.right.dtype.is_boolean():
+            right = self.cast(right, dt.int32)
+
         if how == "sample":
             return self.agg.covar_samp(left, right, where=where)
         return self.agg.covar_pop(left, right, where=where)
