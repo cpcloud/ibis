@@ -7,6 +7,7 @@ import contextlib
 import os
 import urllib
 import warnings
+import weakref
 from operator import itemgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -280,7 +281,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema, UrlFromPath):
         return ops.DatabaseTable(
             name,
             schema=table_schema,
-            source=self,
+            source=ops.Source(weakref.ref(self)),
             namespace=ops.Namespace(catalog=catalog, database=database),
         ).to_expr()
 

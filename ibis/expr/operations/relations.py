@@ -5,7 +5,7 @@ from __future__ import annotations
 import itertools
 import typing
 from abc import abstractmethod
-from typing import Annotated, Any, Literal, Optional, TypeVar
+from typing import Annotated, Any, Generic, Literal, Optional, TypeVar
 
 from public import public
 
@@ -27,6 +27,7 @@ from ibis.expr.schema import Schema
 from ibis.formats import TableProxy  # noqa: TCH001
 
 T = TypeVar("T")
+V = TypeVar("V")
 
 Unaliased = Annotated[T, ~InstanceOf(Alias)]
 NonSortKey = Annotated[T, ~InstanceOf(SortKey)]
@@ -404,11 +405,45 @@ class UnboundTable(PhysicalTable):
 
 
 @public
+class Source(Generic[V]):
+    """A pseudo-hashable object that represents a data source.
+
+    Sources are implemented this way to allow weak references to the backend
+    from `DatabaseTable` relations.
+    """
+
+    def __init__(self, obj: V) -> None:
+        self.obj = obj
+        self.hash = hash((type(obj), obj))
+
+    def __getattr__(self, name: str):
+        obj = self.obj()
+        if obj is None:
+            raise AttributeError(name)
+        return getattr(obj, name)
+
+    def __hash__(self) -> int:
+        return self.hash
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Source):
+            return self.obj == other.obj
+        else:
+            return NotImplemented
+
+    def __ne__(self, other) -> bool:
+        if isinstance(other, Source):
+            return self.obj != other.obj
+        else:
+            return NotImplemented
+
+
+@public
 class DatabaseTable(PhysicalTable):
     """A table that is bound to a specific backend."""
 
     schema: Schema
-    source: Any
+    source: Source
     namespace: Namespace = Namespace()
 
 
@@ -426,7 +461,7 @@ class SQLQueryResult(Relation):
 
     query: str
     schema: Schema
-    source: Any
+    source: Source
     values = FrozenOrderedDict()
 
 

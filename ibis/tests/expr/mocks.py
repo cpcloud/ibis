@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+import weakref
 
 from sqlglot.dialects import DuckDB
 
@@ -44,7 +45,9 @@ class MockBackend(BaseBackend):
 
     def table(self, name, **kwargs):
         schema = self.get_schema(name)
-        node = ops.DatabaseTable(source=self, name=name, schema=schema)
+        node = ops.DatabaseTable(
+            source=ops.Source(weakref.ref(self)), name=name, schema=schema
+        )
         return node.to_expr()
 
     def list_tables(self):

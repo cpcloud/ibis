@@ -7,6 +7,7 @@ import contextlib
 import glob
 import os
 import re
+import weakref
 from typing import TYPE_CHECKING, Any, Optional
 
 import google.api_core.exceptions
@@ -623,7 +624,7 @@ class Backend(SQLBackend, CanCreateDatabase, CanCreateSchema):
             table.name,
             # https://cloud.google.com/bigquery/docs/querying-wildcard-tables#filtering_selected_tables_using_table_suffix
             schema=schema_from_bigquery_table(bq_table, wildcard=table.name[-1] == "*"),
-            source=self,
+            source=ops.Source(weakref.ref(self)),
             namespace=ops.Namespace(database=dataset, catalog=project),
         )
         table_expr = node.to_expr()

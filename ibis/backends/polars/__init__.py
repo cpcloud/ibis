@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from collections.abc import Iterable, Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -73,7 +74,7 @@ class Backend(BaseBackend, NoUrl):
 
     def table(self, name: str) -> ir.Table:
         schema = sch.infer(self._tables[name])
-        return ops.DatabaseTable(name, schema, self).to_expr()
+        return ops.DatabaseTable(name, schema, ops.Source(weakref.ref(self))).to_expr()
 
     @deprecated(
         as_of="9.1",

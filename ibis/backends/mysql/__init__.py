@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import re
 import warnings
+import weakref
 from functools import cached_property
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any
@@ -466,7 +467,10 @@ class Backend(SQLBackend, CanCreateDatabase):
 
         # preserve the input schema if it was provided
         return ops.DatabaseTable(
-            name, schema=schema, source=self, namespace=ops.Namespace(database=database)
+            name,
+            schema=schema,
+            source=ops.Source(weakref.ref(self)),
+            namespace=ops.Namespace(database=database),
         ).to_expr()
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:

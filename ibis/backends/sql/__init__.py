@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import weakref
 from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -138,7 +139,7 @@ class SQLBackend(BaseBackend, _DatabaseSchemaHandler):
         return ops.DatabaseTable(
             name,
             schema=table_schema,
-            source=self,
+            source=ops.Source(weakref.ref(self)),
             namespace=ops.Namespace(catalog=catalog, database=database),
         ).to_expr()
 
@@ -174,7 +175,9 @@ class SQLBackend(BaseBackend, _DatabaseSchemaHandler):
         query = self._transpile_sql(query, dialect=dialect)
         if schema is None:
             schema = self._get_schema_using_query(query)
-        return ops.SQLQueryResult(query, ibis.schema(schema), self).to_expr()
+        return ops.SQLQueryResult(
+            query, ibis.schema(schema), ops.Source(weakref.ref(self))
+        ).to_expr()
 
     @abc.abstractmethod
     def _get_schema_using_query(self, query: str) -> sch.Schema:

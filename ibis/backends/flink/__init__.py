@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import weakref
 from typing import TYPE_CHECKING, Any
 
 import sqlglot as sg
@@ -267,7 +268,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl):
         node = ops.DatabaseTable(
             name,
             schema=schema,
-            source=self,
+            source=ops.Source(weakref.ref(self)),
             namespace=ops.Namespace(catalog=catalog, database=database),
         )
         return node.to_expr()

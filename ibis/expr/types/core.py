@@ -346,7 +346,7 @@ class Expr(Immutable, Coercible):
             if isinstance(table, ops.UnboundTable):
                 has_unbound = True
             else:
-                backends.add(table.source)
+                backends.add(table.source.obj())
 
         return list(backends), has_unbound
 

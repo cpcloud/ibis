@@ -11,7 +11,6 @@ from pytest import param
 import ibis
 import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
-import ibis.expr.operations as ops
 from ibis import _
 from ibis.backends.sql.compilers import BigQueryCompiler
 from ibis.common.annotations import ValidationError
@@ -266,13 +265,8 @@ def test_large_compile():
     num_columns = 20
     num_joins = 7
 
-    class MockBackend(ibis.backends.bigquery.Backend):
-        pass
-
     names = [f"col_{i}" for i in range(num_columns)]
-    schema = ibis.Schema(dict.fromkeys(names, "string"))
-    ibis_client = MockBackend()
-    table = ops.SQLQueryResult("select * from t", schema, ibis_client).to_expr()
+    table = ibis.table(schema=dict.fromkeys(names, "string"), name="t")
     for _ in range(num_joins):  # noqa: F402
         table = table.mutate(dummy=ibis.literal(""))
         table_ = table.view()

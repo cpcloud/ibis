@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import sqlite3
+import weakref
 from typing import TYPE_CHECKING, Any
 
 import sqlglot as sg
@@ -537,7 +538,10 @@ class Backend(SQLBackend, UrlFromPath):
 
         # preserve the input schema if it was provided
         return ops.DatabaseTable(
-            name, schema=schema, source=self, namespace=ops.Namespace(database=database)
+            name,
+            schema=schema,
+            source=ops.Source(weakref.ref(self)),
+            namespace=ops.Namespace(database=database),
         ).to_expr()
 
     def drop_table(

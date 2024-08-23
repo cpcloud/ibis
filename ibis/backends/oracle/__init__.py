@@ -6,6 +6,7 @@ import atexit
 import contextlib
 import re
 import warnings
+import weakref
 from functools import cached_property
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any
@@ -476,7 +477,10 @@ class Backend(SQLBackend, CanListDatabase, CanListSchema):
 
         # preserve the input schema if it was provided
         return ops.DatabaseTable(
-            name, schema=schema, source=self, namespace=ops.Namespace(database=database)
+            name,
+            schema=schema,
+            source=ops.Source(weakref.ref(self)),
+            namespace=ops.Namespace(database=database),
         ).to_expr()
 
     def drop_table(

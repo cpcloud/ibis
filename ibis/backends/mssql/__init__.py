@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import struct
+import weakref
 from contextlib import closing
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any
@@ -704,7 +705,7 @@ GO"""
         return ops.DatabaseTable(
             name,
             schema=schema,
-            source=self,
+            source=ops.Source(weakref.ref(self)),
             namespace=ops.Namespace(catalog=catalog, database=db),
         ).to_expr()
 

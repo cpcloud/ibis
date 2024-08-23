@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import weakref
 from operator import itemgetter
 from typing import TYPE_CHECKING
 
@@ -266,7 +267,10 @@ class Backend(PostgresBackend):
 
         # preserve the input schema if it was provided
         return ops.DatabaseTable(
-            name, schema=schema, source=self, namespace=ops.Namespace(database=database)
+            name,
+            schema=schema,
+            source=ops.Source(weakref.ref(self)),
+            namespace=ops.Namespace(database=database),
         ).to_expr()
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:

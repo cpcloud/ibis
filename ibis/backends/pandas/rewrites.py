@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from typing import Optional
 
 from public import public
@@ -342,7 +343,7 @@ def rewrite_scalar_subquery(_, **kwargs):
 
 @replace(ops.UnboundTable)
 def bind_unbound_table(_, backend, **kwargs):
-    return ops.DatabaseTable(name=_.name, schema=_.schema, source=backend)
+    return ops.DatabaseTable(name=_.name, schema=_.schema, source=weakref.ref(backend))
 
 
 def plan(node, backend, params):

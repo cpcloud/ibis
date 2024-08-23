@@ -45,13 +45,24 @@ class TablesAccessor(collections.abc.Mapping):
 
     Examples
     --------
-    >>> con = ibis.sqlite.connect("example.db")
+    >>> import ibis
+    >>> con = ibis.sqlite.connect()
+    >>> con.create_table("people", schema=ibis.schema({"name": "string", "age": "int"}))
+    DatabaseTable: people
+      name string
+      age  int64
     >>> people = con.tables["people"]  # access via index
     >>> people = con.tables.people  # access via attribute
 
+    If the backend goes out of scope, the accessor is no longer valid and
+    attempting to list any tables will raise a [](`ReferenceError`).
+
+    >>> tables = con.tables
+    >>> del con
+    >>> list(tables)
     """
 
-    def __init__(self, backend: weakref.proxy):
+    def __init__(self, backend: weakref.ProxyType):
         self._backend = backend
 
     def __getitem__(self, name) -> ir.Table:
@@ -1008,17 +1019,10 @@ class BaseBackend(abc.ABC, _FileIOHandler):
         """
 
     @functools.cached_property
-    def tables(self):
+    def tables(self) -> TablesAccessor:
         """An accessor for tables in the database.
 
-        Tables may be accessed by name using either index or attribute access:
-
-        Examples
-        --------
-        >>> con = ibis.sqlite.connect("example.db")
-        >>> people = con.tables["people"]  # access via index
-        >>> people = con.tables.people  # access via attribute
-
+        Tables may be accessed by name using either index or attribute access
         """
         return TablesAccessor(weakref.proxy(self))
 
