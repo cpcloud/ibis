@@ -839,33 +839,6 @@ class BaseBackend(abc.ABC, _FileIOHandler):
     def __rich_repr__(self):
         yield "name", self.name
 
-    def __hash__(self):
-        return hash(self.db_identity)
-
-    def __eq__(self, other):
-        return self.db_identity == other.db_identity
-
-    @functools.cached_property
-    def db_identity(self) -> str:
-        """Return the identity of the database.
-
-        Multiple connections to the same
-        database will return the same value for `db_identity`.
-
-        The default implementation assumes connection parameters uniquely
-        specify the database.
-
-        Returns
-        -------
-        Hashable
-            Database identity
-
-        """
-        parts = [self.__class__]
-        parts.extend(self._con_args)
-        parts.extend(f"{k}={v}" for k, v in self._con_kwargs.items())
-        return "_".join(map(str, parts))
-
     # TODO(kszucs): this should be a classmethod returning with a new backend
     # instance which does instantiate the connection
     def connect(self, *args, **kwargs) -> BaseBackend:
