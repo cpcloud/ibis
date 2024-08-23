@@ -3,11 +3,13 @@ from __future__ import annotations
 import functools
 import sys
 import weakref
-from collections import namedtuple
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Generic, NamedTuple, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    import ibis.expr.operations as ops
+    from ibis.backends import BaseBackend
 
 
 def memoize(func: Callable) -> Callable:
@@ -27,11 +29,20 @@ def memoize(func: Callable) -> Callable:
     return wrapper
 
 
-CacheEntry = namedtuple("CacheEntry", ["name", "ref", "finalizer"])
+class CacheEntry(NamedTuple):
+    name: str
+    ref: weakref.ReferenceType[ops.DatabaseTable]
+    finalizer: weakref.finalize
 
 
-class QueryCache:
+B = TypeVar("B", bound="BaseBackend")
+
+
+class QueryCache(Generic[B]):
     """A cache for executed Ibis expressions.
+
+    Typically implemented by storing computed expressions as temporary tables
+    in the backend.
 
     Notes
     -----
@@ -41,9 +52,9 @@ class QueryCache:
     We can implement that interface if and when we need to.
     """
 
-    def __init__(self, backend: weakref.proxy) -> None:
+    def __init__(self, backend: weakref.ProxyType[B]) -> None:
         self.backend = backend
-        self.cache: dict[Any, CacheEntry] = dict()
+        self.cache: dict[ops.Relation, CacheEntry] = {}
 
     def get(self, key, default=None):
         if (entry := self.cache.get(key)) is not None:
@@ -51,7 +62,7 @@ class QueryCache:
             return op if op is not None else default
         return default
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: ops.Relation) -> ops.DatabaseTable:
         op = self.cache[key].ref()
         if op is None:
             raise KeyError(key)
@@ -74,13 +85,15 @@ class QueryCache:
         return cached
 
     def release(self, name: str) -> None:
+        """Release a cached table by `name`."""
         # Could be sped up with an inverse dictionary
         for key, entry in self.cache.items():
             if entry.name == name:
                 self._release(key)
                 return
 
-    def _release(self, key) -> None:
+    def _release(self, key: ops.Relation) -> None:
+        """Release a cached table by `key` relation."""
         entry = self.cache.pop(key)
         try:
             self.backend._clean_up_cached_table(entry.name)
