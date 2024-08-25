@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import itertools
 import operator
 import re
@@ -796,8 +797,9 @@ class Table(Expr, _FixedTextJupyterMixin):
         elif isinstance(what, int):
             return ops.Field(self.op(), self.columns[what]).to_expr()
 
+        columns = self.columns
         args = [
-            self.columns[arg] if isinstance(arg, int) else arg
+            columns[arg] if isinstance(arg, int) else arg
             for arg in util.promote_list(what)
         ]
         values = self.bind(args)
@@ -879,7 +881,7 @@ class Table(Expr, _FixedTextJupyterMixin):
     def _ipython_key_completions_(self) -> list[str]:
         return self.columns
 
-    @property
+    @functools.cached_property
     def columns(self) -> list[str]:
         """The list of column names in this table.
 
