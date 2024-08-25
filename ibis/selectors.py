@@ -59,6 +59,7 @@ from functools import reduce
 from typing import Optional, Union
 
 from public import public
+from pyroaring import BitMap
 
 import ibis.common.exceptions as exc
 import ibis.expr.datatypes as dt
@@ -89,9 +90,9 @@ def __getattr__(name):
 class Where(Selector):
     predicate: Callable[[ir.Value], bool]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         predicate = self.predicate
-        return frozenset(col for col in table.columns if predicate(table[col]))
+        return BitMap(i for i, col in enumerate(table.columns) if predicate(table[col]))
 
 
 @public
@@ -144,9 +145,9 @@ def numeric() -> Selector:
 class OfType(Selector):
     predicate: Callable[[dt.DataType], bool]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         predicate = self.predicate
-        return frozenset(name for name, typ in table.schema().items() if predicate(typ))
+        return BitMap(i for i, typ in enumerate(table.schema().types) if predicate(typ))
 
 
 @public
@@ -226,9 +227,11 @@ def of_type(dtype: dt.DataType | str | type[dt.DataType]) -> Selector:
 class StartsWith(Selector):
     prefixes: str | VarTuple[str]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         prefixes = self.prefixes
-        return frozenset(col for col in table.columns if col.startswith(prefixes))
+        return BitMap(
+            i for i, col in enumerate(table.columns) if col.startswith(prefixes)
+        )
 
 
 @public
@@ -260,9 +263,11 @@ def startswith(prefixes: str | tuple[str, ...]) -> Selector:
 class EndsWith(Selector):
     suffixes: str | VarTuple[str]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         suffixes = self.suffixes
-        return frozenset(col for col in table.columns if col.endswith(suffixes))
+        return BitMap(
+            i for i, col in enumerate(table.columns) if col.endswith(suffixes)
+        )
 
 
 @public
@@ -295,11 +300,13 @@ class Contains(Selector):
     needles: VarTuple[str]
     how: Callable[[Iterable[bool]], bool]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         needles = self.needles
         how = self.how
-        return frozenset(
-            col for col in table.columns if how(map(col.__contains__, needles))
+        return BitMap(
+            i
+            for i, col in enumerate(table.columns)
+            if how(map(col.__contains__, needles))
         )
 
 
@@ -348,8 +355,9 @@ def contains(
 class Matches(Selector):
     regex: re.Pattern
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
-        return frozenset(filter(self.regex.search, table.columns))
+    def expand_offsets(self, table: ir.Table) -> BitMap:
+        regex = self.regex
+        return BitMap(i for i, col in enumerate(table.columns) if regex.search(col))
 
 
 @public
@@ -413,14 +421,15 @@ def all_of(*predicates: str | Selector) -> Selector:
 class Cols(Selector):
     names: frozenset[str]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         names = self.names
         columns = table.columns
         if extra_cols := sorted(names.difference(columns)):
             raise exc.IbisInputError(
                 f"Columns {extra_cols} are not present in {columns}"
             )
-        return names
+        name_locs = table.schema()._name_locs
+        return BitMap(map(name_locs.__getitem__, names))
 
 
 @public
@@ -450,6 +459,13 @@ def cols(*names: str | ir.Column) -> Selector:
 
 
 class Across(Concrete, Expandable):
+    """Class for selectors that can only be used as the root of a selector tree.
+
+    Child classes **must** implement `expand` and should not implement
+    `expand_offsets`, because `expand_offsets` is what allows selectors to compose
+    via set operations.
+    """
+
     selector: Selector
     funcs: Union[
         Resolver,
@@ -680,25 +696,21 @@ class ColumnIndex(Selector):
             assert isinstance(value, str), f"expected `str` got {type(value)}"
             return name_locs[value] + offset
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
+    def expand_offsets(self, table: ir.Table) -> BitMap:
         name_locs = table.schema()._name_locs
         key = self.key
 
         if isinstance(key, str):
-            iterable = (key,)
+            iterable = (name_locs[key],)
         elif isinstance(key, int):
-            iterable = (table.columns[key],)
+            iterable = (key,)
         elif isinstance(key, Slice):
             start = self.slice_key_to_int(key.start, name_locs, offset=0)
             stop = self.slice_key_to_int(key.stop, name_locs, offset=1)
-            step = key.step
-            iterable = table.columns[start:stop:step]
+            iterable = range(start or 0, stop or len(table.columns), key.step or 1)
         else:
-            iterable = (
-                table.columns[el if isinstance(el, int) else name_locs[el]]
-                for el in key
-            )
-        return frozenset(iterable)
+            iterable = (el if isinstance(el, int) else name_locs[el] for el in key)
+        return BitMap(iterable)
 
 
 class Indexable(Singleton):
@@ -749,8 +761,8 @@ class First(Singleton, Selector):
     def expand(self, table: ir.Table) -> Sequence[ir.Value]:
         return [table[0]]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
-        return frozenset((table.columns[0],))
+    def expand_offsets(self, table: ir.Table) -> BitMap:
+        return BitMap([0])
 
 
 @public
@@ -773,8 +785,8 @@ class Last(Singleton, Selector):
     def expand(self, table: ir.Table) -> Sequence[ir.Value]:
         return [table[-1]]
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
-        return frozenset((table.columns[-1],))
+    def expand_offsets(self, table: ir.Table) -> BitMap:
+        return BitMap([len(table.columns) - 1])
 
 
 @public
@@ -797,8 +809,8 @@ class AllColumns(Singleton, Selector):
     def expand(self, table: ir.Table) -> Sequence[ir.Value]:
         return list(map(table.__getitem__, table.columns))
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
-        return frozenset(table.columns)
+    def expand_offsets(self, table: ir.Table) -> BitMap:
+        return BitMap(range(len(table.columns)))
 
 
 @public
@@ -821,8 +833,8 @@ class NoColumns(Singleton, Selector):
     def expand(self, table: ir.Table) -> Sequence[ir.Value]:
         return []
 
-    def expand_names(self, table: ir.Table) -> frozenset[str]:
-        return frozenset()
+    def expand_offsets(self, table: ir.Table) -> BitMap:
+        return BitMap([])
 
 
 @public

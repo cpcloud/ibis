@@ -543,11 +543,12 @@ def test_methods(penguins):
 @pytest.mark.parametrize("sel", [s.none(), s.cols(), []])
 def test_none_selector(penguins, sel):
     sel = s._to_selector(sel)
+    assert sel.expand(penguins) == []
+    assert not sel.expand_offsets(penguins)
 
-    assert not sel.expand(penguins)
-    assert not sel.expand_names(penguins)
-
-    assert list((sel | s.cols("year")).expand_names(penguins)) == ["year"]
+    assert list((sel | s.c("year")).expand_offsets(penguins)) == [
+        penguins.columns.index("year")
+    ]
 
     with pytest.raises(exc.IbisError):
         penguins.select(sel)
