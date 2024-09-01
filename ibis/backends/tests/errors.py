@@ -143,3 +143,8 @@ try:
     from pyodbc import ProgrammingError as PyODBCProgrammingError
 except ImportError:
     PyODBCProgrammingError = PyODBCDataError = None
+
+try:
+    from pyflink.util.exceptions import TableException as PyFlinkTableException
+except ImportError:
+    PyFlinkTableException = None

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import pytest
-from pyflink.common.types import Row
 
 import ibis
 from ibis.backends.tests.errors import Py4JJavaError
+
+pyflink = pytest.importorskip("pyflink")
+
+Row = pyflink.common.types.Row
 
 
 @pytest.mark.parametrize(

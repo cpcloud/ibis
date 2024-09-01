@@ -4,7 +4,6 @@ import pytest
 from pytest import param
 
 import ibis.expr.datatypes as dt
-from ibis.backends.flink.datatypes import FlinkType
 
 
 @pytest.mark.parametrize(
@@ -35,4 +34,6 @@ from ibis.backends.flink.datatypes import FlinkType
     ],
 )
 def test_simple(datatype, expected):
+    from ibis.backends.flink.datatypes import FlinkType
+
     assert FlinkType.to_string(datatype) == expected
