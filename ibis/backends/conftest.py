@@ -397,11 +397,18 @@ def backend_cls(request) -> BaseBackend:
 
 
 @pytest.fixture(params=_get_backends_to_test(), scope="session")
-def backend(request, data_dir, tmp_path_factory, worker_id) -> BackendTest:
+def backend(
+    request, data_dir, tmp_path_factory, worker_id, pytestconfig
+) -> BackendTest:
     """Return an instance of BackendTest, loaded with data."""
 
     cls = _get_backend_conf(request.param)
-    return cls.load_data(data_dir, tmp_path_factory, worker_id)
+    return cls.load_data(
+        data_dir,
+        tmp_path_factory,
+        worker_id,
+        reload_data=not pytestconfig.getoption("dont_reload_data"),
+    )
 
 
 @pytest.fixture(scope="session")
@@ -447,7 +454,7 @@ def con_create_catalog_database(con):
         pytest.skip(f"{con.name} backend cannot create both database and schemas")
 
 
-def _setup_backend(request, data_dir, tmp_path_factory, worker_id):
+def _setup_backend(request, data_dir, tmp_path_factory, worker_id, reload_data):
     if (backend := request.param) == "duckdb" and WINDOWS:
         pytest.xfail(
             "windows prevents two connections to the same duckdb file "
@@ -455,16 +462,24 @@ def _setup_backend(request, data_dir, tmp_path_factory, worker_id):
         )
     else:
         cls = _get_backend_conf(backend)
-        return cls.load_data(data_dir, tmp_path_factory, worker_id)
+        return cls.load_data(
+            data_dir, tmp_path_factory, worker_id, reload_data=reload_data
+        )
 
 
 @pytest.fixture(
     params=_get_backends_to_test(),
     scope="session",
 )
-def ddl_backend(request, data_dir, tmp_path_factory, worker_id):
+def ddl_backend(request, data_dir, tmp_path_factory, worker_id, pytestconfig):
     """Set up the backends that are SQL-based."""
-    return _setup_backend(request, data_dir, tmp_path_factory, worker_id)
+    return _setup_backend(
+        request,
+        data_dir,
+        tmp_path_factory,
+        worker_id,
+        reload_data=not pytestconfig.get("dont_reload_data"),
+    )
 
 
 @pytest.fixture(scope="session")
@@ -477,10 +492,15 @@ def ddl_con(ddl_backend):
     params=_get_backends_to_test(keep=("pyspark",)),
     scope="session",
 )
-def udf_backend(request, data_dir, tmp_path_factory, worker_id):
+def udf_backend(request, data_dir, tmp_path_factory, worker_id, pytestconfig):
     """Runs the UDF-supporting backends."""
     cls = _get_backend_conf(request.param)
-    return cls.load_data(data_dir, tmp_path_factory, worker_id)
+    return cls.load_data(
+        data_dir,
+        tmp_path_factory,
+        worker_id,
+        reload_data=not pytestconfig.get("dont_reload_data"),
+    )
 
 
 @pytest.fixture(scope="session")

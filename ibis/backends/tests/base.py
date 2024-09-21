@@ -151,11 +151,9 @@ class BackendTest(abc.ABC):
 
     @classmethod
     def load_data(
-        cls, data_dir: Path, tmpdir: Path, worker_id: str, **kw: Any
+        cls, data_dir: Path, tmpdir: Path, worker_id: str, reload_data: bool, **kw: Any
     ) -> BackendTest:
         """Load testdata from `data_dir`."""
-        # handling for multi-processes pytest
-
         # get the temp directory shared by all workers
         root_tmp_dir = tmpdir.getbasetemp()
         if worker_id != "master":
@@ -167,10 +165,12 @@ class BackendTest(abc.ABC):
 
             inst = cls(data_dir=data_dir, tmpdir=tmpdir, worker_id=worker_id, **kw)
 
-            if inst.stateful:
-                inst.stateful_load(fn, **kw)
-            else:
-                inst.stateless_load(**kw)
+            if reload_data:
+                if inst.stateful:
+                    inst.stateful_load(fn, **kw)
+                else:
+                    inst.stateless_load(**kw)
+
             inst.postload(tmpdir=tmpdir, worker_id=worker_id, **kw)
             return inst
 

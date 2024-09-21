@@ -30,3 +30,11 @@ h.settings.register_profile(
 # examples try:
 # pytest pyarrow -sv --hypothesis-profile=debug
 h.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--dont-reload-data",
+        action="store_true",
+        help="Disable data loading for faster iteration on backends with high latency",
+    )
