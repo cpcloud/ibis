@@ -151,6 +151,23 @@ download-iceberg-jar pyspark scala="2.12" iceberg="1.6.1":
     curl -qSsL -o "${jar}" "${url}"
     ls "${jar}"
 
+# remove old, unused or dangling images
+prune-images:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # remove '<none>' images
+    docker rmi $(docker images | grep -F '<none>' | sed 's/ \{2,\}/	/g' | cut -d '	' -f3 | sed -e 's/\n//g' -e 's/ $/\n/g') || true
+
+    # find all images that don't match the existing one in compose.yml
+    # compose="$(mktemp)"
+    # pulled="$(mktemp)"
+    # yj -yj < compose.yaml | jq -r '.services | map(select(.image)) | map(.image) | .[]' | sort -u > "$compose"
+    # docker images --format '{{{{.Repository}}:{{{{.Tag}}' | sort -u > "$pulled"
+    # bloat="$(mktemp)"
+    # comm -13 "$compose" "$pulled" | grep -v 'ibis-postgres\|flink' | tee "$bloat"
+    # docker rmi "$(cat "$bloat")" || true
+
 # start backends using docker compose; no arguments starts all backends
 up *backends:
     #!/usr/bin/env bash
