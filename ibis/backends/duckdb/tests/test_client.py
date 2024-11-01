@@ -420,3 +420,12 @@ def test_memtable_doesnt_leak(con, monkeypatch):
     df = ibis.memtable({"a": [1, 2, 3]}, name=name).execute()
     assert name not in con.list_tables()
     assert len(df) == 3
+
+
+def test_sample_of_url(con):
+    url = "https://storage.googleapis.com/ibis-tutorial-data/penguins.csv"
+    t = con.read_csv(url)
+    count = t.count().execute()
+    sample = t.sample(fraction=0.1)
+    sample_count = sample.count().execute()
+    assert count > sample_count > 0
