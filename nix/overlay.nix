@@ -2,20 +2,22 @@
 let
   # Create package overlay from workspace.
   workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ../.; };
+
   envOverlay = workspace.mkPyprojectOverlay {
     sourcePreference = "wheel";
   };
-  project = pyproject-nix.lib.project.loadPyproject {
-    # Read & unmarshal pyproject.toml relative to this project root.
-    # projectRoot is also used to set `src` for renderers such as buildPythonPackage.
-    projectRoot = ../.;
-  };
+
+  editableOverlay =
+    # Create an overlay enabling editable mode for all local dependencies.
+    # This is for usage with nix-nix develop
+    workspace.mkEditablePyprojectOverlay {
+      root = "$REPO_ROOT";
+    };
 
   pyprojectOverrides = import ./pyproject-overrides.nix { inherit pkgs; };
 
-  mkDevEnv = python: { groups, extras }:
+  mkEnv = python: { deps ? workspace.deps.all, editable ? true }:
     # This devShell uses uv2nix to construct a virtual environment purely from Nix, using the same dependency specification as the application.
-    # The notable difference is that we also apply another overlay here enabling editable mode ( https://setuptools.pypa.io/en/latest/userguide/development_mode.html ).
     #
     # This means that any changes done to your local files do not require a rebuild.
     let
@@ -25,28 +27,14 @@ let
         (pkgs.callPackage pyproject-nix.build.packages {
           inherit python;
         }).overrideScope
-          (pkgs.lib.composeExtensions envOverlay pyprojectOverrides);
-
-      # Create an overlay enabling editable mode for all local dependencies.
-      editableOverlay = workspace.mkEditablePyprojectOverlay {
-        root = "$REPO_ROOT";
-      };
-
-      # Override previous set with our overridable overlay.
-      editablePythonSet = pythonSet.overrideScope editableOverlay;
-      allDeps = builtins.attrNames project.dependencies.groups
-        ++ builtins.attrNames project.dependencies.extras;
-
-      depFilter = set: if set == "*" then (_: true) else (name: pkgs.lib.elem name set);
-      groupFilter = depFilter groups;
-      extraFilter = depFilter extras;
+          (lib.composeManyExtensions ([
+            envOverlay
+            pyprojectOverrides
+          ] ++ lib.optional editable editableOverlay));
     in
-
     # Build virtual environment
-    editablePythonSet.mkVirtualEnv "ibis-${python.pythonVersion}" {
-      ibis-framework = builtins.filter groupFilter allDeps
-        ++ builtins.filter extraFilter allDeps;
-    };
+    pythonSet.mkVirtualEnv "ibis-${python.pythonVersion}" deps;
+
   inherit (pkgs) lib stdenv;
 in
 {
@@ -60,33 +48,28 @@ in
 
   ibis310 = pkgs.callPackage ./ibis.nix {
     python = pkgs.python310;
-    inherit mkDevEnv;
+    inherit mkEnv;
   };
 
   ibis311 = pkgs.callPackage ./ibis.nix {
     python = pkgs.python311;
-    inherit mkDevEnv;
+    inherit mkEnv;
   };
 
   ibis312 = pkgs.callPackage ./ibis.nix {
     python = pkgs.python312;
-    inherit mkDevEnv;
+    inherit mkEnv;
   };
 
-  ibisDevEnv310 = mkDevEnv pkgs.python310 {
-    groups = "*";
-    extras = "*";
-  };
-  ibisDevEnv311 = mkDevEnv pkgs.python311 {
-    groups = "*";
-    extras = "*";
-  };
-  ibisDevEnv312 = mkDevEnv pkgs.python312 {
-    groups = "*";
-    extras = "*";
-  };
+  ibisDevEnv310 = mkEnv pkgs.python310 { };
+  ibisDevEnv311 = mkEnv pkgs.python311 { };
+  ibisDevEnv312 = mkEnv pkgs.python312 { };
 
-  ibisSmallDevEnv = mkDevEnv pkgs.python312 { groups = [ "dev" ]; extras = [ ]; };
+  ibisSmallDevEnv = mkEnv pkgs.python312 {
+    deps = {
+      ibis-framework = [ "dev" ];
+    };
+  };
 
   duckdb = super.duckdb.overrideAttrs (
     _: lib.optionalAttrs (stdenv.isAarch64 && stdenv.isLinux) {

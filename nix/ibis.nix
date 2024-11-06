@@ -1,33 +1,45 @@
-{ pkgs, python, mkDevEnv, ... }:
+{ pkgs, python, mkEnv, stdenv, ... }:
 let
-  testEnv = mkDevEnv python {
-    groups = [ "tests" ];
-    extras = [
-      "duckdb"
-      "datafusion"
-      "sqlite"
-      "polars"
-      "decompiler"
-      "visualization"
-    ];
+  pythonEnv = mkEnv python {
+    editable = false;
+    deps = {
+      ibis-framework = [
+        # Groups
+        "tests"
+        # Extras
+        "duckdb"
+        "datafusion"
+        "sqlite"
+        "polars"
+        "decompiler"
+        "visualization"
+      ];
+    };
   };
+
 in
-python.pkgs.buildPythonPackage {
-  name = "ibis-framework";
-  inherit (testEnv) buildInputs
-    nativeBuildInputs
-    propagatedBuildInputs
-    propagatedNativeBuildInputs;
-  nativeCheckInputs = testEnv.buildInputs ++ [ pkgs.graphviz-nox ];
-  pyproject = true;
-  src = ../.;
-  preCheck = ''
-    ln -s ${pkgs.ibisTestingData} $PWD/ci/ibis-testing-data
-  '';
-  checkPhase = ''
-    runHook preCheck
-    pytest -m datafusion
-    pytest -m 'core or duckdb or sqlite or polars' --numprocesses $NIX_BUILD_CORES --dist loadgroup
-    runHook postCheck
-  '';
-}
+  stdenv.mkDerivation {
+    name = "ibis-framework-test";
+    nativeCheckInputs = [ pythonEnv pkgs.graphviz-nox ];
+    src = ../.;
+    doCheck = true;
+    preCheck = ''
+      ln -s ${pkgs.ibisTestingData} $PWD/ci/ibis-testing-data
+    '';
+    checkPhase = ''
+      runHook preCheck
+      pytest -m datafusion
+      pytest -m 'core or duckdb or sqlite or polars' --numprocesses $NIX_BUILD_CORES --dist loadgroup
+      runHook postCheck
+    '';
+
+    # Ibis-framework was already built as a part of the env, this is just running tests.
+    # Symlink the built test env for convenience.
+    #
+    # Note: Testing could technically be done as a part of the virtualenv constructor derivation.
+    installPhase = ''
+      runHook preInstall
+      ln -s ${pythonEnv} $out
+      runHook postInstall
+    '';
+  }
