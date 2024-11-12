@@ -1,16 +1,16 @@
-CREATE VIEW IF NOT EXISTS diamonds AS
+CREATE TABLE IF NOT EXISTS `diamonds` AS
 SELECT * FROM parquet.`/Volumes/ibis_testing/default/{user}_{python_version}/diamonds.parquet`;
 
-CREATE VIEW IF NOT EXISTS batting AS
+CREATE TABLE IF NOT EXISTS `batting` AS
 SELECT * FROM parquet.`/Volumes/ibis_testing/default/{user}_{python_version}/batting.parquet`;
 
-CREATE VIEW IF NOT EXISTS awards_players AS
+CREATE TABLE IF NOT EXISTS `awards_players` AS
 SELECT * FROM parquet.`/Volumes/ibis_testing/default/{user}_{python_version}/awards_players.parquet`;
 
-CREATE VIEW IF NOT EXISTS functional_alltypes AS
+CREATE TABLE IF NOT EXISTS `functional_alltypes` AS
 SELECT * FROM parquet.`/Volumes/ibis_testing/default/{user}_{python_version}/functional_alltypes.parquet`;
 
-CREATE VIEW IF NOT EXISTS astronauts AS
+CREATE TABLE IF NOT EXISTS `astronauts` AS
 SELECT * FROM parquet.`/Volumes/ibis_testing/default/{user}_{python_version}/astronauts.parquet`;
 
 CREATE TABLE IF NOT EXISTS `array_types` AS
