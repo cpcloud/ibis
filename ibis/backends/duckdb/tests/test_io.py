@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from pathlib import Path
 
 import duckdb
 import numpy as np
@@ -236,14 +235,11 @@ def test_read_sqlite_no_table_name(con, tmp_path):
     raises=duckdb.IOException,
 )
 def test_attach_sqlite(data_dir, tmp_path):
-    import sqlite3
+    script = data_dir.parent.joinpath("schema", "sqlite.sql").read_text()
 
     test_db_path = tmp_path / "test.db"
     with sqlite3.connect(test_db_path) as scon:
-        for line in (
-            Path(data_dir.parent / "schema" / "sqlite.sql").read_text().split(";")
-        ):
-            scon.execute(line)
+        scon.executescript(script)
 
     # Create a new connection here because we already have the `ibis_testing`
     # tables loaded in to the `con` fixture.
