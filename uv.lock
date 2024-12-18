@@ -664,6 +664,34 @@ wheels = [
 ]
 
 [[package]]
+name = "boto3"
+version = "1.35.83"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore" },
+    { name = "jmespath" },
+    { name = "s3transfer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/0c/555e2d1d912a43c90d6d99f960233b4574c166e241c2632e6694a65f18e0/boto3-1.35.83.tar.gz", hash = "sha256:df2e0d57241de0f9c31b62e73093c2126e4fd73b87b1897ecf280a1b87a2b825", size = 111070 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/46/4e993b79c75fcd27aac2d426053e0d01d7af577887a84513d2f27c7f56d5/boto3-1.35.83-py3-none-any.whl", hash = "sha256:a4828d67b12892cb11fe9e6d86f40975a06db470676e61194968e3a32ec4c536", size = 139178 },
+]
+
+[[package]]
+name = "botocore"
+version = "1.35.83"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jmespath" },
+    { name = "python-dateutil" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/06/dd/835b5f9ed7a7d7ffbf7f1f600dc963f5f6c1e5939ca0ca8d0f3ae73f19cb/botocore-1.35.83.tar.gz", hash = "sha256:df5e4384838e50bbafd47e9b5fefb995e83cbb9412e7cd7c0db9555174d91bba", size = 13477605 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/4e/603c90be490cfadaf7d171d7e93a440772bd32a7b6d0401c19c74fabe0b7/botocore-1.35.83-py3-none-any.whl", hash = "sha256:ba363183e4df79fbcfd5f3600fd473bd45a1de03d0d0b5e78abd59f276971d27", size = 13281339 },
+]
+
+[[package]]
 name = "cachetools"
 version = "5.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1907,6 +1935,15 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+athena = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "pyarrow-hotfix" },
+    { name = "pyathena", extra = ["arrow", "pandas"] },
+    { name = "rich" },
+]
 bigquery = [
     { name = "db-dtypes" },
     { name = "google-cloud-bigquery" },
@@ -2155,6 +2192,7 @@ requires-dist = [
     { name = "graphviz", marker = "extra == 'visualization'", specifier = ">=0.16,<1" },
     { name = "impyla", marker = "extra == 'impala'", specifier = ">=0.17,<1" },
     { name = "mysqlclient", marker = "extra == 'mysql'", specifier = ">=2.2.4,<3" },
+    { name = "numpy", marker = "extra == 'athena'", specifier = ">=1.23.2,<3" },
     { name = "numpy", marker = "extra == 'bigquery'", specifier = ">=1.23.2,<3" },
     { name = "numpy", marker = "extra == 'clickhouse'", specifier = ">=1.23.2,<3" },
     { name = "numpy", marker = "extra == 'databricks'", specifier = ">=1.23.2,<3" },
@@ -2175,10 +2213,12 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'sqlite'", specifier = ">=1.23.2,<3" },
     { name = "numpy", marker = "extra == 'trino'", specifier = ">=1.23.2,<3" },
     { name = "oracledb", marker = "extra == 'oracle'", specifier = ">=1.3.1,<3" },
+    { name = "packaging", marker = "extra == 'athena'", specifier = ">=21.3,<25" },
     { name = "packaging", marker = "extra == 'duckdb'", specifier = ">=21.3,<25" },
     { name = "packaging", marker = "extra == 'oracle'", specifier = ">=21.3,<25" },
     { name = "packaging", marker = "extra == 'polars'", specifier = ">=21.3,<25" },
     { name = "packaging", marker = "extra == 'pyspark'", specifier = ">=21.3,<25" },
+    { name = "pandas", marker = "extra == 'athena'", specifier = ">=1.5.3,<3" },
     { name = "pandas", marker = "extra == 'bigquery'", specifier = ">=1.5.3,<3" },
     { name = "pandas", marker = "extra == 'clickhouse'", specifier = ">=1.5.3,<3" },
     { name = "pandas", marker = "extra == 'databricks'", specifier = ">=1.5.3,<3" },
@@ -2203,6 +2243,7 @@ requires-dist = [
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1,<2" },
     { name = "psycopg2", marker = "extra == 'postgres'", specifier = ">=2.8.4,<3" },
     { name = "psycopg2", marker = "extra == 'risingwave'", specifier = ">=2.8.4,<3" },
+    { name = "pyarrow", marker = "extra == 'athena'", specifier = ">=10.0.1" },
     { name = "pyarrow", marker = "extra == 'bigquery'", specifier = ">=10.0.1" },
     { name = "pyarrow", marker = "extra == 'clickhouse'", specifier = ">=10.0.1" },
     { name = "pyarrow", marker = "extra == 'databricks'", specifier = ">=10.0.1" },
@@ -2222,6 +2263,7 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'snowflake'", specifier = ">=10.0.1" },
     { name = "pyarrow", marker = "extra == 'sqlite'", specifier = ">=10.0.1" },
     { name = "pyarrow", marker = "extra == 'trino'", specifier = ">=10.0.1" },
+    { name = "pyarrow-hotfix", marker = "extra == 'athena'", specifier = ">=0.4,<1" },
     { name = "pyarrow-hotfix", marker = "extra == 'bigquery'", specifier = ">=0.4,<1" },
     { name = "pyarrow-hotfix", marker = "extra == 'clickhouse'", specifier = ">=0.4,<1" },
     { name = "pyarrow-hotfix", marker = "extra == 'databricks'", specifier = ">=0.4,<1" },
@@ -2241,6 +2283,7 @@ requires-dist = [
     { name = "pyarrow-hotfix", marker = "extra == 'snowflake'", specifier = ">=0.4,<1" },
     { name = "pyarrow-hotfix", marker = "extra == 'sqlite'", specifier = ">=0.4,<1" },
     { name = "pyarrow-hotfix", marker = "extra == 'trino'", specifier = ">=0.4,<1" },
+    { name = "pyathena", extras = ["pandas", "arrow"], marker = "extra == 'athena'", specifier = ">=3.11.0,<4" },
     { name = "pydata-google-auth", marker = "extra == 'bigquery'", specifier = ">=1.4.0,<2" },
     { name = "pydruid", marker = "extra == 'druid'", specifier = ">=0.6.7,<1" },
     { name = "pyexasol", marker = "extra == 'exasol'", specifier = ">=0.25.2,<1" },
@@ -2250,6 +2293,7 @@ requires-dist = [
     { name = "python-dateutil", specifier = ">=2.8.2,<3" },
     { name = "pytz", specifier = ">=2022.7" },
     { name = "regex", marker = "extra == 'sqlite'", specifier = ">=2021.7.6" },
+    { name = "rich", marker = "extra == 'athena'", specifier = ">=12.4.4,<14" },
     { name = "rich", marker = "extra == 'bigquery'", specifier = ">=12.4.4,<14" },
     { name = "rich", marker = "extra == 'clickhouse'", specifier = ">=12.4.4,<14" },
     { name = "rich", marker = "extra == 'databricks'", specifier = ">=12.4.4,<14" },
@@ -2508,6 +2552,15 @@ wheels = [
 ]
 
 [[package]]
+name = "jmespath"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/2a/e867e8531cf3e36b41201936b7fa7ba7b5702dbef42922193f05c8976cd6/jmespath-1.0.1.tar.gz", hash = "sha256:90261b206d6defd58fdd5e85f478bf633a2901798906be2ad389150c5c60edbe", size = 25843 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/b4/b9b800c45527aadd64d5b442f9b932b00648617eb5d63d2c7a6587b7cafc/jmespath-1.0.1-py3-none-any.whl", hash = "sha256:02e2e4cc71b5bcab88332eebf907519190dd9e6e82107fa7f83b1003a6252980", size = 20256 },
+]
+
+[[package]]
 name = "joblib"
 version = "1.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2624,7 +2677,7 @@ wheels = [
 
 [[package]]
 name = "jupyter-events"
-version = "0.10.0"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema", extra = ["format-nongpl"] },
@@ -2635,9 +2688,9 @@ dependencies = [
     { name = "rfc3986-validator" },
     { name = "traitlets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/53/7537a1aa558229bb0b1b178d814c9d68a9c697d3aecb808a1cb2646acf1f/jupyter_events-0.10.0.tar.gz", hash = "sha256:670b8229d3cc882ec782144ed22e0d29e1c2d639263f92ca8383e66682845e22", size = 61516 }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/65/5791c8a979b5646ca29ea50e42b6708908b789f7ff389d1a03c1b93a1c54/jupyter_events-0.11.0.tar.gz", hash = "sha256:c0bc56a37aac29c1fbc3bcfbddb8c8c49533f9cf11f1c4e6adadba936574ab90", size = 62039 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/94/059180ea70a9a326e1815176b2370da56376da347a796f8c4f0b830208ef/jupyter_events-0.10.0-py3-none-any.whl", hash = "sha256:4b72130875e59d57716d327ea70d3ebc3af1944d3717e5a498b8a06c6c159960", size = 18777 },
+    { url = "https://files.pythonhosted.org/packages/3f/8c/9b65cb2cd4ea32d885993d5542244641590530836802a2e8c7449a4c61c9/jupyter_events-0.11.0-py3-none-any.whl", hash = "sha256:36399b41ce1ca45fe8b8271067d6a140ffa54cec4028e95491c93b78a855cacf", size = 19423 },
 ]
 
 [[package]]
@@ -2697,7 +2750,7 @@ wheels = [
 
 [[package]]
 name = "jupyterlab"
-version = "4.3.3"
+version = "4.3.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "async-lru" },
@@ -2715,9 +2768,9 @@ dependencies = [
     { name = "tornado" },
     { name = "traitlets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/ca/b80ea37f800b7d0b96088dec04d59b4575eb33e59ca1ca19d23885fb6fe6/jupyterlab-4.3.3.tar.gz", hash = "sha256:76fa39e548fdac94dc1204af5956c556f54c785f70ee26aa47ea08eda4d5bbcd", size = 21797278 }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/45/1052f842e066902b1d78126df7e2269b1b9408991e1344e167b2e429f9e1/jupyterlab-4.3.4.tar.gz", hash = "sha256:f0bb9b09a04766e3423cccc2fc23169aa2ffedcdf8713e9e0fb33cac0b6859d0", size = 21797583 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/ce/6731e54aacbe91daa439ae895763fe9d91952ce96cd0e3f94d8d13229717/jupyterlab-4.3.3-py3-none-any.whl", hash = "sha256:32a8fd30677e734ffcc3916a4758b9dab21b02015b668c60eb36f84357b7d4b1", size = 11665394 },
+    { url = "https://files.pythonhosted.org/packages/61/48/af57263e53cfc220e522de047aa0993f53bab734fe812af1e03e33ac6d7c/jupyterlab-4.3.4-py3-none-any.whl", hash = "sha256:b754c2601c5be6adf87cb5a1d8495d653ffb945f021939f77776acaa94dae952", size = 11665373 },
 ]
 
 [[package]]
@@ -4014,6 +4067,30 @@ wheels = [
 ]
 
 [[package]]
+name = "pyathena"
+version = "3.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+    { name = "botocore" },
+    { name = "fsspec" },
+    { name = "python-dateutil" },
+    { name = "tenacity" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/a0/a1e663963c69e4a2ae5234c33adc69fed7f5c7bc429cc8ec24e253b6b8cd/pyathena-3.11.0.tar.gz", hash = "sha256:a6e9cac35132abe719a0fc2862182c77a34af0eb0a356c3374a583bca7bb530a", size = 56007 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/42/9743122a5b9d866faa28cbc6c0226774b607d987cc9920d9245fad92ed08/pyathena-3.11.0-py3-none-any.whl", hash = "sha256:f17cf61063384affbe940f5df42e191ed959b88f701fa382812fc7a3d4ebde51", size = 75678 },
+]
+
+[package.optional-dependencies]
+arrow = [
+    { name = "pyarrow" },
+]
+pandas = [
+    { name = "pandas" },
+]
+
+[[package]]
 name = "pycparser"
 version = "2.22"
 source = { registry = "https://pypi.org/simple" }
@@ -4967,6 +5044,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/79/e9/5b81dc9afc8a80884405b230b9429efeef76d04caead904bd213f453b973/ruff-0.8.3-py3-none-win32.whl", hash = "sha256:19048f2f878f3ee4583fc6cb23fb636e48c2635e30fb2022b3a1cd293402f964", size = 8807651 },
     { url = "https://files.pythonhosted.org/packages/ea/67/7291461066007617b59a707887b90e319b6a043c79b4d19979f86b7a20e7/ruff-0.8.3-py3-none-win_amd64.whl", hash = "sha256:f7df94f57d7418fa7c3ffb650757e0c2b96cf2501a0b192c18e4fb5571dfada9", size = 9625289 },
     { url = "https://files.pythonhosted.org/packages/03/8f/e4fa95288b81233356d9a9dcaed057e5b0adc6399aa8fd0f6d784041c9c3/ruff-0.8.3-py3-none-win_arm64.whl", hash = "sha256:fe2756edf68ea79707c8d68b78ca9a58ed9af22e430430491ee03e718b5e4936", size = 9078754 },
+]
+
+[[package]]
+name = "s3transfer"
+version = "0.10.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/0a/1cdbabf9edd0ea7747efdf6c9ab4e7061b085aa7f9bfc36bb1601563b069/s3transfer-0.10.4.tar.gz", hash = "sha256:29edc09801743c21eb5ecbc617a152df41d3c287f67b615f73e5f750583666a7", size = 145287 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/05/7957af15543b8c9799209506df4660cba7afc4cf94bfb60513827e96bed6/s3transfer-0.10.4-py3-none-any.whl", hash = "sha256:244a76a24355363a68164241438de1b72f8781664920260c48465896b712a41e", size = 83175 },
 ]
 
 [[package]]

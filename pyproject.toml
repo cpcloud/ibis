@@ -95,6 +95,15 @@ duckdb = [
   "rich>=12.4.4,<14",
   "packaging>=21.3,<25",
 ]
+athena = [
+  "PyAthena[Pandas,Arrow]>=3.11.0,<4",
+  "pyarrow>=10.0.1",
+  "pyarrow-hotfix>=0.4,<1",
+  "numpy>=1.23.2,<3",
+  "pandas>=1.5.3,<3",
+  "rich>=12.4.4,<14",
+  "packaging>=21.3,<25",
+]
 exasol = [
   "pyexasol>=0.25.2,<1",
   "pyarrow>=10.0.1",
@@ -271,6 +280,7 @@ docs = [
 ]
 
 [project.entry-points."ibis.backends"]
+athena = "ibis.backends.athena"
 bigquery = "ibis.backends.bigquery"
 clickhouse = "ibis.backends.clickhouse"
 databricks = "ibis.backends.databricks"

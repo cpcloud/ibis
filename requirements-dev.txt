@@ -27,6 +27,8 @@ beautifulsoup4==4.12.3
 bitarray==3.0.0
 black==24.10.0
 bleach==6.2.0
+boto3==1.35.83
+botocore==1.35.83
 cachetools==5.5.0
 certifi==2024.12.14
 cffi==1.17.1
@@ -100,6 +102,7 @@ isoduration==20.11.0
 itables==2.2.4
 jedi==0.19.2
 jinja2==3.1.4
+jmespath==1.0.1
 joblib==1.4.2
 json5==0.10.0
 jsonpointer==3.0.0
@@ -108,11 +111,11 @@ jsonschema-specifications==2024.10.1
 jupyter-cache==1.0.1
 jupyter-client==8.6.3
 jupyter-core==5.7.2
-jupyter-events==0.10.0
+jupyter-events==0.11.0
 jupyter-lsp==2.2.5
 jupyter-server==2.14.2
 jupyter-server-terminals==0.5.3
-jupyterlab==4.3.3
+jupyterlab==4.3.4
 jupyterlab-night==0.5.1
 jupyterlab-pygments==0.3.0
 jupyterlab-server==2.27.3
@@ -181,6 +184,7 @@ pyarrow==18.1.0
 pyarrow-hotfix==0.6
 pyasn1==0.6.1
 pyasn1-modules==0.4.1
+pyathena==3.11.0
 pycparser==2.22
 pydantic==2.10.3
 pydantic-core==2.27.1
@@ -226,6 +230,7 @@ rich==13.9.4
 rpds-py==0.22.3
 rsa==4.9
 ruff==0.8.3
+s3transfer==0.10.4
 scikit-learn==1.6.0
 scipy==1.14.1
 seaborn==0.13.2
