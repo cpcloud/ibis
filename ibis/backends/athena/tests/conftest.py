@@ -6,6 +6,9 @@ import sys
 from os import environ as env
 from typing import TYPE_CHECKING, Any
 
+import sqlglot as sg
+import sqlglot.expressions as sge
+
 import ibis
 from ibis.backends.tests.base import BackendTest
 
@@ -15,7 +18,7 @@ if TYPE_CHECKING:
     from ibis.backends import BaseBackend
 
 
-IBIS_ATHENA_S3_STAGING_DIR = env.get("IBIS_ATHENA_S3_STAGING_DIR", "s3://ibis-testing/")
+IBIS_ATHENA_S3_STAGING_DIR = env.get("IBIS_ATHENA_S3_STAGING_DIR", "s3://ibis-testing")
 IBIS_ATHENA_REGION_NAME = env.get("IBIS_ATHENA_REGION_NAME", "us-east-2")
 IBIS_ATHENA_PROFILE_NAME = env.get(
     "IBIS_ATHENA_PROFILE_NAME", "070284473168_PowerUserAccess"
@@ -27,21 +30,35 @@ CONNECT_ARGS = dict(
 )
 
 
-def create_table(
-    con, *, fs: s3fs.S3FileSystem, file: str, schema: str, folder: str
-) -> None:
+def create_table(con, *, fs: s3fs.S3FileSystem, file: str, folder: str) -> None:
+    import pyarrow.parquet as pq
+
+    from ibis.formats.pyarrow import PyArrowSchema
+
+    arrow_schema = pq.read_metadata(file).schema.to_arrow_schema()
+    schema = PyArrowSchema.to_ibis(arrow_schema).to_sqlglot("athena")
     name = file.with_suffix("").name
 
-    fs.copy(file, f"{folder}/{file.name}")
-
-    schema_string = ", ".join(pair.sql("athena") for pair in schema)
-    con.execute(
-        f"""
-        CREATE EXTERNAL TABLE IF NOT EXISTS {name} ({schema_string})
-        STORED AS PARQUET
-        LOCATION '{folder}/'
-        """
+    ddl = sge.Create(
+        kind="TABLE",
+        this=sge.Schema(this=sg.table(name), expressions=schema),
+        properties=sge.Properties(
+            expressions=[
+                sge.ExternalProperty(),
+                sge.FileFormatProperty(this=sge.Var(this="PARQUET")),
+                sge.LocationProperty(this=sge.convert(f"{folder}/{name}")),
+            ]
+        ),
     )
+
+    fs.put(str(file), f"{folder.removeprefix('s3://')}/{name}/{file.name}")
+
+    drop_query = sge.Drop(kind="TABLE", this=sg.table(name), exists=True).sql("athena")
+    create_query = ddl.sql("athena")
+
+    with con.cursor() as cur:
+        cur.execute(drop_query)
+        cur.execute(create_query)
 
 
 class TestConf(BackendTest):
@@ -50,11 +67,8 @@ class TestConf(BackendTest):
     deps = ("pyathena", "s3fs")
 
     def _load_data(self, **_: Any) -> None:
-        import pyarrow.parquet as pq
         import pyathena
         import s3fs
-
-        from ibis.formats.pyarrow import PyArrowSchema
 
         files = list(self.data_dir.joinpath("parquet").glob("*.parquet"))
 
@@ -64,22 +78,25 @@ class TestConf(BackendTest):
 
         fs = s3fs.S3FileSystem()
 
-        with pyathena.connect(**CONNECT_ARGS) as con:
-            with concurrent.futures.ThreadPoolExecutor() as exe:
-                for fut in concurrent.futures.as_completed(
-                    exe.submit(
+        futures = []
+
+        with (
+            pyathena.connect(**CONNECT_ARGS) as con,
+            concurrent.futures.ThreadPoolExecutor() as executor,
+        ):
+            for file in files:
+                futures.append(
+                    executor.submit(
                         create_table,
                         con,
                         fs=fs,
                         file=file,
-                        schema=PyArrowSchema.to_ibis(
-                            pq.read_metadata(file).schema.to_arrow_schema()
-                        ).to_sqlglot("athena"),
                         folder=f"{IBIS_ATHENA_S3_STAGING_DIR}/{folder}",
                     )
-                    for file in files
-                ):
-                    fut.result()
+                )
+
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
 
     @staticmethod
     def connect(*, tmpdir, worker_id, **kw) -> BaseBackend:

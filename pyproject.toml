@@ -415,6 +415,8 @@ filterwarnings = [
   "ignore:Passing a BlockManager to DataFrame is deprecated:DeprecationWarning",
   # snowpark logging warnings
   "ignore:The 'warn' method is deprecated, use 'warning' instead:DeprecationWarning",
+  # botocore is still using utcnow
+  "ignore:datetime\\.datetime\\.utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning",
 ]
 empty_parameter_set_mark = "fail_at_collect"
 markers = [
@@ -427,6 +429,7 @@ markers = [
   "notimpl: We could implement/fix this in ibis, but haven't yet",
   "notyet: This requires upstream to implement/fix something. We can't/won't workaround on the ibis side",
   "never: The backend will never support this / pass this test. Don't bother trying to fix it",
+  "athena: Amazon Athena tests",
   "bigquery: BigQuery tests",
   "clickhouse: ClickHouse tests",
   "databricks: Databricks SQL tests",
