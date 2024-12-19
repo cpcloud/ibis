@@ -10,6 +10,8 @@ import ibis
 from ibis.backends.tests.base import BackendTest
 
 if TYPE_CHECKING:
+    import s3fs
+
     from ibis.backends import BaseBackend
 
 
@@ -25,13 +27,19 @@ CONNECT_ARGS = dict(
 )
 
 
-def create_table(con, *, name: str, schema: str, folder: str) -> None:
+def create_table(
+    con, *, fs: s3fs.S3FileSystem, file: str, schema: str, folder: str
+) -> None:
+    name = file.with_suffix("").name
+
+    fs.copy(file, f"{folder}/{file.name}")
+
     schema_string = ", ".join(pair.sql("athena") for pair in schema)
     con.execute(
         f"""
         CREATE EXTERNAL TABLE IF NOT EXISTS {name} ({schema_string})
         STORED AS PARQUET
-        LOCATION '{IBIS_ATHENA_S3_STAGING_DIR}/{folder}/'
+        LOCATION '{folder}/'
         """
     )
 
@@ -39,11 +47,12 @@ def create_table(con, *, name: str, schema: str, folder: str) -> None:
 class TestConf(BackendTest):
     supports_map = True
     driver_supports_multiple_statements = False
-    deps = ("databricks.sql",)
+    deps = ("pyathena", "s3fs")
 
     def _load_data(self, **_: Any) -> None:
         import pyarrow.parquet as pq
         import pyathena
+        import s3fs
 
         from ibis.formats.pyarrow import PyArrowSchema
 
@@ -53,17 +62,20 @@ class TestConf(BackendTest):
         python_version = "".join(map(str, sys.version_info[:3]))
         folder = f"{user}_{python_version}"
 
+        fs = s3fs.S3FileSystem()
+
         with pyathena.connect(**CONNECT_ARGS) as con:
             with concurrent.futures.ThreadPoolExecutor() as exe:
                 for fut in concurrent.futures.as_completed(
                     exe.submit(
                         create_table,
                         con,
-                        name=file.with_suffix("").name,
+                        fs=fs,
+                        file=file,
                         schema=PyArrowSchema.to_ibis(
                             pq.read_metadata(file).schema.to_arrow_schema()
                         ).to_sqlglot("athena"),
-                        folder=folder,
+                        folder=f"{IBIS_ATHENA_S3_STAGING_DIR}/{folder}",
                     )
                     for file in files
                 ):
