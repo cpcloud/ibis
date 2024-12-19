@@ -13,9 +13,27 @@ if TYPE_CHECKING:
     from ibis.backends import BaseBackend
 
 
-def put_into(con, query):
-    with con.cursor() as cur:
-        cur.execute(query)
+IBIS_ATHENA_S3_STAGING_DIR = env.get("IBIS_ATHENA_S3_STAGING_DIR", "s3://ibis-testing/")
+IBIS_ATHENA_REGION_NAME = env.get("IBIS_ATHENA_REGION_NAME", "us-east-2")
+IBIS_ATHENA_PROFILE_NAME = env.get(
+    "IBIS_ATHENA_PROFILE_NAME", "070284473168_PowerUserAccess"
+)
+CONNECT_ARGS = dict(
+    s3_staging_dir=IBIS_ATHENA_S3_STAGING_DIR,
+    region_name=IBIS_ATHENA_REGION_NAME,
+    profile_name=IBIS_ATHENA_PROFILE_NAME,
+)
+
+
+def create_table(con, *, name: str, schema: str, folder: str) -> None:
+    schema_string = ", ".join(pair.sql("athena") for pair in schema)
+    con.execute(
+        f"""
+        CREATE EXTERNAL TABLE IF NOT EXISTS {name} ({schema_string})
+        STORED AS PARQUET
+        LOCATION '{IBIS_ATHENA_S3_STAGING_DIR}/{folder}/'
+        """
+    )
 
 
 class TestConf(BackendTest):
@@ -24,52 +42,33 @@ class TestConf(BackendTest):
     deps = ("databricks.sql",)
 
     def _load_data(self, **_: Any) -> None:
-        import databricks.sql
+        import pyarrow.parquet as pq
+        import pyathena
+
+        from ibis.formats.pyarrow import PyArrowSchema
 
         files = list(self.data_dir.joinpath("parquet").glob("*.parquet"))
 
         user = getpass.getuser()
         python_version = "".join(map(str, sys.version_info[:3]))
-        volume = f"{user}_{python_version}"
-        volume_prefix = f"/Volumes/ibis_testing/default/{volume}"
+        folder = f"{user}_{python_version}"
 
-        with databricks.sql.connect(
-            server_hostname=env["DATABRICKS_SERVER_HOSTNAME"],
-            http_path=env["DATABRICKS_HTTP_PATH"],
-            access_token=env["DATABRICKS_TOKEN"],
-            staging_allowed_local_path=str(self.data_dir),
-        ) as con:
-            with con.cursor() as cur:
-                cur.execute(
-                    f"CREATE VOLUME IF NOT EXISTS ibis_testing.default.{volume} COMMENT 'Ibis test data storage'"
-                )
+        with pyathena.connect(**CONNECT_ARGS) as con:
             with concurrent.futures.ThreadPoolExecutor() as exe:
                 for fut in concurrent.futures.as_completed(
                     exe.submit(
-                        put_into,
+                        create_table,
                         con,
-                        f"PUT '{file}' INTO '{volume_prefix}/{file.name}' OVERWRITE",
+                        name=file.with_suffix("").name,
+                        schema=PyArrowSchema.to_ibis(
+                            pq.read_metadata(file).schema.to_arrow_schema()
+                        ).to_sqlglot("athena"),
+                        folder=folder,
                     )
                     for file in files
                 ):
                     fut.result()
 
-            with con.cursor() as cur:
-                for raw_stmt in self.ddl_script:
-                    try:
-                        stmt = raw_stmt.format(user=user, python_version=python_version)
-                    except KeyError:  # not a valid format string, just execute it
-                        stmt = raw_stmt
-
-                    cur.execute(stmt)
-
     @staticmethod
     def connect(*, tmpdir, worker_id, **kw) -> BaseBackend:
-        return ibis.databricks.connect(
-            server_hostname=env["DATABRICKS_SERVER_HOSTNAME"],
-            http_path=env["DATABRICKS_HTTP_PATH"],
-            access_token=env["DATABRICKS_TOKEN"],
-            catalog="ibis_testing",
-            schema="default",
-            **kw,
-        )
+        return ibis.athena.connect(**CONNECT_ARGS, **kw)
