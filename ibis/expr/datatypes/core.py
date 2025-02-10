@@ -21,7 +21,7 @@ from typing import (
 )
 
 import toolz
-from koerce import attribute
+from koerce import attribute, pattern
 from public import public
 from typing_extensions import Self
 
@@ -903,13 +903,23 @@ class Struct(Parametric, MapSet):
 T = TypeVar("T", bound=DataType, covariant=True)
 
 
+@pattern
+def is_positive(value, **ctx):
+    if value < 0:
+        raise ValueError(f"{value} must be positive")
+    return value
+
+
+PosInt = Annotated[int, is_positive]
+
+
 @public
 class Array(Variadic, Parametric, Generic[T]):
     """Array values."""
 
     value_type: T
     """Element type of the array."""
-    length: Annotated[int, Between(lower=0)] | None = None
+    length: PosInt | None = None
     """The length of the array if known."""
 
     scalar = "ArrayScalar"
