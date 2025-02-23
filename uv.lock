@@ -2545,6 +2545,7 @@ docs = [
     { name = "jupyterlite-pyodide-kernel" },
     { name = "lonboard" },
     { name = "nbclient" },
+    { name = "numpy-financial" },
     { name = "plotly" },
     { name = "plotnine", version = "0.13.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "plotnine", version = "0.14.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -2750,6 +2751,7 @@ docs = [
     { name = "jupyterlite-pyodide-kernel", specifier = ">=0.5,<0.6" },
     { name = "lonboard", specifier = "==0.10.4" },
     { name = "nbclient", specifier = ">=0.8.0,<1" },
+    { name = "numpy-financial" },
     { name = "plotly", specifier = ">=5.16.1,<6" },
     { name = "plotnine", specifier = ">=0.12.2,<1" },
     { name = "py-cpuinfo", specifier = ">=9,<10" },
@@ -4199,6 +4201,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/29/e8/5da32ffcaa7a72f7ecd82f90c062140a061eb823cb88e90279424e515cf4/numpy-2.2.3-pp310-pypy310_pp73-macosx_14_0_x86_64.whl", hash = "sha256:ed2cf9ed4e8ebc3b754d398cba12f24359f018b416c380f577bbae112ca52fc9", size = 6809418 },
     { url = "https://files.pythonhosted.org/packages/a8/a9/68aa7076c7656a7308a0f73d0a2ced8c03f282c9fd98fa7ce21c12634087/numpy-2.2.3-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:39261798d208c3095ae4f7bc8eaeb3481ea8c6e03dc48028057d3cbdbdb8937e", size = 16215461 },
     { url = "https://files.pythonhosted.org/packages/17/7f/d322a4125405920401450118dbdc52e0384026bd669939484670ce8b2ab9/numpy-2.2.3-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:783145835458e60fa97afac25d511d00a1eca94d4a8f3ace9fe2043003c678e4", size = 12839607 },
+]
+
+[[package]]
+name = "numpy-financial"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "numpy", version = "2.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/4e/6dff3733162d4a96140f0195f3b529c2d56f90d3245c8c1b506913d11f91/numpy-financial-1.0.0.tar.gz", hash = "sha256:f84341bc62b2485d5604a73d5fac7e91975b4b9cd5f4a5a9cf608902ea00cb40", size = 13185 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/be/d07585e440d58835bad8f1c9ca7823b5252ffeda4c797e653a20215fca65/numpy_financial-1.0.0-py3-none-any.whl", hash = "sha256:bae534b357516f12258862d1f0181d911032d0467f215bfcd1c264b4da579047", size = 14025 },
 ]
 
 [[package]]
