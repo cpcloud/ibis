@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 import ibis
+import ibis.selectors as s
+from ibis import _
 from ibis.backends.tests.errors import ClickHouseDatabaseError
 from ibis.backends.tests.tpc.conftest import add_date, tpc_test
 
@@ -20,24 +22,23 @@ def test_01(lineitem):
     LINESTATUS, and  listed  in ascending  order of RETURNFLAG and  LINESTATUS.
     A  count  of the  number  of  lineitems in each  group  is included.
     """
-    t = lineitem
-
-    q = t.filter(t.l_shipdate <= add_date("1998-12-01", dd=-90))
-    discount_price = t.l_extendedprice * (1 - t.l_discount)
-    charge = discount_price * (1 + t.l_tax)
-    q = q.group_by(["l_returnflag", "l_linestatus"])
-    q = q.aggregate(
-        sum_qty=t.l_quantity.sum(),
-        sum_base_price=t.l_extendedprice.sum(),
-        sum_disc_price=discount_price.sum(),
-        sum_charge=charge.sum(),
-        avg_qty=t.l_quantity.mean(),
-        avg_price=t.l_extendedprice.mean(),
-        avg_disc=t.l_discount.mean(),
-        count_order=lambda t: t.count(),
+    discount_price = _.l_extendedprice * (1 - _.l_discount)
+    charge = discount_price * (1 + _.l_tax)
+    return (
+        lineitem.filter(_.l_shipdate <= add_date("1998-12-01", dd=-90))
+        .group_by(_.l_returnflag, _.l_linestatus)
+        .agg(
+            sum_qty=_.l_quantity.sum(),
+            sum_base_price=_.l_extendedprice.sum(),
+            sum_disc_price=discount_price.sum(),
+            sum_charge=charge.sum(),
+            avg_qty=_.l_quantity.mean(),
+            avg_price=_.l_extendedprice.mean(),
+            avg_disc=_.l_discount.mean(),
+            count_order=_.count(),
+        )
+        .order_by(_.l_returnflag, _.l_linestatus)
     )
-    q = q.order_by(["l_returnflag", "l_linestatus"])
-    return q
 
 
 @pytest.mark.notyet(
@@ -64,35 +65,29 @@ def test_02(part, supplier, partsupp, nation, region):
         partsupp.join(supplier, supplier.s_suppkey == partsupp.ps_suppkey)
         .join(nation, supplier.s_nationkey == nation.n_nationkey)
         .join(region, nation.n_regionkey == region.r_regionkey)
+        .filter(_.r_name == REGION, expr.p_partkey == _.ps_partkey)
     )
 
-    subexpr = subexpr.filter(
-        (subexpr.r_name == REGION) & (expr.p_partkey == subexpr.ps_partkey)
+    return (
+        expr.filter(
+            _.p_size == SIZE,
+            _.p_type.like(f"%{TYPE}"),
+            _.r_name == REGION,
+            _.ps_supplycost == subexpr.ps_supplycost.min(),
+        )
+        .select(
+            _.s_acctbal,
+            _.s_name,
+            _.n_name,
+            _.p_partkey,
+            _.p_mfgr,
+            _.s_address,
+            _.s_phone,
+            _.s_comment,
+        )
+        .order_by(_.s_acctbal.desc(), _.n_name, _.s_name, _.p_partkey)
+        .limit(100)
     )
-
-    filters = [
-        expr.p_size == SIZE,
-        expr.p_type.like(f"%{TYPE}"),
-        expr.r_name == REGION,
-        expr.ps_supplycost == subexpr.ps_supplycost.min(),
-    ]
-    q = expr.filter(filters)
-
-    q = q.select(
-        [
-            q.s_acctbal,
-            q.s_name,
-            q.n_name,
-            q.p_partkey,
-            q.p_mfgr,
-            q.s_address,
-            q.s_phone,
-            q.s_comment,
-        ]
-    )
-
-    q = q.order_by([ibis.desc(q.s_acctbal), q.n_name, q.s_name, q.p_partkey]).limit(100)
-    return q
 
 
 @tpc_test("h")
@@ -101,19 +96,16 @@ def test_03(customer, orders, lineitem):
     MKTSEGMENT = "BUILDING"
     DATE = ibis.date("1995-03-15")
 
-    q = customer.join(orders, customer.c_custkey == orders.o_custkey)
-    q = q.join(lineitem, lineitem.l_orderkey == orders.o_orderkey)
-    q = q.filter(
-        [q.c_mktsegment == MKTSEGMENT, q.o_orderdate < DATE, q.l_shipdate > DATE]
+    return (
+        customer.join(orders, customer.c_custkey == orders.o_custkey)
+        .join(lineitem, lineitem.l_orderkey == orders.o_orderkey)
+        .filter(_.c_mktsegment == MKTSEGMENT, _.o_orderdate < DATE, _.l_shipdate > DATE)
+        .group_by(_.l_orderkey, _.o_orderdate, _.o_shippriority)
+        .agg(revenue=(_.l_extendedprice * (1 - _.l_discount)).sum())
+        .relocate("revenue", after="l_orderkey")
+        .order_by(_.revenue.desc(), _.o_orderdate)
+        .limit(10)
     )
-    qg = q.group_by([q.l_orderkey, q.o_orderdate, q.o_shippriority])
-    q = qg.aggregate(revenue=(q.l_extendedprice * (1 - q.l_discount)).sum()).relocate(
-        "revenue", after="l_orderkey"
-    )
-    q = q.order_by([ibis.desc(q.revenue), q.o_orderdate])
-    q = q.limit(10)
-
-    return q
 
 
 @pytest.mark.notyet(
@@ -125,20 +117,19 @@ def test_03(customer, orders, lineitem):
 def test_04(orders, lineitem):
     """Order Priority Checking Query (Q4)"""
     DATE = "1993-07-01"
-    cond = (lineitem.l_orderkey == orders.o_orderkey) & (
-        lineitem.l_commitdate < lineitem.l_receiptdate
+    return (
+        orders.filter(
+            (
+                (lineitem.l_orderkey == orders.o_orderkey)
+                & (lineitem.l_commitdate < lineitem.l_receiptdate)
+            ).any(),
+            _.o_orderdate >= ibis.date(DATE),
+            _.o_orderdate < add_date(DATE, dm=3),
+        )
+        .group_by(_.o_orderpriority)
+        .agg(order_count=_.count())
+        .order_by(_.o_orderpriority)
     )
-    q = orders.filter(
-        [
-            cond.any(),
-            orders.o_orderdate >= ibis.date(DATE),
-            orders.o_orderdate < add_date(DATE, dm=3),
-        ]
-    )
-    q = q.group_by([orders.o_orderpriority])
-    q = q.aggregate(order_count=lambda t: t.count())
-    q = q.order_by([orders.o_orderpriority])
-    return q
 
 
 @tpc_test("h")
@@ -147,29 +138,25 @@ def test_05(customer, lineitem, orders, supplier, nation, region):
     NAME = "ASIA"
     DATE = "1994-01-01"
 
-    q = customer
-    q = q.join(orders, customer.c_custkey == orders.o_custkey)
-    q = q.join(lineitem, lineitem.l_orderkey == orders.o_orderkey)
-    q = q.join(supplier, lineitem.l_suppkey == supplier.s_suppkey)
-    q = q.join(
-        nation,
-        (customer.c_nationkey == supplier.s_nationkey)
-        & (supplier.s_nationkey == nation.n_nationkey),
+    return (
+        customer.join(orders, customer.c_custkey == orders.o_custkey)
+        .join(lineitem, lineitem.l_orderkey == orders.o_orderkey)
+        .join(supplier, lineitem.l_suppkey == supplier.s_suppkey)
+        .join(
+            nation,
+            (customer.c_nationkey == supplier.s_nationkey)
+            & (supplier.s_nationkey == nation.n_nationkey),
+        )
+        .join(region, nation.n_regionkey == region.r_regionkey)
+        .filter(
+            _.r_name == NAME,
+            _.o_orderdate >= ibis.date(DATE),
+            _.o_orderdate < add_date(DATE, dy=1),
+        )
+        .group_by(_.n_name)
+        .agg(revenue=(_.l_extendedprice * (1 - _.l_discount)).sum())
+        .order_by(_.revenue.desc())
     )
-    q = q.join(region, nation.n_regionkey == region.r_regionkey)
-
-    q = q.filter(
-        [
-            q.r_name == NAME,
-            q.o_orderdate >= ibis.date(DATE),
-            q.o_orderdate < add_date(DATE, dy=1),
-        ]
-    )
-    revexpr = q.l_extendedprice * (1 - q.l_discount)
-    gq = q.group_by([q.n_name])
-    q = gq.aggregate(revenue=revexpr.sum())
-    q = q.order_by([ibis.desc(q.revenue)])
-    return q
 
 
 @tpc_test("h")
@@ -179,19 +166,12 @@ def test_06(lineitem):
     DISCOUNT = 0.06
     QUANTITY = 24
 
-    q = lineitem
-    discount_min = round(DISCOUNT - 0.01, 2)
-    discount_max = round(DISCOUNT + 0.01, 2)
-    q = q.filter(
-        [
-            q.l_shipdate >= ibis.date(DATE),
-            q.l_shipdate < add_date(DATE, dy=1),
-            q.l_discount.between(discount_min, discount_max),
-            q.l_quantity < QUANTITY,
-        ]
-    )
-    q = q.aggregate(revenue=(q.l_extendedprice * q.l_discount).sum())
-    return q
+    return lineitem.filter(
+        _.l_shipdate >= ibis.date(DATE),
+        _.l_shipdate < add_date(DATE, dy=1),
+        _.l_discount.between(round(DISCOUNT - 0.01, 2), round(DISCOUNT + 0.01, 2)),
+        _.l_quantity < QUANTITY,
+    ).agg(revenue=(_.l_extendedprice * _.l_discount).sum())
 
 
 @tpc_test("h")
@@ -201,38 +181,33 @@ def test_07(supplier, lineitem, orders, customer, nation):
     NATION2 = "GERMANY"
     DATE = "1995-01-01"
 
-    q = supplier
-    q = q.join(lineitem, supplier.s_suppkey == lineitem.l_suppkey)
-    q = q.join(orders, orders.o_orderkey == lineitem.l_orderkey)
-    q = q.join(customer, customer.c_custkey == orders.o_custkey)
     n1 = nation
     n2 = nation.view()
-    q = q.join(n1, supplier.s_nationkey == n1.n_nationkey)
-    q = q.join(n2, customer.c_nationkey == n2.n_nationkey)
 
-    q = q.select(
-        n1.n_name.name("supp_nation"),
-        n2.n_name.name("cust_nation"),
-        lineitem.l_shipdate,
-        lineitem.l_extendedprice,
-        lineitem.l_discount,
-        lineitem.l_shipdate.year().name("l_year"),
-        (lineitem.l_extendedprice * (1 - lineitem.l_discount)).name("volume"),
+    return (
+        supplier.join(lineitem, supplier.s_suppkey == lineitem.l_suppkey)
+        .join(orders, orders.o_orderkey == lineitem.l_orderkey)
+        .join(customer, customer.c_custkey == orders.o_custkey)
+        .join(n1, supplier.s_nationkey == n1.n_nationkey)
+        .join(n2, customer.c_nationkey == n2.n_nationkey)
+        .select(
+            n1.n_name.name("supp_nation"),
+            n2.n_name.name("cust_nation"),
+            _.l_shipdate,
+            _.l_extendedprice,
+            _.l_discount,
+            _.l_shipdate.year().name("l_year"),
+            (_.l_extendedprice * (1 - _.l_discount)).name("volume"),
+        )
+        .filter(
+            ((_.cust_nation == NATION1) & (_.supp_nation == NATION2))
+            | ((_.cust_nation == NATION2) & (_.supp_nation == NATION1)),
+            _.l_shipdate.between(ibis.date(DATE), add_date(DATE, dy=2, dd=-1)),
+        )
+        .group_by(_.supp_nation, _.cust_nation, _.l_year)
+        .agg(revenue=_.volume.sum())
+        .order_by(s.all() & ~s.cols("revenue"))
     )
-
-    q = q.filter(
-        [
-            ((q.cust_nation == NATION1) & (q.supp_nation == NATION2))
-            | ((q.cust_nation == NATION2) & (q.supp_nation == NATION1)),
-            q.l_shipdate.between(ibis.date(DATE), add_date(DATE, dy=2, dd=-1)),
-        ]
-    )
-
-    gq = q.group_by(["supp_nation", "cust_nation", "l_year"])
-    q = gq.aggregate(revenue=q.volume.sum())
-    q = q.order_by(["supp_nation", "cust_nation", "l_year"])
-
-    return q
 
 
 @tpc_test("h")
@@ -246,37 +221,32 @@ def test_08(part, supplier, region, lineitem, orders, customer, nation):
     n1 = nation
     n2 = n1.view()
 
-    q = part
-    q = q.join(lineitem, part.p_partkey == lineitem.l_partkey)
-    q = q.join(supplier, supplier.s_suppkey == lineitem.l_suppkey)
-    q = q.join(orders, lineitem.l_orderkey == orders.o_orderkey)
-    q = q.join(customer, orders.o_custkey == customer.c_custkey)
-    q = q.join(n1, customer.c_nationkey == n1.n_nationkey)
-    q = q.join(region, n1.n_regionkey == region.r_regionkey)
-    q = q.join(n2, supplier.s_nationkey == n2.n_nationkey)
-
-    q = q.select(
-        orders.o_orderdate.year().name("o_year"),
-        (lineitem.l_extendedprice * (1 - lineitem.l_discount)).name("volume"),
-        n2.n_name.name("nation"),
-        region.r_name,
-        orders.o_orderdate,
-        part.p_type,
+    return (
+        part.join(lineitem, part.p_partkey == lineitem.l_partkey)
+        .join(supplier, supplier.s_suppkey == lineitem.l_suppkey)
+        .join(orders, lineitem.l_orderkey == orders.o_orderkey)
+        .join(customer, orders.o_custkey == customer.c_custkey)
+        .join(n1, customer.c_nationkey == n1.n_nationkey)
+        .join(region, n1.n_regionkey == region.r_regionkey)
+        .join(n2, supplier.s_nationkey == n2.n_nationkey)
+        .select(
+            _.o_orderdate.year().name("o_year"),
+            (_.l_extendedprice * (1 - _.l_discount)).name("volume"),
+            n2.n_name.name("nation"),
+            _.r_name,
+            _.o_orderdate,
+            _.p_type,
+        )
+        .filter(
+            _.r_name == REGION,
+            _.o_orderdate.between(ibis.date(DATE), add_date(DATE, dy=2, dd=-1)),
+            _.p_type == TYPE,
+        )
+        .mutate(nation_volume=ibis.cases((_.nation == NATION, _.volume), else_=0))
+        .group_by(_.o_year)
+        .agg(mkt_share=_.nation_volume.sum() / _.volume.sum())
+        .order_by(_.o_year)
     )
-
-    q = q.filter(
-        [
-            q.r_name == REGION,
-            q.o_orderdate.between(ibis.date(DATE), add_date(DATE, dy=2, dd=-1)),
-            q.p_type == TYPE,
-        ]
-    )
-
-    q = q.mutate(nation_volume=ibis.cases((q.nation == NATION, q.volume), else_=0))
-    gq = q.group_by([q.o_year])
-    q = gq.aggregate(mkt_share=q.nation_volume.sum() / q.volume.sum())
-    q = q.order_by([q.o_year])
-    return q
 
 
 @tpc_test("h")
@@ -284,68 +254,58 @@ def test_09(part, supplier, lineitem, partsupp, orders, nation):
     """Product Type Profit Measure Query (Q9)"""
     COLOR = "green"
 
-    q = lineitem
-    q = q.join(supplier, supplier.s_suppkey == lineitem.l_suppkey)
-    q = q.join(
-        partsupp,
-        (partsupp.ps_suppkey == lineitem.l_suppkey)
-        & (partsupp.ps_partkey == lineitem.l_partkey),
+    return (
+        lineitem.join(supplier, supplier.s_suppkey == lineitem.l_suppkey)
+        .join(
+            partsupp,
+            (partsupp.ps_suppkey == lineitem.l_suppkey)
+            & (partsupp.ps_partkey == lineitem.l_partkey),
+        )
+        .join(part, part.p_partkey == lineitem.l_partkey)
+        .join(orders, orders.o_orderkey == lineitem.l_orderkey)
+        .join(nation, supplier.s_nationkey == nation.n_nationkey)
+        .select(
+            amount=(
+                _.l_extendedprice * (1 - _.l_discount) - _.ps_supplycost * _.l_quantity
+            ),
+            o_year=_.o_orderdate.year(),
+            nation=_.n_name,
+            p_name=_.p_name,
+        )
+        .filter(_.p_name.like(f"%{COLOR}%"))
+        .group_by(_.nation, _.o_year)
+        .agg(sum_profit=_.amount.sum())
+        .order_by(_.nation, _.o_year.desc())
     )
-    q = q.join(part, part.p_partkey == lineitem.l_partkey)
-    q = q.join(orders, orders.o_orderkey == lineitem.l_orderkey)
-    q = q.join(nation, supplier.s_nationkey == nation.n_nationkey)
-
-    q = q.select(
-        (q.l_extendedprice * (1 - q.l_discount) - q.ps_supplycost * q.l_quantity).name(
-            "amount"
-        ),
-        q.o_orderdate.year().name("o_year"),
-        q.n_name.name("nation"),
-        q.p_name,
-    )
-
-    q = q.filter([q.p_name.like("%" + COLOR + "%")])
-
-    gq = q.group_by([q.nation, q.o_year])
-    q = gq.aggregate(sum_profit=q.amount.sum())
-    q = q.order_by([q.nation, ibis.desc(q.o_year)])
-    return q
 
 
-@tpc_test
+@tpc_test("h")
 def test_10(customer, orders, lineitem, nation):
     """Returned Item Reporting Query (Q10)"""
     DATE = "1993-10-01"
 
-    q = customer
-    q = q.join(orders, customer.c_custkey == orders.o_custkey)
-    q = q.join(lineitem, lineitem.l_orderkey == orders.o_orderkey)
-    q = q.join(nation, customer.c_nationkey == nation.n_nationkey)
-
-    q = q.filter(
-        [
-            (q.o_orderdate >= ibis.date(DATE)) & (q.o_orderdate < add_date(DATE, dm=3)),
-            q.l_returnflag == "R",
-        ]
+    return (
+        customer.join(orders, customer.c_custkey == orders.o_custkey)
+        .join(lineitem, lineitem.l_orderkey == orders.o_orderkey)
+        .join(nation, customer.c_nationkey == nation.n_nationkey)
+        .filter(
+            (_.o_orderdate >= ibis.date(DATE)) & (_.o_orderdate < add_date(DATE, dm=3)),
+            _.l_returnflag == "R",
+        )
+        .group_by(
+            _.c_custkey,
+            _.c_name,
+            _.c_acctbal,
+            _.n_name,
+            _.c_address,
+            _.c_phone,
+            _.c_comment,
+        )
+        .agg(revenue=(_.l_extendedprice * (1 - _.l_discount)).sum())
+        .relocate("revenue", after="c_name")
+        .order_by(_.revenue.desc())
+        .limit(20)
     )
-
-    gq = q.group_by(
-        [
-            q.c_custkey,
-            q.c_name,
-            q.c_acctbal,
-            q.n_name,
-            q.c_address,
-            q.c_phone,
-            q.c_comment,
-        ]
-    )
-    q = gq.aggregate(revenue=(q.l_extendedprice * (1 - q.l_discount)).sum()).relocate(
-        "revenue", after="c_name"
-    )
-
-    q = q.order_by(ibis.desc(q.revenue))
-    return q.limit(20)
 
 
 @tpc_test("h")
@@ -353,23 +313,22 @@ def test_11(partsupp, supplier, nation):
     NATION = "GERMANY"
     FRACTION = 0.0001
 
-    q = partsupp
-    q = q.join(supplier, partsupp.ps_suppkey == supplier.s_suppkey)
-    q = q.join(nation, nation.n_nationkey == supplier.s_nationkey)
+    innerq = (
+        partsupp.join(supplier, partsupp.ps_suppkey == supplier.s_suppkey)
+        .join(nation, nation.n_nationkey == supplier.s_nationkey)
+        .filter(_.n_name == NATION)
+        .agg(total=(_.ps_supplycost * _.ps_availqty).sum())
+    )
 
-    q = q.filter([q.n_name == NATION])
-
-    innerq = partsupp
-    innerq = innerq.join(supplier, partsupp.ps_suppkey == supplier.s_suppkey)
-    innerq = innerq.join(nation, nation.n_nationkey == supplier.s_nationkey)
-    innerq = innerq.filter([innerq.n_name == NATION])
-    innerq = innerq.aggregate(total=(innerq.ps_supplycost * innerq.ps_availqty).sum())
-
-    gq = q.group_by([q.ps_partkey])
-    q = gq.aggregate(value=(q.ps_supplycost * q.ps_availqty).sum())
-    q = q.filter([q.value > innerq.total * FRACTION])
-    q = q.order_by(ibis.desc(q.value))
-    return q
+    return (
+        partsupp.join(supplier, partsupp.ps_suppkey == supplier.s_suppkey)
+        .join(nation, nation.n_nationkey == supplier.s_nationkey)
+        .filter(_.n_name == NATION)
+        .group_by(_.ps_partkey)
+        .agg(value=(_.ps_supplycost * _.ps_availqty).sum())
+        .filter(_.value > innerq.total * FRACTION)
+        .order_by(_.value.desc())
+    )
 
 
 @tpc_test("h")
@@ -383,38 +342,32 @@ def test_12(orders, lineitem):
     SHIPMODE2 = "SHIP"
     DATE = "1994-01-01"
 
-    q = orders
-    q = q.join(lineitem, orders.o_orderkey == lineitem.l_orderkey)
-
-    q = q.filter(
-        [
-            q.l_shipmode.isin([SHIPMODE1, SHIPMODE2]),
-            q.l_commitdate < q.l_receiptdate,
-            q.l_shipdate < q.l_commitdate,
-            q.l_receiptdate >= ibis.date(DATE),
-            q.l_receiptdate < add_date(DATE, dy=1),
-        ]
+    return (
+        orders.join(lineitem, orders.o_orderkey == lineitem.l_orderkey)
+        .filter(
+            _.l_shipmode.isin([SHIPMODE1, SHIPMODE2]),
+            _.l_commitdate < _.l_receiptdate,
+            _.l_shipdate < _.l_commitdate,
+            _.l_receiptdate >= ibis.date(DATE),
+            _.l_receiptdate < add_date(DATE, dy=1),
+        )
+        .group_by(_.l_shipmode)
+        .agg(
+            high_line_count=_.o_orderpriority.cases(
+                ("1-URGENT", 1),
+                ("2-HIGH", 1),
+                else_=0,
+            ).sum(),
+            low_line_count=_.o_orderpriority.cases(
+                ("1-URGENT", 0),
+                ("2-HIGH", 0),
+                else_=1,
+            ).sum(),
+        )
+        .order_by(_.l_shipmode)
     )
 
-    gq = q.group_by([q.l_shipmode])
-    q = gq.aggregate(
-        high_line_count=q.o_orderpriority.cases(
-            ("1-URGENT", 1),
-            ("2-HIGH", 1),
-            else_=0,
-        ).sum(),
-        low_line_count=q.o_orderpriority.cases(
-            ("1-URGENT", 0),
-            ("2-HIGH", 0),
-            else_=1,
-        ).sum(),
-    )
-    q = q.order_by(q.l_shipmode)
 
-    return q
-
-
-@pytest.mark.notyet(["clickhouse"], reason="broken sqlglot codegen")
 @tpc_test("h")
 def test_13(customer, orders):
     """Customer Distribution Query (Q13)
@@ -425,20 +378,18 @@ def test_13(customer, orders):
     WORD1 = "special"
     WORD2 = "requests"
 
-    innerq = customer
-    innerq = innerq.left_join(
-        orders,
-        (customer.c_custkey == orders.o_custkey)
-        & ~orders.o_comment.like(f"%{WORD1}%{WORD2}%"),
+    return (
+        customer.left_join(
+            orders,
+            (customer.c_custkey == orders.o_custkey)
+            & ~orders.o_comment.like(f"%{WORD1}%{WORD2}%"),
+        )
+        .group_by(_.c_custkey)
+        .agg(c_count=_.o_orderkey.count())
+        .group_by(_.c_count)
+        .agg(custdist=_.count())
+        .order_by(_.custdist.desc(), _.c_count.desc())
     )
-    innergq = innerq.group_by([innerq.c_custkey])
-    innerq = innergq.aggregate(c_count=innerq.o_orderkey.count())
-
-    gq = innerq.group_by([innerq.c_count])
-    q = gq.aggregate(custdist=innerq.count())
-
-    q = q.order_by([ibis.desc(q.custdist), ibis.desc(q.c_count)])
-    return q
 
 
 @tpc_test("h")
@@ -450,15 +401,13 @@ def test_14(part, lineitem):
 
     DATE = "1995-09-01"
 
-    q = lineitem
-    q = q.join(part, lineitem.l_partkey == part.p_partkey)
-    q = q.filter([q.l_shipdate >= ibis.date(DATE), q.l_shipdate < add_date(DATE, dm=1)])
-
-    revenue = q.l_extendedprice * (1 - q.l_discount)
-    promo_revenue = q.p_type.like("PROMO%").ifelse(revenue, 0)
-
-    q = q.aggregate(promo_revenue=100 * promo_revenue.sum() / revenue.sum())
-    return q
+    return (
+        lineitem.join(part, lineitem.l_partkey == part.p_partkey)
+        .filter(_.l_shipdate >= ibis.date(DATE), _.l_shipdate < add_date(DATE, dm=1))
+        .mutate(revenue=_.l_extendedprice * (1 - _.l_discount))
+        .mutate(promo_revenue=_.p_type.like("PROMO%").ifelse(_.revenue, 0))
+        .agg(promo_revenue=100 * _.promo_revenue.sum() / _.revenue.sum())
+    )
 
 
 @tpc_test("h")
@@ -473,23 +422,21 @@ def test_15(lineitem, supplier):
 
     DATE = "1996-01-01"
 
-    qrev = lineitem
-    qrev = qrev.filter(
-        [
-            lineitem.l_shipdate >= ibis.date(DATE),
-            lineitem.l_shipdate < add_date(DATE, dm=3),
-        ]
+    rev = (
+        lineitem.filter(
+            _.l_shipdate >= ibis.date(DATE),
+            _.l_shipdate < add_date(DATE, dm=3),
+        )
+        .group_by(lineitem.l_suppkey)
+        .agg(total_revenue=(_.l_extendedprice * (1 - _.l_discount)).sum())
     )
 
-    gqrev = qrev.group_by([lineitem.l_suppkey])
-    qrev = gqrev.aggregate(
-        total_revenue=(qrev.l_extendedprice * (1 - qrev.l_discount)).sum()
+    return (
+        supplier.join(rev, supplier.s_suppkey == rev.l_suppkey)
+        .filter(_.total_revenue == rev.total_revenue.max())
+        .select(_.s_suppkey, _.s_name, _.s_address, _.s_phone, _.total_revenue)
+        .order_by(_.s_suppkey)
     )
-
-    q = supplier.join(qrev, supplier.s_suppkey == qrev.l_suppkey)
-    q = q.filter([q.total_revenue == qrev.total_revenue.max()])
-    q = q.select(q.s_suppkey, q.s_name, q.s_address, q.s_phone, q.total_revenue)
-    return q.order_by([q.s_suppkey])
 
 
 @tpc_test("h")
@@ -504,23 +451,22 @@ def test_16(partsupp, part, supplier):
     TYPE = "MEDIUM POLISHED"
     SIZES = (49, 14, 23, 45, 19, 3, 36, 9)
 
-    q = partsupp.join(part, part.p_partkey == partsupp.ps_partkey)
-    q = q.filter(
-        [
-            q.p_brand != BRAND,
-            ~q.p_type.like(f"{TYPE}%"),
-            q.p_size.isin(SIZES),
-            ~q.ps_suppkey.isin(
+    return (
+        partsupp.join(part, part.p_partkey == partsupp.ps_partkey)
+        .filter(
+            _.p_brand != BRAND,
+            ~_.p_type.like(f"{TYPE}%"),
+            _.p_size.isin(SIZES),
+            ~_.ps_suppkey.isin(
                 supplier.filter(
-                    [supplier.s_comment.like("%Customer%Complaints%")]
+                    supplier.s_comment.like("%Customer%Complaints%")
                 ).s_suppkey
             ),
-        ]
+        )
+        .group_by(_.p_brand, _.p_type, _.p_size)
+        .agg(supplier_cnt=_.ps_suppkey.nunique())
+        .order_by(_.supplier_cnt.desc(), _.p_brand, _.p_type, _.p_size)
     )
-    gq = q.group_by([q.p_brand, q.p_type, q.p_size])
-    q = gq.aggregate(supplier_cnt=q.ps_suppkey.nunique())
-    q = q.order_by([ibis.desc(q.supplier_cnt), q.p_brand, q.p_type, q.p_size])
-    return q
 
 
 @pytest.mark.notyet(
@@ -540,18 +486,12 @@ def test_17(lineitem, part):
 
     q = lineitem.join(part, part.p_partkey == lineitem.l_partkey)
 
-    innerq = lineitem
-    innerq = innerq.filter([innerq.l_partkey == q.p_partkey])
-
-    q = q.filter(
-        [
-            q.p_brand == BRAND,
-            q.p_container == CONTAINER,
-            q.l_quantity < (0.2 * innerq.l_quantity.mean()),
-        ]
-    )
-    q = q.aggregate(avg_yearly=q.l_extendedprice.sum() / 7.0)
-    return q
+    return q.filter(
+        _.p_brand == BRAND,
+        _.p_container == CONTAINER,
+        _.l_quantity
+        < 0.2 * lineitem.filter(_.l_partkey == q.p_partkey).l_quantity.mean(),
+    ).agg(avg_yearly=_.l_extendedprice.sum() / 7.0)
 
 
 @tpc_test("h")
@@ -564,21 +504,22 @@ def test_18(customer, orders, lineitem):
 
     QUANTITY = 300
 
-    subgq = lineitem.group_by([lineitem.l_orderkey])
-    subq = subgq.aggregate(qty_sum=lineitem.l_quantity.sum())
-    subq = subq.filter([subq.qty_sum > QUANTITY])
-
-    q = customer
-    q = q.join(orders, customer.c_custkey == orders.o_custkey)
-    q = q.join(lineitem, orders.o_orderkey == lineitem.l_orderkey)
-    q = q.filter([q.o_orderkey.isin(subq.l_orderkey)])
-
-    gq = q.group_by(
-        [q.c_name, q.c_custkey, q.o_orderkey, q.o_orderdate, q.o_totalprice]
+    return (
+        customer.join(orders, customer.c_custkey == orders.o_custkey)
+        .join(lineitem, orders.o_orderkey == lineitem.l_orderkey)
+        .filter(
+            _.o_orderkey.isin(
+                lineitem.group_by(_.l_orderkey)
+                .agg(qty_sum=_.l_quantity.sum())
+                .filter(_.qty_sum > QUANTITY)
+                .l_orderkey
+            )
+        )
+        .group_by(_.c_name, _.c_custkey, _.o_orderkey, _.o_orderdate, _.o_totalprice)
+        .agg(sum_qty=_.l_quantity.sum())
+        .order_by(_.o_totalprice.desc(), _.o_orderdate)
+        .limit(100)
     )
-    q = gq.aggregate(sum_qty=q.l_quantity.sum())
-    q = q.order_by([ibis.desc(q.o_totalprice), q.o_orderdate])
-    return q.limit(100)
 
 
 @tpc_test("h")
@@ -597,41 +538,39 @@ def test_19(lineitem, part):
     BRAND2 = "Brand#23"
     BRAND3 = "Brand#34"
 
-    q = lineitem.join(part, part.p_partkey == lineitem.l_partkey)
-
-    q1 = (
-        (q.p_brand == BRAND1)
-        & (q.p_container.isin(("SM CASE", "SM BOX", "SM PACK", "SM PKG")))
-        & (q.l_quantity >= QUANTITY1)
-        & (q.l_quantity <= QUANTITY1 + 10)
-        & (q.p_size.between(1, 5))
-        & (q.l_shipmode.isin(("AIR", "AIR REG")))
-        & (q.l_shipinstruct == "DELIVER IN PERSON")
+    return (
+        lineitem.join(part, part.p_partkey == lineitem.l_partkey)
+        .filter(
+            (
+                (_.p_brand == BRAND1)
+                & (_.p_container.isin(("SM CASE", "SM BOX", "SM PACK", "SM PKG")))
+                & (_.l_quantity >= QUANTITY1)
+                & (_.l_quantity <= QUANTITY1 + 10)
+                & (_.p_size.between(1, 5))
+                & (_.l_shipmode.isin(("AIR", "AIR REG")))
+                & (_.l_shipinstruct == "DELIVER IN PERSON")
+            )
+            | (
+                (_.p_brand == BRAND2)
+                & (_.p_container.isin(("MED BAG", "MED BOX", "MED PKG", "MED PACK")))
+                & (_.l_quantity >= QUANTITY2)
+                & (_.l_quantity <= QUANTITY2 + 10)
+                & (_.p_size.between(1, 10))
+                & (_.l_shipmode.isin(("AIR", "AIR REG")))
+                & (_.l_shipinstruct == "DELIVER IN PERSON")
+            )
+            | (
+                (_.p_brand == BRAND3)
+                & (_.p_container.isin(("LG CASE", "LG BOX", "LG PACK", "LG PKG")))
+                & (_.l_quantity >= QUANTITY3)
+                & (_.l_quantity <= QUANTITY3 + 10)
+                & (_.p_size.between(1, 15))
+                & (_.l_shipmode.isin(("AIR", "AIR REG")))
+                & (_.l_shipinstruct == "DELIVER IN PERSON")
+            )
+        )
+        .agg(revenue=(_.l_extendedprice * (1 - _.l_discount)).sum())
     )
-
-    q2 = (
-        (q.p_brand == BRAND2)
-        & (q.p_container.isin(("MED BAG", "MED BOX", "MED PKG", "MED PACK")))
-        & (q.l_quantity >= QUANTITY2)
-        & (q.l_quantity <= QUANTITY2 + 10)
-        & (q.p_size.between(1, 10))
-        & (q.l_shipmode.isin(("AIR", "AIR REG")))
-        & (q.l_shipinstruct == "DELIVER IN PERSON")
-    )
-
-    q3 = (
-        (q.p_brand == BRAND3)
-        & (q.p_container.isin(("LG CASE", "LG BOX", "LG PACK", "LG PKG")))
-        & (q.l_quantity >= QUANTITY3)
-        & (q.l_quantity <= QUANTITY3 + 10)
-        & (q.p_size.between(1, 15))
-        & (q.l_shipmode.isin(("AIR", "AIR REG")))
-        & (q.l_shipinstruct == "DELIVER IN PERSON")
-    )
-
-    q = q.filter([q1 | q2 | q3])
-    q = q.aggregate(revenue=(q.l_extendedprice * (1 - q.l_discount)).sum())
-    return q
 
 
 @pytest.mark.notyet(
@@ -650,32 +589,29 @@ def test_20(supplier, nation, partsupp, part, lineitem):
     DATE = "1994-01-01"
     NATION = "CANADA"
 
-    q1 = supplier.join(nation, supplier.s_nationkey == nation.n_nationkey)
-
-    q3 = part.filter([part.p_name.like(f"{COLOR}%")])
-    q2 = partsupp
-
-    q4 = lineitem.filter(
-        [
-            lineitem.l_partkey == q2.ps_partkey,
-            lineitem.l_suppkey == q2.ps_suppkey,
-            lineitem.l_shipdate >= ibis.date(DATE),
-            lineitem.l_shipdate < add_date(DATE, dy=1),
-        ]
+    return (
+        supplier.join(nation, supplier.s_nationkey == nation.n_nationkey)
+        .filter(
+            _.n_name == NATION,
+            _.s_suppkey.isin(
+                partsupp.filter(
+                    _.ps_partkey.isin(
+                        part.filter(_.p_name.like(f"{COLOR}%")).p_partkey
+                    ),
+                    _.ps_availqty
+                    > 0.5
+                    * lineitem.filter(
+                        _.l_partkey == partsupp.ps_partkey,
+                        _.l_suppkey == partsupp.ps_suppkey,
+                        _.l_shipdate >= ibis.date(DATE),
+                        _.l_shipdate < add_date(DATE, dy=1),
+                    ).l_quantity.sum(),
+                ).ps_suppkey
+            ),
+        )
+        .select(_.s_name, _.s_address)
+        .order_by(_.s_name)
     )
-
-    q2 = q2.filter(
-        [
-            partsupp.ps_partkey.isin(q3.p_partkey),
-            partsupp.ps_availqty > 0.5 * q4.l_quantity.sum(),
-        ]
-    )
-
-    q1 = q1.filter([q1.n_name == NATION, q1.s_suppkey.isin(q2.ps_suppkey)])
-
-    q1 = q1.select(q1.s_name, q1.s_address)
-
-    return q1.order_by(q1.s_name)
 
 
 @pytest.mark.notyet(
@@ -694,21 +630,23 @@ def test_21(supplier, lineitem, orders, nation):
     L2 = lineitem.view()
     L3 = lineitem.view()
 
-    q = supplier
-    q = q.join(lineitem, supplier.s_suppkey == lineitem.l_suppkey)
-    q = q.join(orders, orders.o_orderkey == lineitem.l_orderkey)
-    q = q.join(nation, supplier.s_nationkey == nation.n_nationkey)
-    q = q.select(
-        q.l_orderkey.name("l1_orderkey"),
-        q.o_orderstatus,
-        q.l_receiptdate,
-        q.l_commitdate,
-        q.l_suppkey.name("l1_suppkey"),
-        q.s_name,
-        q.n_name,
+    q = (
+        supplier.join(lineitem, supplier.s_suppkey == lineitem.l_suppkey)
+        .join(orders, orders.o_orderkey == lineitem.l_orderkey)
+        .join(nation, supplier.s_nationkey == nation.n_nationkey)
+        .select(
+            _.l_orderkey.name("l1_orderkey"),
+            _.o_orderstatus,
+            _.l_receiptdate,
+            _.l_commitdate,
+            _.l_suppkey.name("l1_suppkey"),
+            _.s_name,
+            _.n_name,
+        )
     )
-    q = q.filter(
-        [
+
+    return (
+        q.filter(
             q.o_orderstatus == "F",
             q.l_receiptdate > q.l_commitdate,
             q.n_name == NATION,
@@ -720,13 +658,12 @@ def test_21(supplier, lineitem, orders, nation):
                     & (L3.l_receiptdate > L3.l_commitdate)
                 ).any()
             ),
-        ]
+        )
+        .group_by(_.s_name)
+        .agg(numwait=_.count())
+        .order_by(_.numwait.desc(), _.s_name)
+        .limit(100)
     )
-
-    gq = q.group_by([q.s_name])
-    q = gq.aggregate(numwait=q.count())
-    q = q.order_by([ibis.desc(q.numwait), q.s_name])
-    return q.limit(100)
 
 
 @pytest.mark.notyet(
@@ -744,28 +681,20 @@ def test_22(customer, orders):
     COUNTRY_CODES = ("13", "31", "23", "29", "30", "18", "17")
 
     q = customer.filter(
-        [
-            customer.c_acctbal > 0.00,
-            customer.c_phone.substr(0, 2).isin(COUNTRY_CODES),
-        ]
-    )
-    q = q.aggregate(avg_bal=customer.c_acctbal.mean())
+        _.c_acctbal > 0.00, _.c_phone.substr(0, 2).isin(COUNTRY_CODES)
+    ).agg(avg_bal=_.c_acctbal.mean())
 
-    custsale = customer.filter(
-        [
-            customer.c_phone.substr(0, 2).isin(COUNTRY_CODES),
-            customer.c_acctbal > q.avg_bal,
+    return (
+        customer.filter(
+            _.c_phone.substr(0, 2).isin(COUNTRY_CODES),
+            _.c_acctbal > q.avg_bal,
             ~(orders.o_custkey == customer.c_custkey).any(),
-        ]
+        )
+        .select(_.c_phone.substr(0, 2).name("cntrycode"), _.c_acctbal)
+        .group_by(_.cntrycode)
+        .agg(numcust=_.count(), totacctbal=_.c_acctbal.sum())
+        .order_by(_.cntrycode)
     )
-    custsale = custsale.select(
-        customer.c_phone.substr(0, 2).name("cntrycode"), customer.c_acctbal
-    )
-
-    gq = custsale.group_by(custsale.cntrycode)
-    outerq = gq.aggregate(numcust=custsale.count(), totacctbal=custsale.c_acctbal.sum())
-
-    return outerq.order_by(outerq.cntrycode)
 
 
 def test_all_queries_are_written():
