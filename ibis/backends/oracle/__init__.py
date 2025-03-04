@@ -252,7 +252,7 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
 
     def raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name)
+            query = query.sql(dialect=self.dialect)
 
         con = self.con
         cursor = con.cursor()
