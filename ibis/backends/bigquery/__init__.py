@@ -560,7 +560,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             properties=sge.Properties(expressions=properties),
         )
 
-        self.raw_sql(stmt.sql(self.name))
+        self.raw_sql(stmt.sql(self.dialect))
 
     def drop_database(
         self,
@@ -579,7 +579,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             cascade=cascade,
         )
 
-        self.raw_sql(stmt.sql(self.name))
+        self.raw_sql(stmt.sql(self.dialect))
 
     def table(
         self,
@@ -589,7 +589,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
         database: str | None = None,
     ) -> ir.Table:
         table_loc = self._to_sqlglot_table(database)
-        table = sg.parse_one(f"`{name}`", into=sge.Table, read=self.name)
+        table = sg.parse_one(f"`{name}`", into=sge.Table, read=self.dialect)
 
         # Bigquery, unlike other backends, had existing support for specifying
         # table hierarchy in the table name, e.g. con.table("dataset.table_name")
@@ -1092,7 +1092,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             expression=None if obj is None else self.compile(obj),
         )
 
-        sql = stmt.sql(self.name)
+        sql = stmt.sql(self.dialect)
 
         self.raw_sql(sql)
         return self.table(table.name, database=(table.catalog, table.db))
@@ -1116,7 +1116,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             ),
             exists=force,
         )
-        self.raw_sql(stmt.sql(self.name))
+        self.raw_sql(stmt.sql(self.dialect))
 
     def create_view(
         self,
@@ -1141,7 +1141,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             replace=overwrite,
         )
         self._run_pre_execute_hooks(obj)
-        self.raw_sql(stmt.sql(self.name))
+        self.raw_sql(stmt.sql(self.dialect))
         return self.table(name, database=(catalog, database))
 
     def drop_view(
@@ -1159,7 +1159,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             ),
             exists=force,
         )
-        self.raw_sql(stmt.sql(self.name))
+        self.raw_sql(stmt.sql(self.dialect))
 
     def _drop_cached_table(self, name):
         self.drop_table(

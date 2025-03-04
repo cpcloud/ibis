@@ -295,7 +295,7 @@ class Backend(
 
         """
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.dialect, pretty=True)
+            query = query.sql(dialect=self.dialect)
         self._log(query)
         return self.con.sql(query)
 

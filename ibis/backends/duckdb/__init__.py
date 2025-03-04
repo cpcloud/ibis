@@ -89,7 +89,7 @@ class Backend(SQLBackend, CanCreateDatabase, UrlFromPath, DirectExampleLoader):
     # TODO(kszucs): should be moved to the base SQLGLot backend
     def raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name)
+            query = query.sql(dialect=self.dialect)
         return self.con.execute(query, **kwargs)
 
     def create_table(
@@ -1092,7 +1092,7 @@ class Backend(SQLBackend, CanCreateDatabase, UrlFromPath, DirectExampleLoader):
         code = f"ATTACH '{path}'"
 
         if name is not None:
-            name = sg.to_identifier(name).sql(self.name)
+            name = sg.to_identifier(name).sql(self.dialect)
             code += f" AS {name}"
 
         if read_only:
@@ -1109,7 +1109,7 @@ class Backend(SQLBackend, CanCreateDatabase, UrlFromPath, DirectExampleLoader):
             The name of the database to detach.
 
         """
-        name = sg.to_identifier(name).sql(self.name)
+        name = sg.to_identifier(name).sql(self.dialect)
         self.con.execute(f"DETACH {name}").fetchall()
 
     def attach_sqlite(

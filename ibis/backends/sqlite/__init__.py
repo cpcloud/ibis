@@ -134,7 +134,7 @@ class Backend(SQLBackend, UrlFromPath, PyArrowExampleLoader):
 
     def raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
         if not isinstance(query, str):
-            query = query.sql(dialect=self.name)
+            query = query.sql(dialect=self.dialect)
         return self.con.execute(query, **kwargs)
 
     @contextlib.contextmanager
@@ -351,7 +351,7 @@ class Backend(SQLBackend, UrlFromPath, PyArrowExampleLoader):
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:
         table = sg.table(op.name, quoted=self.compiler.quoted, catalog="temp")
-        create_stmt = self._generate_create_table(table, op.schema).sql(self.name)
+        create_stmt = self._generate_create_table(table, op.schema).sql(self.dialect)
         df = op.data.to_frame()
 
         data = df.itertuples(index=False)
@@ -499,7 +499,7 @@ class Backend(SQLBackend, UrlFromPath, PyArrowExampleLoader):
 
         create_stmt = self._generate_create_table(
             created_table, schema=(schema or obj.schema())
-        ).sql(self.name)
+        ).sql(self.dialect)
 
         with self.begin() as cur:
             cur.execute(create_stmt)
@@ -507,13 +507,13 @@ class Backend(SQLBackend, UrlFromPath, PyArrowExampleLoader):
             if insert_query is not None:
                 cur.execute(
                     sge.Insert(this=created_table, expression=insert_query).sql(
-                        self.name
+                        self.dialect
                     )
                 )
 
             if overwrite:
                 cur.execute(
-                    sge.Drop(kind="TABLE", this=table, exists=True).sql(self.name)
+                    sge.Drop(kind="TABLE", this=table, exists=True).sql(self.dialect)
                 )
                 # SQLite's ALTER TABLE statement doesn't support using a
                 # fully-qualified table reference after RENAME TO. Since we
@@ -521,7 +521,7 @@ class Backend(SQLBackend, UrlFromPath, PyArrowExampleLoader):
                 # here.
                 quoted_name = _quote(name)
                 cur.execute(
-                    f"ALTER TABLE {created_table.sql(self.name)} RENAME TO {quoted_name}"
+                    f"ALTER TABLE {created_table.sql(self.dialect)} RENAME TO {quoted_name}"
                 )
 
         if schema is None:
@@ -561,11 +561,13 @@ class Backend(SQLBackend, UrlFromPath, PyArrowExampleLoader):
 
         stmts = []
         if overwrite:
-            stmts.append(sge.Drop(kind="VIEW", this=view, exists=True).sql(self.name))
+            stmts.append(
+                sge.Drop(kind="VIEW", this=view, exists=True).sql(self.dialect)
+            )
         stmts.append(
             sge.Create(
                 this=view, kind="VIEW", replace=False, expression=self.compile(obj)
-            ).sql(self.name)
+            ).sql(self.dialect)
         )
 
         self._run_pre_execute_hooks(obj)

@@ -597,12 +597,13 @@ class SQLBackend(BaseBackend):
         self.con.close()
 
     def _to_catalog_db_tuple(self, table_loc: sge.Table):
+        dialect = self.dialect
         if (sg_cat := table_loc.args["catalog"]) is not None:
             sg_cat.args["quoted"] = False
-            sg_cat = sg_cat.sql(self.name)
+            sg_cat = sg_cat.sql(dialect)
         if (sg_db := table_loc.args["db"]) is not None:
             sg_db.args["quoted"] = False
-            sg_db = sg_db.sql(self.name)
+            sg_db = sg_db.sql(dialect)
 
         return sg_cat, sg_db
 

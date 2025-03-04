@@ -227,7 +227,7 @@ class Backend(SQLBackend, CanCreateCatalog, CanCreateDatabase, DirectExampleLoad
 
     def _make_udf(self, name: str, defn) -> str:
         signature = ", ".join(
-            f"{sg.to_identifier(argname, quoted=self.compiler.quoted).sql(self.name)} {typ}"
+            f"{sg.to_identifier(argname, quoted=self.compiler.quoted).sql(self.dialect)} {typ}"
             for argname, typ in defn["inputs"].items()
         )
         return_type = defn["returns"]
@@ -311,7 +311,7 @@ $$ {defn["source"]} $$"""
             )
 
         if create_object_udfs:
-            dialect = self.name
+            dialect = self.dialect
             create_stmt = sge.Create(
                 kind="DATABASE", this="ibis_udfs", exists=True
             ).sql(dialect)
@@ -620,7 +620,7 @@ $$ {defn["source"]} $$"""
 
         if catalog is not None:
             sg_cat = sg.to_identifier(catalog, quoted=self.compiler.quoted).sql(
-                self.name
+                self.dialect
             )
             query += f" IN {sg_cat}"
 
@@ -695,7 +695,7 @@ $$ {defn["source"]} $$"""
         use_stmt = sge.Use(
             kind="SCHEMA",
             this=sg.table(current_database, db=current_catalog, quoted=quoted),
-        ).sql(self.name)
+        ).sql(self.dialect)
         with self._safe_raw_sql(create_stmt) as cur:
             # Snowflake automatically switches to the new database after creating
             # it per
@@ -729,7 +729,7 @@ $$ {defn["source"]} $$"""
         use_stmt = sge.Use(
             kind="SCHEMA",
             this=sg.table(current_database, db=current_catalog, quoted=quoted),
-        ).sql(self.name)
+        ).sql(self.dialect)
         with self._safe_raw_sql(create_stmt) as cur:
             # Snowflake automatically switches to the new schema after creating
             # it per
@@ -740,14 +740,14 @@ $$ {defn["source"]} $$"""
     @contextlib.contextmanager
     def _safe_raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name)
+            query = query.sql(dialect=self.dialect)
 
         with contextlib.closing(self.raw_sql(query, **kwargs)) as cur:
             yield cur
 
     def raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name)
+            query = query.sql(dialect=self.dialect)
         cur = self.con.cursor()
         try:
             cur.execute(query, **kwargs)
@@ -827,7 +827,7 @@ $$ {defn["source"]} $$"""
             target = sg.table(name, quoted=quoted)
             catalog = db = database
         else:
-            db = sg.parse_one(database, into=sge.Table, read=self.name)
+            db = sg.parse_one(database, into=sge.Table, read=self.dialect)
             catalog = db.db
             db = db.name
             target = sg.table(name, db=db, catalog=catalog, quoted=quoted)

@@ -497,7 +497,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectExampleLoader):
         external_tables = toolz.valmap(_to_memtable, external_tables or {})
         external_data = self._normalize_external_tables(external_tables)
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name, pretty=True)
+            query = query.sql(self.dialect)
         self._log(query)
         return self.con.query(query, external_data=external_data, **kwargs)
 
@@ -576,7 +576,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectExampleLoader):
             pass
 
     def truncate_table(self, name: str, /, *, database: str | None = None) -> None:
-        ident = sg.table(name, db=database).sql(self.name)
+        ident = sg.table(name, db=database).sql(self.dialect)
         with self._safe_raw_sql(f"TRUNCATE TABLE {ident}"):
             pass
 
@@ -782,7 +782,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectExampleLoader):
         external_data = self._normalize_external_tables(external_tables)
 
         # create the table
-        sql = code.sql(self.name, pretty=True)
+        sql = code.sql(self.dialect)
         self.con.raw_query(sql, external_data=external_data)
 
         return self.table(name, database=database)

@@ -329,11 +329,11 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, PyArrowExampleLoade
 
         if (db := table_loc.args["db"]) is not None:
             db.args["quoted"] = False
-            db = db.sql(dialect=self.name)
+            db = db.sql(dialect=self.dialect)
             conditions.append(C.table_schema.eq(sge.convert(db)))
         if (catalog := table_loc.args["catalog"]) is not None:
             catalog.args["quoted"] = False
-            catalog = catalog.sql(dialect=self.name)
+            catalog = catalog.sql(dialect=self.dialect)
             conditions.append(C.table_catalog.eq(sge.convert(catalog)))
 
         sql = (

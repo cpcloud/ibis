@@ -57,7 +57,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
     def raw_sql(self, query: str | sg.Expression) -> Any:
         """Execute a raw SQL query."""
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name, pretty=True)
+            query = query.sql(dialect=self.dialect)
 
         con = self.con
         cur = con.cursor()
@@ -158,8 +158,9 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
             meta = cur.fetchall()
 
         if not meta:
-            fqn = sg.table(table_name, db=database, catalog=catalog).sql(self.name)
-            raise com.TableNotFound(fqn)
+            raise com.TableNotFound(
+                sg.table(table_name, db=database, catalog=catalog).sql(self.dialect)
+            )
 
         type_mapper = self.compiler.type_mapper
 
@@ -201,7 +202,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
 
         if catalog is not None:
             catalog = sg.to_identifier(catalog, quoted=self.compiler.quoted).sql(
-                self.name
+                self.dialect
             )
             query += f" IN {catalog}"
 
@@ -507,12 +508,13 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
             ),
         )
 
+        dialect = self.dialect
         with self._safe_raw_sql(create_stmt) as cur:
             if overwrite:
                 # drop the original table
                 cur.execute(
                     sge.Drop(kind="TABLE", this=orig_table_ref, exists=True).sql(
-                        self.name
+                        dialect
                     )
                 )
 
@@ -522,7 +524,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
                         this=table_ref,
                         exists=True,
                         actions=[RenameTable(this=orig_table_ref, exists=True)],
-                    ).sql(self.name)
+                    ).sql(dialect)
                 )
 
         return self.table(orig_table_ref.name, database=(catalog, db))
@@ -548,6 +550,7 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
 
     def _register_in_memory_table(self, op: ops.InMemoryTable) -> None:
         schema = op.schema
+        dialect = self.dialect
         if null_columns := schema.null_fields:
             raise com.IbisTypeError(
                 "Trino cannot yet reliably handle `null` typed columns; "
@@ -561,9 +564,9 @@ class Backend(SQLBackend, CanListCatalog, CanCreateDatabase, NoExampleLoader):
             kind="TABLE",
             this=sg.exp.Schema(
                 this=sg.to_identifier(name, quoted=quoted),
-                expressions=schema.to_sqlglot(self.dialect),
+                expressions=schema.to_sqlglot(dialect),
             ),
-        ).sql(self.name)
+        ).sql(dialect)
 
         data = op.data.to_frame().itertuples(index=False)
         insert_stmt = self._build_insert_template(name, schema=schema)

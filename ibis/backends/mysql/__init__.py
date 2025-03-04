@@ -246,13 +246,13 @@ class Backend(SQLBackend, CanCreateDatabase, PyArrowExampleLoader):
     def create_database(self, name: str, force: bool = False) -> None:
         sql = sge.Create(
             kind="DATABASE", exists=force, this=sg.to_identifier(name)
-        ).sql(self.name)
+        ).sql(self.dialect)
         with self.begin() as cur:
             cur.execute(sql)
 
     def drop_database(self, name: str, force: bool = False) -> None:
         sql = sge.Drop(kind="DATABASE", exists=force, this=sg.to_identifier(name)).sql(
-            self.name
+            self.dialect
         )
         with self.begin() as cur:
             cur.execute(sql)
@@ -287,7 +287,7 @@ class Backend(SQLBackend, CanCreateDatabase, PyArrowExampleLoader):
 
     def raw_sql(self, query: str | sg.Expression, **kwargs: Any) -> Any:
         with contextlib.suppress(AttributeError):
-            query = query.sql(dialect=self.name)
+            query = query.sql(dialect=self.dialect)
 
         con = self.con
         autocommit = con.get_autocommit()
@@ -351,7 +351,7 @@ class Backend(SQLBackend, CanCreateDatabase, PyArrowExampleLoader):
         if (sg_db := table_loc.args["db"]) is not None:
             sg_db.args["quoted"] = False
         if table_loc.catalog or table_loc.db:
-            conditions = [C.table_schema.eq(sge.convert(table_loc.sql(self.name)))]
+            conditions = [C.table_schema.eq(sge.convert(table_loc.sql(self.dialect)))]
 
         col = "table_name"
         sql = (
@@ -359,7 +359,7 @@ class Backend(SQLBackend, CanCreateDatabase, PyArrowExampleLoader):
             .from_(sg.table("tables", db="information_schema"))
             .distinct()
             .where(*conditions)
-            .sql(self.name)
+            .sql(self.dialect)
         )
 
         with self._safe_raw_sql(sql) as cur:

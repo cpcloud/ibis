@@ -294,7 +294,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoExampleLoader):
             kind="TABLE",
             this=sg.exp.Schema(this=ident, expressions=schema.to_sqlglot(self.dialect)),
         )
-        create_stmt_sql = create_stmt.sql(self.name)
+        create_stmt_sql = create_stmt.sql(self.dialect)
 
         df = op.data.to_frame()
         data = df.itertuples(index=False, name=None)
@@ -388,10 +388,9 @@ class Backend(SQLBackend, CanCreateDatabase, NoExampleLoader):
         if not schema:
             schema = table.schema()
 
+        dialect = self.dialect
         table_expr = sg.table(temp_name, catalog=database, quoted=quoted)
-        target = sge.Schema(
-            this=table_expr, expressions=schema.to_sqlglot(self.dialect)
-        )
+        target = sge.Schema(this=table_expr, expressions=schema.to_sqlglot(dialect))
 
         create_stmt = sge.Create(kind="TABLE", this=target)
 
@@ -399,15 +398,15 @@ class Backend(SQLBackend, CanCreateDatabase, NoExampleLoader):
         with self._safe_raw_sql(create_stmt):
             if query is not None:
                 self.con.execute(
-                    sge.Insert(this=table_expr, expression=query).sql(self.name)
+                    sge.Insert(this=table_expr, expression=query).sql(dialect)
                 )
 
             if overwrite:
                 self.con.execute(
-                    sge.Drop(kind="TABLE", this=this, exists=True).sql(self.name)
+                    sge.Drop(kind="TABLE", this=this, exists=True).sql(dialect)
                 )
                 self.con.execute(
-                    f"RENAME TABLE {table_expr.sql(self.name)} TO {this.sql(self.name)}"
+                    f"RENAME TABLE {table_expr.sql(dialect)} TO {this.sql(dialect)}"
                 )
 
         if schema is None:

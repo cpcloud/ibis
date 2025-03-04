@@ -1422,7 +1422,7 @@ class Backend(SQLBackend, NoExampleLoader):
                 this=sg.to_identifier(name, quoted=quoted),
                 expressions=schema.to_sqlglot(self.dialect),
             ),
-        ).sql(self.name, pretty=True)
+        ).sql(self.dialect)
 
         data = op.data.to_frame().itertuples(index=False)
         insert_stmt = self._build_insert_template(name, schema=schema)

@@ -127,8 +127,7 @@ class TestConf(ServiceBackendTest):
         with self.connection.begin() as con:
             con.execute(f"CREATE SCHEMA IF NOT EXISTS hive.{suite_name}")
             for stmt in sqls:
-                raw_sql = stmt.sql("trino", pretty=True)
-                con.execute(raw_sql)
+                con.execute(stmt.sql("trino"))
 
     @property
     def test_files(self) -> Iterable[Path]:

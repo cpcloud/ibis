@@ -310,7 +310,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl, PyArrowExampleLoader):
         from ibis.backends.flink.datatypes import get_field_data_types
 
         qualified_name = sg.table(table_name, db=catalog, catalog=database).sql(
-            self.name
+            self.dialect
         )
         try:
             table = self._table_env.from_path(qualified_name)
@@ -690,7 +690,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl, PyArrowExampleLoader):
         if isinstance(obj, pd.DataFrame):
             qualified_name = sg.table(
                 name, db=database, catalog=catalog, quoted=self.compiler.quoted
-            ).sql(self.name)
+            ).sql(self.dialect)
             if schema:
                 table = self._table_env.from_pandas(
                     obj, FlinkRowSchema.from_ibis(schema)
@@ -714,7 +714,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl, PyArrowExampleLoader):
                 if temp
                 else None,
             )
-            self.raw_sql(stmt.sql(self.name))
+            self.raw_sql(stmt.sql(self.dialect))
 
         else:
             raise exc.IbisError(f"Unsupported `obj` type: {type(obj)}")
@@ -1039,7 +1039,7 @@ class Backend(SQLBackend, CanCreateDatabase, NoUrl, PyArrowExampleLoader):
             return None
 
         qualified_name = sg.table(table_name, quoted=self.compiler.quoted).sql(
-            self.name
+            self.dialect
         )
         try:
             return self._table_env.from_path(qualified_name)
