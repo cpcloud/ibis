@@ -333,7 +333,7 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
                 "No cross-catalog schema access in Oracle"
             )
 
-        query = sg.select("username").from_("all_users").order_by("username")
+        query = sg.select(C.username).from_("all_users")
 
         with self._safe_raw_sql(query) as con:
             schemata = list(map(itemgetter(0), con))
@@ -351,9 +351,9 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
                 C.data_type,
                 C.data_precision,
                 C.data_scale,
-                C.nullable.eq(sge.convert("Y")).as_("nullable"),
+                C.nullable.eq(sge.convert("Y")),
             )
-            .from_(sg.table("all_tab_columns"))
+            .from_("all_tab_columns")
             .where(
                 C.table_name.eq(sge.convert(name)),
                 C.owner.eq(sge.convert(database)),
@@ -444,10 +444,13 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
         else:
             temp_name = name
 
-        initial_table = sg.table(temp_name, db=database, quoted=self.compiler.quoted)
+        compiler = self.compiler
+        quoted = compiler.quoted
+        dialect = self.dialect
+        initial_table = sg.table(temp_name, db=database, quoted=quoted)
         target = sge.Schema(
             this=initial_table,
-            expressions=(schema or table.schema()).to_sqlglot(self.dialect),
+            expressions=(schema or table.schema()).to_sqlglot(dialect),
         )
 
         create_stmt = sge.Create(
@@ -457,18 +460,18 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
         )
 
         # This is the same table as initial_table unless overwrite == True
-        final_table = sg.table(name, db=database, quoted=self.compiler.quoted)
+        final_table = sg.table(name, db=database, quoted=quoted)
         with self._safe_raw_sql(create_stmt) as cur:
             if query is not None:
                 insert_stmt = sge.Insert(this=initial_table, expression=query).sql(
-                    self.name
+                    dialect
                 )
                 cur.execute(insert_stmt)
 
             if overwrite:
                 self.drop_table(final_table.name, database=final_table.db, force=True)
                 cur.execute(
-                    f"ALTER TABLE IF EXISTS {initial_table.sql(self.name)} RENAME TO {final_table.sql(self.name)}"
+                    f"ALTER TABLE IF EXISTS {initial_table.sql(dialect)} RENAME TO {final_table.sql(dialect)}"
                 )
 
         if schema is None:
@@ -491,6 +494,7 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
         catalog, db = self._to_catalog_db_tuple(table_loc)
 
         table = sg.table(name, db=db, catalog=catalog, quoted=self.compiler.quoted)
+        truncate = sge.TruncateTable(expressions=[table]).sql(self.dialect)
 
         with self.begin() as bind:
             # global temporary tables cannot be dropped without first truncating them
@@ -500,7 +504,7 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
             # ignore DatabaseError exceptions because the table may not exist
             # because it's already been deleted
             with contextlib.suppress(oracledb.DatabaseError):
-                bind.execute(f"TRUNCATE TABLE {table.sql(self.name)}")
+                bind.execute(truncate)
 
         super().drop_table(name, database=(catalog, db), force=force)
 
@@ -514,14 +518,15 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
 
         name = op.name
         quoted = self.compiler.quoted
+        dialect = self.dialect
         create_stmt = sge.Create(
             kind="TABLE",
             this=sg.exp.Schema(
                 this=sg.to_identifier(name, quoted=quoted),
-                expressions=schema.to_sqlglot(self.dialect),
+                expressions=schema.to_sqlglot(dialect),
             ),
             properties=sge.Properties(expressions=[sge.TemporaryProperty()]),
-        ).sql(self.name)
+        ).sql(dialect)
 
         data = op.data.to_frame().replace(float("nan"), None)
         insert_stmt = self._build_insert_template(
@@ -536,7 +541,7 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
 
     def _get_schema_using_query(self, query: str) -> sch.Schema:
         name = util.gen_name("oracle_metadata")
-        dialect = self.name
+        dialect = self.dialect
 
         try:
             sg_expr = sg.parse_one(query, into=sg.exp.Table, dialect=dialect)
@@ -558,7 +563,8 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
 
         sg_expr = sg_expr.transform(transformer)
 
-        this = sg.table(name, quoted=True)
+        compiler = self.compiler
+        this = sg.table(name, quoted=compiler.quoted)
         create_view = sg.exp.Create(kind="VIEW", this=this, expression=sg_expr).sql(
             dialect
         )
@@ -586,19 +592,17 @@ class Backend(SQLBackend, CanListDatabase, PyArrowExampleLoader):
                 # drop the view no matter what
                 con.execute(drop_view)
 
-        schema = {}
-
-        # TODO: hand all this off to the type mapper
-        type_mapper = self.compiler.type_mapper
-        for name, type_string, precision, scale, nullable in results:
-            typ = metadata_row_to_type(
+        type_mapper = compiler.type_mapper
+        schema = {
+            name: metadata_row_to_type(
                 type_mapper=type_mapper,
                 type_string=type_string,
                 precision=precision,
                 scale=scale,
                 nullable=nullable,
             )
-            schema[name] = typ
+            for name, type_string, precision, scale, nullable in results
+        }
 
         return sch.Schema(schema)
 
