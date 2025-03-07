@@ -73,7 +73,7 @@ backend-doctests backend *args:
         fi
     done
     if [ -n "${CI}" ]; then
-        uv run --all-extras --group tests "${args[@]}"
+        uv run --extra {{ backend }} --group tests "${args[@]}"
     else
         "${args[@]}"
     fi
