@@ -11,7 +11,6 @@ import sqlglot.planner as sgp
 from public import public
 
 import ibis
-import ibis.common.exceptions as com
 import ibis.expr.datatypes as dt
 import ibis.expr.schema as sch
 import ibis.expr.types as ir
@@ -469,13 +468,15 @@ def to_sql(
     Parameters
     ----------
     expr
-        Ibis expression.
+        Expression to compile to SQL.
     dialect
-        SQL dialect to use for compilation.
+        SQL dialect to use for compilation. Defaults to the expression's
+        backend's dialect if the expression is bound to a backend. Unbound
+        expressions use the DuckDB dialect.
     pretty
         Whether to use pretty formatting.
     kwargs
-        Scalar parameters
+        Scalar parameters.
 
     Returns
     -------
@@ -487,7 +488,7 @@ def to_sql(
     >>> import ibis
     >>> t = ibis.table({"a": "int", "b": "int"}, name="t")
     >>> expr = t.mutate(c=t.a + t.b)
-    >>> ibis.to_sql(expr)  # doctest: +SKIP
+    >>> print(ibis.to_sql(expr))
     SELECT
       "t0"."a",
       "t0"."b",
@@ -495,40 +496,42 @@ def to_sql(
     FROM "t" AS "t0"
 
     You can also specify the SQL dialect to use for compilation:
-    >>> ibis.to_sql(expr, dialect="mysql")  # doctest: +SKIP
+    >>> print(ibis.to_sql(expr, dialect="mysql"))
     SELECT
       `t0`.`a`,
       `t0`.`b`,
       `t0`.`a` + `t0`.`b` AS `c`
     FROM `t` AS `t0`
 
+    All queries compile to a `SELECT` statement, which is technically a
+    table, even expressions that are columns or scalars.
+    >>> lit = ibis.array([1, 2, 3]).name("a")
+    >>> lit
+    a: Array([1, 2, 3])
+    >>> column_expr = lit.unnest()
+    >>> column_expr
+    a: Unnest(Array([1, 2, 3]))
+    >>> print(column_expr.to_sql())
+    SELECT
+      UNNEST(CAST([1, 2, 3] AS TINYINT[])) AS "a"
+    >>> scalar_expr = column_expr.as_table().a.sum()
+    >>> scalar_expr
+    r0 := DummyTable
+      a: Unnest(Array([1, 2, 3]))
+    Sum(a): Sum(r0.a)
+    >>> print(scalar_expr.to_sql())
+    SELECT
+      SUM("t0"."a") AS "Sum(a)"
+    FROM (
+      SELECT
+        UNNEST(CAST([1, 2, 3] AS TINYINT[])) AS "a"
+    ) AS "t0"
+
+    The transmutation into a column or scalar happens after the query is
+    executed.
+
     See Also
     --------
-    [`Table.compile()`](./expression-tables.qmd#ibis.expr.types.relations.Table.compile)
-
+    [`Expr.compile()`](./expression-tables.qmd#ibis.expr.types.core.Expr.compile)
     """
-    import ibis.backends.sql.compilers as sc
-
-    # try to infer from a non-str expression or if not possible fallback to
-    # the default pretty dialect for expressions
-    if dialect is None:
-        try:
-            compiler_provider = expr._find_backend(use_default=True)
-        except com.IbisError:
-            # default to duckdb for SQL compilation because it supports the
-            # widest array of ibis features for SQL backends
-            compiler_provider = sc.duckdb
-    else:
-        try:
-            compiler_provider = getattr(sc, dialect)
-        except AttributeError as e:
-            raise ValueError(f"Unknown dialect {dialect}") from e
-
-    if (compiler := getattr(compiler_provider, "compiler", None)) is None:
-        raise NotImplementedError(f"{compiler_provider} is not a SQL backend")
-
-    out = compiler.to_sqlglot(expr.unbind(), **kwargs)
-    queries = out if isinstance(out, list) else [out]
-    dialect = compiler.dialect
-    sql = ";\n".join(query.sql(dialect=dialect, pretty=pretty) for query in queries)
-    return SQLString(sql)
+    return expr.to_sql(dialect=dialect, pretty=pretty, **kwargs)
