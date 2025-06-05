@@ -1,8 +1,7 @@
 name: Conventional commits check
 
 on:
-  # runs on `pull_request_target` events so that commenting on the PR is allowed
-  pull_request_target:
+  pull_request:
     types: [opened, edited, synchronize, reopened]
 
 jobs:
@@ -23,6 +22,7 @@ jobs:
       - name: checkout code to pick up commitlint configuration
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: run commitlint
@@ -60,10 +60,17 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body-includes: "ACTION NEEDED"
 
+      - uses: actions/create-github-app-token@v2.0.6
+        id: generate-token
+        with:
+          app-id: ${{ secrets.SQUAWK_BOT_APP_ID }}
+          private-key: ${{ secrets.SQUAWK_BOT_APP_PRIVATE_KEY }}
+
       - name: if the PR title and body fail `commitlint`, post or update a comment
         if: needs.verify-commitlint.outputs.failed == '1'
         uses: peter-evans/create-or-update-comment@v4
         with:
+          token: ${{ steps.generate-token.outputs.token }}
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           edit-mode: replace
@@ -89,6 +96,7 @@ jobs:
         if: needs.verify-commitlint.outputs.failed == '0' && steps.find-comment.outputs.comment-id != ''
         uses: peter-evans/create-or-update-comment@v4
         with:
+          token: ${{ steps.generate-token.outputs.token }}
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           edit-mode: replace
