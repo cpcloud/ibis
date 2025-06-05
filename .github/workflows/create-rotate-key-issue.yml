@@ -25,10 +25,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: create issue to rotate key
-        uses: peter-evans/create-issue-from-file@v5
-        with:
-          token: ${{ steps.generate_token.outputs.token }}
-          title: "chore: rotate ibis bot keys"
-          content-filepath: .github/rotate-key-template.md
-          labels: ci
-          assignees: cpcloud
+        run: |
+          gh issue create \
+            --title "chore: rotate ibis bot keys" \
+            --assignee cpcloud \
+            --body-file .github/rotate-key-template.md \
+            --label ci
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
