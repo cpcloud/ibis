@@ -8,6 +8,7 @@ from functools import singledispatch
 from math import isfinite
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
+from uuid import UUID
 
 import rich
 import rich.table
@@ -83,9 +84,13 @@ def _(dtype, values, **fmt_kwargs):
 
 
 @format_values.register(dt.Boolean)
-@format_values.register(dt.UUID)
 def _(dtype, values, **fmt_kwargs):
     return [Text(str(v)) for v in values]
+
+
+@format_values.register(dt.UUID)
+def _(dtype, values, **fmt_kwargs):
+    return [Text.styled(str(UUID(bytes=v)), "yellow") for v in values]
 
 
 @format_values.register(dt.Decimal)

@@ -29,3 +29,9 @@ class DuckDBPyArrowData(PyArrowData):
         if dtype.is_null():
             return pa.nulls(len(column))
         return super().convert_column(column, dtype)
+
+    @classmethod
+    def convert_UUID(cls, scalar: pa.Scalar, dtype: dt.DataType) -> pa.Scalar:
+        if scalar.is_valid:
+            return pa.scalar(str(scalar.as_py()), type=pa.string())
+        return pa.scalar(None, type=pa.string())

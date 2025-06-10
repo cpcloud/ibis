@@ -1734,9 +1734,10 @@ def test_group_by_scalar(alltypes, df, value):
 
 
 def test_empty_sum(con):
-    t = ibis.memtable({"x": [1]}, schema={"x": "int"})
+    t = ibis.memtable({"x": [1.0]}, schema={"x": "float"})
     result = con.execute(t.count())
     assert result == 1
 
-    result = con.to_pyarrow(t.x.sum(where=t.x > 1)).as_py()
+    expr = t.x.sum(where=t.x > 1.0)
+    result = con.to_pyarrow(expr).as_py()
     assert result is None

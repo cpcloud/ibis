@@ -81,3 +81,13 @@ def test_uuid_unique_each_row(con):
         con.tables.functional_alltypes.mutate(uuid=ibis.uuid()).limit(2).uuid.nunique()
     )
     assert expr.execute() == 2
+
+
+# def test_uuid(con):
+#     pa = pytest.importorskip("pyarrow")
+#     uuid_value = uuid.uuid4()
+#     expr = ibis.uuid(uuid_value).name("u").as_table()
+#     # sql = ibis.to_sql(expr)
+#     result = con.to_pyarrow(expr)
+#     breakpoint()
+#     assert result.equals(pa.Table.from_pydict({"u": [uuid_value.bytes]}))

@@ -1422,10 +1422,16 @@ class Backend(SQLBackend, CanCreateDatabase, UrlFromPath, DirectExampleLoader):
     ) -> pa.Table:
         from ibis.backends.duckdb.converter import DuckDBPyArrowData
 
-        table = self._to_duckdb_relation(
-            expr, params=params, limit=limit, **kwargs
-        ).arrow()
-        return expr.__pyarrow_result__(table, data_mapper=DuckDBPyArrowData)
+        table = self._to_duckdb_relation(expr, params=params, limit=limit, **kwargs)
+
+        conversion = self.settings["arrow_lossless_conversion"]
+        self.settings["arrow_lossless_conversion"] = True
+        try:
+            arrow = table.arrow()
+        finally:
+            self.settings["arrow_lossless_conversion"] = conversion
+
+        return expr.__pyarrow_result__(arrow, data_mapper=DuckDBPyArrowData)
 
     def execute(
         self,

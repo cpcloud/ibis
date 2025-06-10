@@ -403,14 +403,12 @@ class PandasData(DataMapper):
     def convert_UUID_element(cls, _):
         from uuid import UUID
 
-        def convert(value):
-            if value is None:
+        def convert(value: str | bytes | UUID | None) -> bytes:
+            if value is None or isinstance(value, bytes):
                 return value
-            elif isinstance(value, UUID):
-                return value
-            elif isinstance(value, bytes):
-                return UUID(bytes=value)
-            return UUID(value)
+            elif not isinstance(value, UUID):
+                value = UUID(value)
+            return value.bytes
 
         return convert
 
