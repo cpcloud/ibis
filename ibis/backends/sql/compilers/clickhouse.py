@@ -3,7 +3,7 @@ from __future__ import annotations
 import calendar
 import math
 from string import whitespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import sqlglot as sg
 import sqlglot.expressions as sge
@@ -206,6 +206,15 @@ class ClickHouseCompiler(SQLGlotCompiler):
 
     def visit_ApproxMultiQuantile(self, op, *, arg, quantile, where):
         return self._visit_quantile("quantilesTDigest", arg, quantile, where)
+
+    def visit_Kurtosis(self, op, *, arg, where, how: Literal["sample", "pop"]):
+        if op.arg.dtype.is_boolean():
+            arg = self.cast(arg, dt.int32)
+
+        if how == "sample":
+            return self.agg.kurtSamp(arg, where=where)
+        else:
+            return self.agg.kurtPop(arg, where=where)
 
     def visit_Correlation(self, op, *, left, right, how, where):
         if how == "pop":

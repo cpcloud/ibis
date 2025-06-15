@@ -449,6 +449,16 @@ def test_aggregate_multikey_group_reduction_udf(backend, alltypes, df):
             ],
         ),
         param(
+            lambda t, where: t.double_col.kurtosis(how="sample", where=where),
+            lambda t, where: t.double_col[where].kurtosis(),
+            id="kurtosis_samp",
+            marks=[
+                pytest.mark.notimpl(
+                    ["druid", "snowflake"], raises=com.OperationNotDefinedError
+                )
+            ],
+        ),
+        param(
             lambda t, where: t.double_col.std(how="sample", where=where),
             lambda t, where: t.double_col[where].std(ddof=1),
             id="std",
