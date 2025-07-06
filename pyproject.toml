@@ -630,10 +630,7 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+show_missing = true
+skip_covered = true
 ignore_errors = true
-omit = [
-  "*_version.py",
-  "*tests*",
-  "ibis/interactive.py",
-  "ibis/examples/gen_registry.py",
-]
+omit = ["*_version.py", "ibis/interactive.py", "ibis/examples/gen_registry.py"]
