@@ -770,6 +770,7 @@ def test_unsigned_integer_type(con, temp_table):
         param("impala://localhost:21050/default", marks=mark.impala, id="impala"),
         param("mysql://ibis:ibis@localhost:3306", marks=mark.mysql, id="mysql"),
         param("polars://", marks=mark.polars, id="polars"),
+        param("duckdb://", marks=mark.duckdb, id="duckdb"),
         param(
             "postgres://postgres:postgres@localhost:5432",
             marks=mark.postgres,
