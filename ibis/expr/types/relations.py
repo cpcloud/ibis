@@ -299,13 +299,24 @@ class Table(Expr, FixedTextJupyterMixin):
             A tuple of bound values
         """
         values = self._fast_bind(*args, **kwargs)
-        # dereference the values to `self`
-        dm = DerefMap.from_targets(self.op())
+
+        dm = None
         result = []
         for original in values:
-            value = dm.dereference(original.op()).to_expr()
-            value = value.name(original.get_name())
+            rels = (orig_op := original.op()).relations
+            if rels and rels != {op := self.op()}:
+                if dm is None:
+                    dm = DerefMap.from_targets(op)
+                value = dm.dereference(orig_op).to_expr()
+                value = value.name(original.get_name())
+            else:
+                # rels is empty OR the value's rel is just this table's op
+                #
+                # empty rels: literals
+                # value's rel is just this table's op: simple column references
+                value = original
             result.append(value)
+
         return tuple(result)
 
     def as_scalar(self) -> ir.Scalar:
