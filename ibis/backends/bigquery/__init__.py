@@ -270,6 +270,7 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
         path: str | Path,
         *,
         table_name: str | None = None,
+        temp: bool = True,
         job_config: bq.LoadJobConfig,
     ) -> ir.Table:
         """Read a file into a BigQuery table.
@@ -282,6 +283,11 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             Path to a file on GCS or the local filesystem. Globs are supported.
         table_name
             Optional table name
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         job_config
             A `LoadJobConfig` object that specifies how to load the data.
         """
@@ -290,10 +296,16 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
         if table_name is None:
             table_name = util.gen_name(f"bq_read_{job_config.source_format}")
 
-        table_ref = self._session_dataset.table(table_name)
+        if temp:
+            dataset = self._session_dataset
+        else:
+            dataset = bq.DatasetReference(
+                project=self.current_catalog, dataset_id=self.current_database
+            )
 
-        database = self._session_dataset.dataset_id
-        catalog = self._session_dataset.project
+        table_ref = dataset.table(table_name)
+        database = dataset.dataset_id
+        catalog = dataset.project
 
         # drop the table if it exists
         #
@@ -331,7 +343,13 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
         return self.table(table_name, database=(catalog, database))
 
     def read_parquet(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ):
         """Read Parquet data into a BigQuery table.
 
@@ -343,6 +361,11 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             Path to a Parquet file on GCS or the local filesystem. Globs are supported.
         table_name
             Optional table name
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments passed to `google.cloud.bigquery.LoadJobConfig`.
 
@@ -354,13 +377,20 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
         return self._read_file(
             path,
             table_name=table_name,
+            temp=temp,
             job_config=bq.LoadJobConfig(
                 source_format=bq.SourceFormat.PARQUET, **kwargs
             ),
         )
 
     def read_csv(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Read CSV data into a BigQuery table.
 
@@ -372,6 +402,11 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             Path to a CSV file on GCS or the local filesystem. Globs are supported.
         table_name
             Optional table name
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments passed to
             `google.cloud.bigquery.LoadJobConfig`.
@@ -387,10 +422,18 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             skip_leading_rows=1,
             **kwargs,
         )
-        return self._read_file(path, table_name=table_name, job_config=job_config)
+        return self._read_file(
+            path, table_name=table_name, temp=temp, job_config=job_config
+        )
 
     def read_json(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Read newline-delimited JSON data into a BigQuery table.
 
@@ -403,6 +446,11 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             filesystem. Globs are supported.
         table_name
             Optional table name
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments passed to
             `google.cloud.bigquery.LoadJobConfig`.
@@ -417,7 +465,9 @@ class Backend(SQLBackend, CanCreateDatabase, DirectPyArrowExampleLoader):
             autodetect=True,
             **kwargs,
         )
-        return self._read_file(path, table_name=table_name, job_config=job_config)
+        return self._read_file(
+            path, table_name=table_name, temp=temp, job_config=job_config
+        )
 
     def _from_url(self, url: ParseResult, **kwarg_overrides):
         kwargs = {}

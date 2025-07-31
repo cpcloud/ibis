@@ -44,6 +44,13 @@ def _to_memtable(v):
     return ibis.memtable(v).op() if not isinstance(v, ops.InMemoryTable) else v
 
 
+_PYARROW_TO_CLICKHOUSE_FORMAT = {
+    "parquet": "Parquet",
+    "json": "JSON",
+    "csv": "CSV",
+}
+
+
 class Backend(SQLBackend, CanCreateDatabase, DirectExampleLoader):
     name = "clickhouse"
     compiler = sc.clickhouse.compiler
@@ -552,35 +559,57 @@ class Backend(SQLBackend, CanCreateDatabase, DirectExampleLoader):
         with self._safe_raw_sql(f"TRUNCATE TABLE {ident}"):
             pass
 
-    def read_parquet(
+    def _read_files(
         self,
         path: str | Path,
         /,
         *,
         table_name: str | None = None,
+        temp: bool = True,
         engine: str = "MergeTree",
+        pyarrow_format: str,
         **kwargs: Any,
-    ) -> ir.Table:
+    ):
         import pyarrow.dataset as ds
         from clickhouse_connect.driver.tools import insert_file
 
         from ibis.formats.pyarrow import PyArrowSchema
 
         paths = list(glob.glob(str(path)))
-        schema = PyArrowSchema.to_ibis(ds.dataset(paths, format="parquet").schema)
+        schema = PyArrowSchema.to_ibis(ds.dataset(paths, format=pyarrow_format).schema)
 
-        name = table_name or util.gen_name("read_parquet")
-        table = self.create_table(name, engine=engine, schema=schema, temp=True)
+        name = table_name or util.gen_name(f"read_{pyarrow_format}")
+        table = self.create_table(name, engine=engine, schema=schema, temp=temp)
 
+        client = self.con
         for file_path in paths:
             insert_file(
-                client=self.con,
+                client=client,
                 table=name,
                 file_path=file_path,
-                fmt="Parquet",
+                fmt=_PYARROW_TO_CLICKHOUSE_FORMAT[pyarrow_format],
                 **kwargs,
             )
         return table
+
+    def read_parquet(
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        engine: str = "MergeTree",
+        **kwargs: Any,
+    ) -> ir.Table:
+        return self._read_files(
+            path,
+            table_name=table_name,
+            temp=temp,
+            engine=engine,
+            pyarrow_format="parquet",
+            **kwargs,
+        )
 
     def read_csv(
         self,
@@ -588,23 +617,37 @@ class Backend(SQLBackend, CanCreateDatabase, DirectExampleLoader):
         /,
         *,
         table_name: str | None = None,
+        temp: bool = True,
         engine: str = "MergeTree",
         **kwargs: Any,
     ) -> ir.Table:
-        import pyarrow.dataset as ds
-        from clickhouse_connect.driver.tools import insert_file
+        return self._read_files(
+            path,
+            table_name=table_name,
+            temp=temp,
+            engine=engine,
+            pyarrow_format="csv",
+            **kwargs,
+        )
 
-        from ibis.formats.pyarrow import PyArrowSchema
-
-        paths = list(glob.glob(str(path)))
-        schema = PyArrowSchema.to_ibis(ds.dataset(paths, format="csv").schema)
-
-        name = table_name or util.gen_name("read_csv")
-        table = self.create_table(name, engine=engine, schema=schema, temp=True)
-
-        for file_path in paths:
-            insert_file(client=self.con, table=name, file_path=file_path, **kwargs)
-        return table
+    def read_json(
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        engine: str = "MergeTree",
+        **kwargs: Any,
+    ) -> ir.Table:
+        return self._read_files(
+            path,
+            table_name=table_name,
+            temp=temp,
+            engine=engine,
+            pyarrow_format="json",
+            **kwargs,
+        )
 
     def create_table(
         self,

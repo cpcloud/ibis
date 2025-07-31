@@ -530,6 +530,7 @@ class Backend(
         *,
         table_name: str | None = None,
         columns: Mapping[str, str] | None = None,
+        temp: bool = True,
         **kwargs,
     ) -> ir.Table:
         """Read newline-delimited JSON into an ibis table.
@@ -546,6 +547,11 @@ class Backend(
             Optional table name
         columns
             Optional mapping from string column name to duckdb type string.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to DuckDB's `read_json_auto` function.
 
@@ -579,13 +585,14 @@ class Backend(
                 )
             )
 
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
                 self.compiler.f.read_json_auto(
                     util.normalize_filenames(paths), *options
                 )
             ),
+            temp=temp,
         )
 
         return self.table(table_name)
@@ -598,6 +605,7 @@ class Backend(
         table_name: str | None = None,
         columns: Mapping[str, str | dt.DataType] | None = None,
         types: Mapping[str, str | dt.DataType] | None = None,
+        temp: bool = True,
         **kwargs: Any,
     ) -> ir.Table:
         """Register a CSV file as a table in the current database.
@@ -614,6 +622,11 @@ class Backend(
             An optional mapping of **all** column names to their types.
         types
             An optional mapping of a **subset** of column names to their types.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to DuckDB loading function. See
             https://duckdb.org/docs/data/csv for more information.
@@ -716,15 +729,22 @@ class Backend(
         if types is not None:
             options.append(C.types.eq(make_struct_argument(types)))
 
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(self.compiler.f.read_csv(paths, *options)),
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(self.compiler.f.read_csv(paths, *options)),
+            temp=temp,
         )
 
         return self.table(table_name)
 
     def read_geo(
-        self, path: str, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Register a geospatial data file as a table in the current database.
 
@@ -735,7 +755,12 @@ class Backend(
             See https://duckdb.org/docs/extensions/spatial.html#st_read---read-spatial-data-from-files
         table_name
             An optional name to use for the created table. This defaults to
-            a sequentially generated name.
+            a generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments passed to DuckDB loading function.
             See https://duckdb.org/docs/extensions/spatial.html#st_read---read-spatial-data-from-files
@@ -757,21 +782,16 @@ class Backend(
         if path.startswith(("http://", "https://", "s3://")):
             self._load_extensions(["httpfs"])
 
-        source_expr = sg.select(STAR).from_(
-            self.compiler.f.st_read(
-                path,
-                *(sg.to_identifier(key).eq(val) for key, val in kwargs.items()),
-            )
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
+                self.compiler.f.st_read(
+                    path,
+                    *(sg.to_identifier(key).eq(val) for key, val in kwargs.items()),
+                )
+            ),
+            temp=temp,
         )
-
-        view = sge.Create(
-            kind="VIEW",
-            this=sg.table(table_name, quoted=self.compiler.quoted),
-            properties=sge.Properties(expressions=[sge.TemporaryProperty()]),
-            expression=source_expr,
-        )
-        with self._safe_raw_sql(view):
-            pass
         return self.table(table_name)
 
     def read_parquet(
@@ -780,6 +800,7 @@ class Backend(
         /,
         *,
         table_name: str | None = None,
+        temp: bool = True,
         **kwargs: Any,
     ) -> ir.Table:
         """Register a parquet file as a table in the current database.
@@ -791,7 +812,12 @@ class Backend(
             or directory of parquet files.
         table_name
             An optional name to use for the created table. This defaults to
-            a sequentially generated name.
+            a generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to DuckDB loading function.
             See https://duckdb.org/docs/data/parquet for more information.
@@ -811,14 +837,23 @@ class Backend(
         options = [
             sg.to_identifier(key).eq(sge.convert(val)) for key, val in kwargs.items()
         ]
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(self.compiler.f.read_parquet(paths, *options)),
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
+                self.compiler.f.read_parquet(paths, *options)
+            ),
+            temp=temp,
         )
         return self.table(table_name)
 
     def read_delta(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Register a Delta Lake table as a table in the current database.
 
@@ -829,6 +864,11 @@ class Backend(
         table_name
             An optional name to use for the created table. This defaults to
             a sequentially generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments passed to deltalake.DeltaTable.
 
@@ -851,9 +891,12 @@ class Backend(
 
         self._load_extensions(extensions)
 
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(self.compiler.f.delta_scan(path, *options)),
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
+                self.compiler.f.delta_scan(path, *options)
+            ),
+            temp=temp,
         )
         return self.table(table_name)
 
@@ -881,7 +924,13 @@ class Backend(
         return self._filter_with_like(out[col].to_pylist(), like)
 
     def read_postgres(
-        self, uri: str, /, *, table_name: str | None = None, database: str = "public"
+        self,
+        uri: str,
+        /,
+        *,
+        table_name: str | None = None,
+        database: str = "public",
+        temp: bool = True,
     ) -> ir.Table:
         """Register a table from a postgres instance into a DuckDB table.
 
@@ -904,12 +953,16 @@ class Backend(
             The table to read
         database
             PostgreSQL database (schema) where `table_name` resides
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
 
         Returns
         -------
         ir.Table
             The just-registered table.
-
         """
         if table_name is None:
             raise ValueError(
@@ -917,11 +970,12 @@ class Backend(
             )
         self._load_extensions(["postgres_scanner"])
 
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
                 self.compiler.f.postgres_scan_pushdown(uri, database, table_name)
             ),
+            temp=temp,
         )
 
         return self.table(table_name)
@@ -951,7 +1005,6 @@ class Backend(
         ir.Table
             The just-registered table.
         """
-
         parsed = urllib.parse.urlparse(uri)
 
         if table_name is None:
@@ -961,15 +1014,22 @@ class Backend(
 
         database = parsed.path.strip("/")
 
-        query_con = f"""ATTACH 'host={parsed.hostname} user={parsed.username} password={parsed.password} port={parsed.port} database={database}' AS {catalog} (TYPE mysql)"""
+        mysql_con_params = [
+            f"host={parsed.hostname}",
+            f"user={parsed.username}",
+            f"password={parsed.password}",
+            f"port={parsed.port}",
+            f"database={database}",
+        ]
+        query = f"""ATTACH '{" ".join(mysql_con_params)}' AS {catalog} (TYPE mysql)"""
 
-        with self._safe_raw_sql(query_con):
+        with self._safe_raw_sql(query):
             pass
 
         return self.table(table_name, database=(catalog, database))
 
     def read_sqlite(
-        self, path: str | Path, /, *, table_name: str | None = None
+        self, path: str | Path, /, *, table_name: str | None = None, temp: bool = True
     ) -> ir.Table:
         """Register a table from a SQLite database into a DuckDB table.
 
@@ -979,6 +1039,11 @@ class Backend(
             The path to the SQLite database
         table_name
             The table to read
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
 
         Returns
         -------
@@ -1011,20 +1076,19 @@ class Backend(
         │     2 │ b      │
         │     3 │ c      │
         └───────┴────────┘
-
         """
-
         if table_name is None:
             raise ValueError("`table_name` is required when registering a sqlite table")
         self._load_extensions(["sqlite"])
 
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
                 self.compiler.f.sqlite_scan(
                     sg.to_identifier(str(path), quoted=True), table_name
                 )
             ),
+            temp=temp,
         )
 
         return self.table(table_name)
@@ -1037,6 +1101,7 @@ class Backend(
         *,
         sheet: str | None = None,
         range: str | None = None,
+        temp: bool = True,
         **kwargs,
     ) -> ir.Table:
         """Read an Excel file into a DuckDB table. This requires duckdb>=1.2.0.
@@ -1049,6 +1114,11 @@ class Backend(
             The name of the sheet to read, eg 'Sheet3'.
         range
             The range of cells to read, eg 'A5:Z'.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional args passed to the backend's read function.
 
@@ -1086,9 +1156,12 @@ class Backend(
         ]
 
         self.load_extension("excel")
-        self._create_temp_view(
-            table_name,
-            sg.select(STAR).from_(self.compiler.f.read_xlsx(str(path), *options)),
+        self._create_view(
+            name=table_name,
+            definition=sg.select(STAR).from_(
+                self.compiler.f.read_xlsx(str(path), *options)
+            ),
+            temp=temp,
         )
         return self.table(table_name)
 
@@ -1765,17 +1838,26 @@ class Backend(
     _register_python_udf = _register_udf
     _register_pyarrow_udf = _register_udf
 
-    def _get_temp_view_definition(self, name: str, definition: str) -> str:
+    def _get_view_definition(
+        self, *, name: str, definition: sge.Expression, temp: bool
+    ) -> sge.Create:
         return sge.Create(
             this=sg.to_identifier(name, quoted=self.compiler.quoted),
             kind="VIEW",
             expression=definition,
-            replace=True,
-            properties=sge.Properties(expressions=[sge.TemporaryProperty()]),
+            replace=temp,
+            properties=(
+                sge.Properties(expressions=[sge.TemporaryProperty()]) if temp else None
+            ),
         )
 
-    def _create_temp_view(self, table_name, source):
-        with self._safe_raw_sql(self._get_temp_view_definition(table_name, source)):
+    def _create_view(
+        self, *, name: str, definition: sge.Expression, temp: bool
+    ) -> None:
+        definition = self._get_view_definition(
+            name=name, definition=definition, temp=temp
+        )
+        with self._safe_raw_sql(definition):
             pass
 
 

@@ -1502,6 +1502,7 @@ def read_csv(
     /,
     *,
     table_name: str | None = None,
+    temp: bool = True,
     **kwargs: Any,
 ) -> ir.Table:
     """Lazily load a CSV or set of CSVs.
@@ -1515,6 +1516,11 @@ def read_csv(
         A filesystem path or URL or list of same.  Supports CSV and TSV files.
     table_name
         A name to refer to the table.  If not provided, a name will be generated.
+    temp
+        Whether to create a temporary object for the file. If `True`, the
+        backend will automatically drop the table when the connection is
+        closed. Otherwise, the table is persisted as a view or table as
+        appropriate for the backend.
     kwargs
         Backend-specific keyword arguments for the file type. For the DuckDB
         backend used by default, please refer to:
@@ -1552,7 +1558,7 @@ def read_csv(
     from ibis.config import _default_backend
 
     con = _default_backend()
-    return con.read_csv(paths, table_name=table_name, **kwargs)
+    return con.read_csv(paths, table_name=table_name, temp=temp, **kwargs)
 
 
 @experimental
@@ -1561,6 +1567,7 @@ def read_json(
     /,
     *,
     table_name: str | None = None,
+    temp: bool = True,
     **kwargs: Any,
 ) -> ir.Table:
     """Lazily load newline-delimited JSON data.
@@ -1574,6 +1581,11 @@ def read_json(
         A filesystem path or URL or list of same.
     table_name
         A name to refer to the table.  If not provided, a name will be generated.
+    temp
+        Whether to create a temporary object for the file. If `True`, the
+        backend will automatically drop the table when the connection is
+        closed. Otherwise, the table is persisted as a view or table as
+        appropriate for the backend.
     kwargs
         Backend-specific keyword arguments for the file type. See
         https://duckdb.org/docs/extensions/json.html for details.
@@ -1609,7 +1621,7 @@ def read_json(
     from ibis.config import _default_backend
 
     con = _default_backend()
-    return con.read_json(paths, table_name=table_name, **kwargs)
+    return con.read_json(paths, table_name=table_name, temp=temp, **kwargs)
 
 
 def read_parquet(
@@ -1617,6 +1629,7 @@ def read_parquet(
     /,
     *,
     table_name: str | None = None,
+    temp: bool = True,
     **kwargs: Any,
 ) -> ir.Table:
     """Lazily load a parquet file or set of parquet files.
@@ -1630,6 +1643,11 @@ def read_parquet(
         A filesystem path or URL or list of same.
     table_name
         A name to refer to the table.  If not provided, a name will be generated.
+    temp
+        Whether to create a temporary object for the file. If `True`, the
+        backend will automatically drop the table when the connection is
+        closed. Otherwise, the table is persisted as a view or table as
+        appropriate for the backend.
     kwargs
         Backend-specific keyword arguments for the file type. For the DuckDB
         backend used by default, please refer to:
@@ -1664,15 +1682,27 @@ def read_parquet(
     │     2 │ h      │
     │     3 │ i      │
     └───────┴────────┘
+
+    A table can be persisted by passing `temp=False` to `ibis.read_parquet`:
+
+    >>> t = ibis.read_parquet("/tmp/data.parquet", table_name="my_table", temp=False)
+    >>> con = ibis.get_backend()
+    >>> "my_table" in con.list_tables()
+    True
     """
     from ibis.config import _default_backend
 
     con = _default_backend()
-    return con.read_parquet(paths, table_name=table_name, **kwargs)
+    return con.read_parquet(paths, table_name=table_name, temp=temp, **kwargs)
 
 
 def read_delta(
-    path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+    path: str | Path,
+    /,
+    *,
+    table_name: str | None = None,
+    temp: bool = True,
+    **kwargs: Any,
 ) -> ir.Table:
     """Lazily load a Delta Lake table.
 
@@ -1682,6 +1712,11 @@ def read_delta(
         A filesystem path or URL.
     table_name
         A name to refer to the table.  If not provided, a name will be generated.
+    temp
+        Whether to create a temporary object for the file. If `True`, the
+        backend will automatically drop the table when the connection is
+        closed. Otherwise, the table is persisted as a view or table as
+        appropriate for the backend.
     kwargs
         Backend-specific keyword arguments for the file type.
 
@@ -1719,7 +1754,7 @@ def read_delta(
     from ibis.config import _default_backend
 
     con = _default_backend()
-    return con.read_delta(path, table_name=table_name, **kwargs)
+    return con.read_delta(path, table_name=table_name, temp=temp, **kwargs)
 
 
 def set_backend(backend: str | BaseBackend, /) -> None:

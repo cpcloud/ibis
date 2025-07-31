@@ -378,7 +378,13 @@ class _FileIOHandler:
         }
 
     def read_parquet(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Register a parquet file as a table in the current backend.
 
@@ -389,6 +395,11 @@ class _FileIOHandler:
         table_name
             An optional name to use for the created table. This defaults to
             a sequentially generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to the backend loading function.
 
@@ -402,7 +413,13 @@ class _FileIOHandler:
         )
 
     def read_csv(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Register a CSV file as a table in the current backend.
 
@@ -413,6 +430,11 @@ class _FileIOHandler:
         table_name
             An optional name to use for the created table. This defaults to
             a sequentially generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to the backend loading function.
 
@@ -426,7 +448,13 @@ class _FileIOHandler:
         )
 
     def read_json(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Register a JSON file as a table in the current backend.
 
@@ -437,6 +465,11 @@ class _FileIOHandler:
         table_name
             An optional name to use for the created table. This defaults to
             a sequentially generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to the backend loading function.
 
@@ -450,7 +483,13 @@ class _FileIOHandler:
         )
 
     def read_delta(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ):
         """Register a Delta Lake table in the current database.
 
@@ -461,6 +500,11 @@ class _FileIOHandler:
         table_name
             An optional name to use for the created table. This defaults to
             a sequentially generated name.
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         **kwargs
             Additional keyword arguments passed to the underlying backend or library.
 

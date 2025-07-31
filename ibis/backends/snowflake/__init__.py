@@ -830,7 +830,13 @@ $$ {defn["source"]} $$"""
         return self.table(name, database=(catalog, db))
 
     def read_csv(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Register a CSV file as a table in the Snowflake backend.
 
@@ -840,6 +846,11 @@ $$ {defn["source"]} $$"""
             A string or Path to a CSV file; globs are supported
         table_name
             Optional name for the table; if not passed, a random name will be generated
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Snowflake-specific file format configuration arguments. See the documentation for
             the full list of options: https://docs.snowflake.com/en/sql-reference/sql/create-file-format#type-csv
@@ -941,7 +952,9 @@ $$ {defn["source"]} $$"""
                             for field in json.loads(info)
                         ],
                     ),
-                    properties=sge.Properties(expressions=[sge.TemporaryProperty()]),
+                    properties=sge.Properties(expressions=[sge.TemporaryProperty()])
+                    if temp
+                    else None,
                 ).sql(self.dialect),
                 # load the CSV into the table
                 f"""
@@ -955,7 +968,13 @@ $$ {defn["source"]} $$"""
         return self.table(table)
 
     def read_json(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Read newline-delimited JSON into an ibis table, using Snowflake.
 
@@ -965,6 +984,11 @@ $$ {defn["source"]} $$"""
             A string or Path to a JSON file; globs are supported
         table_name
             Optional table name
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments. See
             https://docs.snowflake.com/en/sql-reference/sql/create-file-format#type-json
@@ -1023,7 +1047,7 @@ $$ {defn["source"]} $$"""
             cur.execute(
                 ";\n".join(
                     [
-                        f"CREATE TEMP TABLE {qtable} USING TEMPLATE ({query.sql(self.dialect)})",
+                        f"CREATE {'TEMP ' if temp else ''}TABLE {qtable} USING TEMPLATE ({query.sql(self.dialect)})",
                         # load the JSON file into the table
                         sge.Copy(
                             this=qtable,
@@ -1043,7 +1067,13 @@ $$ {defn["source"]} $$"""
         return self.table(table)
 
     def read_parquet(
-        self, path: str | Path, /, *, table_name: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        /,
+        *,
+        table_name: str | None = None,
+        temp: bool = True,
+        **kwargs: Any,
     ) -> ir.Table:
         """Read a Parquet file into an ibis table, using Snowflake.
 
@@ -1053,6 +1083,11 @@ $$ {defn["source"]} $$"""
             A string or Path to a Parquet file; globs are supported
         table_name
             Optional table name
+        temp
+            Whether to create a temporary object for the file. If `True`, the
+            backend will automatically drop the table when the connection is
+            closed. Otherwise, the table is persisted as a view or table as
+            appropriate for the backend.
         kwargs
             Additional keyword arguments. See
             https://docs.snowflake.com/en/sql-reference/sql/create-file-format#type-parquet
@@ -1094,7 +1129,9 @@ $$ {defn["source"]} $$"""
                     this=qtable,
                     expressions=schema.to_sqlglot_column_defs(dialect),
                 ),
-                properties=sge.Properties(expressions=[sge.TemporaryProperty()]),
+                properties=sge.Properties(expressions=[sge.TemporaryProperty()])
+                if temp
+                else None,
             ).sql(dialect),
         ]
 

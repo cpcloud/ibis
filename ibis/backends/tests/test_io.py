@@ -363,7 +363,6 @@ def test_read_parquet_glob(con, tmp_path, ft_data):
 
 @pytest.mark.notyet(
     [
-        "clickhouse",
         "datafusion",
         "impala",
         "mssql",
