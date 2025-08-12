@@ -437,6 +437,7 @@ class Backend(SQLBackend, CanCreateDatabase, UrlFromPath, PyArrowExampleLoader):
             expression=sge.select(STAR).from_(
                 sg.table(upstream_path, db="parquet", quoted=quoted)
             ),
+            properties=sge.Properties(expressions=[sge.TemporaryProperty()]),
         ).sql(self.dialect)
         data = op.data.to_pyarrow(schema=op.schema)
         with util.mktempd() as tmpdir:
@@ -453,7 +454,12 @@ class Backend(SQLBackend, CanCreateDatabase, UrlFromPath, PyArrowExampleLoader):
         path = f"{self._memtable_volume_path}/{name}.parquet"
         sql = sge.Drop(
             kind="VIEW",
-            this=sg.to_identifier(name, quoted=self.compiler.quoted),
+            this=sg.table(
+                name,
+                db=self.current_database,
+                catalog=self.current_catalog,
+                quoted=self.compiler.quoted,
+            ),
             exists=True,
         ).sql(self.dialect)
 
